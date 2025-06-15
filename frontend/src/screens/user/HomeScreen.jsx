@@ -6,407 +6,226 @@ import {
   StyleSheet,
   SafeAreaView,
   ScrollView,
-  Alert,
   RefreshControl,
+  StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useSelector, useDispatch } from 'react-redux';
-import { logout } from '../../redux/authSlice'; // Adjust path as needed
 
 const HomeScreen = ({ navigation }) => {
-  const { user } = useSelector((state) => state.auth);
-  const dispatch = useDispatch();
   const [refreshing, setRefreshing] = useState(false);
+  const [currentAQI, setCurrentAQI] = useState(85);
+  const [location, setLocation] = useState('Manila');
+  const [aiPrediction, setAiPrediction] = useState(null);
+  const [healthRisk, setHealthRisk] = useState('Moderate');
 
   useEffect(() => {
-    console.log('HomeScreen mounted, user:', user);
+    fetchAirQualityData();
+    generateAIPrediction();
   }, []);
 
-  const onRefresh = React.useCallback(() => {
-    setRefreshing(true);
-    // Simulate API call
+  const fetchAirQualityData = () => {
+    // Simulate ML prediction
     setTimeout(() => {
-      setRefreshing(false);
-    }, 2000);
-  }, []);
-
-  const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: () => {
-            console.log('User logging out');
-            dispatch(logout());
-          },
-        },
-      ]
-    );
+      setCurrentAQI(Math.floor(Math.random() * 200) + 1);
+      generateHealthRisk();
+    }, 1000);
   };
 
-  const handleProfilePress = () => {
-    console.log('Profile pressed');
-    navigation.navigate('Profile');
+  const generateAIPrediction = () => {
+    // Simulate LSTM/RNN prediction
+    const predictions = [
+      { hour: '14:00', aqi: 78, confidence: 0.92 },
+      { hour: '16:00', aqi: 85, confidence: 0.89 },
+      { hour: '18:00', aqi: 92, confidence: 0.85 },
+    ];
+    setAiPrediction(predictions);
   };
 
-  const handleSettingsPress = () => {
-    console.log('Settings pressed');
-    navigation.navigate('Settings');
+  const generateHealthRisk = () => {
+    // Simulate AI-based health risk assessment
+    const risks = ['Low', 'Moderate', 'High', 'Very High'];
+    setHealthRisk(risks[Math.floor(Math.random() * risks.length)]);
   };
 
-  const quickActions = [
-    {
-      id: 1,
-      title: 'Profile',
-      icon: 'person-outline',
-      onPress: handleProfilePress,
-      color: '#667eea',
-    },
-    {
-      id: 2,
-      title: 'Settings',
-      icon: 'settings-outline',
-      onPress: handleSettingsPress,
-      color: '#764ba2',
-    },
-    {
-      id: 3,
-      title: 'Help',
-      icon: 'help-circle-outline',
-      onPress: () => Alert.alert('Help', 'Help section coming soon!'),
-      color: '#51cf66',
-    },
-    {
-      id: 4,
-      title: 'About',
-      icon: 'information-circle-outline',
-      onPress: () => Alert.alert('About', 'App version 1.0.0'),
-      color: '#ff8cc8',
-    },
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchAirQualityData();
+    generateAIPrediction();
+    setTimeout(() => setRefreshing(false), 2000);
+  };
+
+  const getAQIStatus = (aqi) => {
+    if (aqi <= 50) return { status: 'Good', color: '#00E676', gradient: ['#00E676', '#00C853'] };
+    if (aqi <= 100) return { status: 'Moderate', color: '#FFD54F', gradient: ['#FFD54F', '#FFC107'] };
+    if (aqi <= 150) return { status: 'Unhealthy', color: '#FF7043', gradient: ['#FF7043', '#FF5722'] };
+    return { status: 'Hazardous', color: '#E91E63', gradient: ['#E91E63', '#C2185B'] };
+  };
+
+  const pollutionSources = [
+    { source: 'Traffic', percentage: 45, icon: 'car-outline' },
+    { source: 'Industrial', percentage: 30, icon: 'business-outline' },
+    { source: 'Construction', percentage: 15, icon: 'hammer-outline' },
+    { source: 'Other', percentage: 10, icon: 'ellipse-outline' },
   ];
 
+  const aqiInfo = getAQIStatus(currentAQI);
+
   return (
-    <LinearGradient
-      colors={['#667eea', '#764ba2']}
-      style={styles.container}
-    >
-      <SafeAreaView style={styles.safeArea}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Text style={styles.greeting}>Hello,</Text>
-            <Text style={styles.userName}>
-              {user?.name || user?.email?.split('@')[0] || 'User'}!
-            </Text>
-          </View>
-          <TouchableOpacity
-            style={styles.logoutButton}
-            onPress={handleLogout}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="log-out-outline" size={24} color="#fff" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Content */}
-        <ScrollView
-          style={styles.content}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-        >
-          {/* Welcome Card */}
-          <View style={styles.welcomeCard}>
-            <View style={styles.welcomeIconContainer}>
-              <Ionicons name="home" size={32} color="#667eea" />
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      <LinearGradient colors={['#0A0A0A', '#1A1A2E', '#16213E']} style={styles.gradient}>
+        <SafeAreaView style={styles.safeArea}>
+          
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={styles.locationContainer}>
+              <Ionicons name="location" size={16} color="#00E676" />
+              <Text style={styles.location}>{location}</Text>
             </View>
-            <Text style={styles.welcomeTitle}>Welcome to Your Dashboard</Text>
-            <Text style={styles.welcomeSubtitle}>
-              Everything you need is just a tap away
-            </Text>
           </View>
 
-          {/* Quick Actions */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Quick Actions</Text>
-            <View style={styles.actionsGrid}>
-              {quickActions.map((action) => (
-                <TouchableOpacity
-                  key={action.id}
-                  style={styles.actionCard}
-                  onPress={action.onPress}
-                  activeOpacity={0.8}
-                >
-                  <View style={[styles.actionIconContainer, { backgroundColor: action.color }]}>
-                    <Ionicons name={action.icon} size={24} color="#fff" />
-                  </View>
-                  <Text style={styles.actionTitle}>{action.title}</Text>
-                </TouchableOpacity>
+          <ScrollView
+            style={styles.content}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00E676" />}
+          >
+            
+            {/* Current AQI Card */}
+            <LinearGradient colors={aqiInfo.gradient} style={styles.aqiCard}>
+              <Text style={styles.aqiNumber}>{currentAQI}</Text>
+              <Text style={styles.aqiLabel}>Air Quality Index</Text>
+              <Text style={styles.statusText}>{aqiInfo.status}</Text>
+            </LinearGradient>
+
+            {/* Health Recommendations */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Health Advice</Text>
+              <View style={styles.healthCard}>
+                <Text style={styles.healthRisk}>Health Risk: {healthRisk}</Text>
+                <Text style={styles.healthAdvice}>
+                  {healthRisk === 'High' 
+                    ? 'Stay indoors when possible. Close windows and use air purifiers.'
+                    : 'Good for outdoor activities! People with asthma should still be careful.'
+                  }
+                </Text>
+              </View>
+            </View>
+
+            {/* Air Quality Forecast */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Smart Forecast</Text>
+              {aiPrediction?.map((pred, index) => (
+                <View key={index} style={styles.predictionItem}>
+                  <Text style={styles.predTime}>{pred.hour}</Text>
+                  <Text style={styles.predAQI}>Air Quality: {pred.aqi}</Text>
+                  <Text style={styles.confidence}>Accuracy: {(pred.confidence * 100).toFixed(0)}%</Text>
+                </View>
               ))}
             </View>
-          </View>
 
-          {/* Recent Activity */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Recent Activity</Text>
-            <View style={styles.activityCard}>
-              <View style={styles.activityItem}>
-                <View style={styles.activityIconContainer}>
-                  <Ionicons name="checkmark-circle" size={20} color="#51cf66" />
+            {/* What's Causing Pollution */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Pollution Causes</Text>
+              {pollutionSources.map((source, index) => (
+                <View key={index} style={styles.sourceItem}>
+                  <Ionicons name={source.icon} size={20} color="#00E676" />
+                  <Text style={styles.sourceName}>{source.source}</Text>
+                  <Text style={styles.sourcePercent}>{source.percentage}%</Text>
                 </View>
-                <View style={styles.activityContent}>
-                  <Text style={styles.activityTitle}>Account Created</Text>
-                  <Text style={styles.activityTime}>Welcome to the app!</Text>
-                </View>
-              </View>
-              
-              <View style={styles.activityItem}>
-                <View style={styles.activityIconContainer}>
-                  <Ionicons name="person-add" size={20} color="#667eea" />
-                </View>
-                <View style={styles.activityContent}>
-                  <Text style={styles.activityTitle}>Profile Setup</Text>
-                  <Text style={styles.activityTime}>Complete your profile for better experience</Text>
-                </View>
+              ))}
+            </View>
+
+            {/* Daily Summary */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Today's Air Report</Text>
+              <View style={styles.bulletinCard}>
+                <Text style={styles.bulletinText}>
+                  More cars on the road today are making the air dirtier. 
+                  Good news: Rain tonight should help clear the air! 
+                  If you have breathing problems, stay inside between 12-4 PM.
+                </Text>
+                <Text style={styles.bulletinTime}>Updated at 8:30 AM</Text>
               </View>
             </View>
-          </View>
 
-          {/* Stats Card */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Your Stats</Text>
-            <View style={styles.statsCard}>
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>1</Text>
-                <Text style={styles.statLabel}>Days Active</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>0</Text>
-                <Text style={styles.statLabel}>Tasks Done</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>100%</Text>
-                <Text style={styles.statLabel}>Progress</Text>
-              </View>
-            </View>
-          </View>
-        </ScrollView>
-      </SafeAreaView>
-    </LinearGradient>
+            {/* Bottom spacing for navigation */}
+            <View style={styles.bottomSpacer} />
+
+          </ScrollView>
+        </SafeAreaView>
+      </LinearGradient>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  safeArea: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 30,
-  },
-  headerLeft: {
-    flex: 1,
-  },
-  greeting: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontWeight: '400',
-  },
-  userName: {
-    fontSize: 24,
-    color: '#fff',
-    fontWeight: 'bold',
-    marginTop: 4,
-  },
-  logoutButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  content: {
-    flex: 1,
-    backgroundColor: '#f8f9fa',
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    paddingHorizontal: 20,
-  },
-  welcomeCard: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
+  container: { flex: 1, backgroundColor: '#0A0A0A' },
+  gradient: { flex: 1 },
+  safeArea: { flex: 1 },
+  header: { padding: 10, alignItems: 'center' },
+  locationContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 26  },
+  location: { fontSize: 15, color: '#FFFFFF', marginLeft: 8 },
+  content: { flex: 1, paddingHorizontal: 20 },
+  
+  aqiCard: {
     padding: 30,
+    borderRadius: 20,
     alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 30,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 8,
+    marginBottom: 20,
   },
-  welcomeIconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#f0f2ff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
+  aqiNumber: { fontSize: 60, fontWeight: '900', color: '#FFFFFF' },
+  aqiLabel: { fontSize: 16, color: 'rgba(255,255,255,0.9)', marginTop: 5 },
+  statusText: { fontSize: 18, color: '#FFFFFF', fontWeight: '600', marginTop: 10 },
+  
+  section: { marginBottom: 25 },
+  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#FFFFFF', marginBottom: 15 },
+  
+  healthCard: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    padding: 20,
+    borderRadius: 15,
+    borderColor: 'rgba(0,230,118,0.3)',
+    borderWidth: 1,
   },
-  welcomeTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  welcomeSubtitle: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    lineHeight: 24,
-  },
-  section: {
-    marginBottom: 30,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 16,
-  },
-  actionsGrid: {
+  healthRisk: { fontSize: 16, fontWeight: '600', color: '#00E676', marginBottom: 8 },
+  healthAdvice: { fontSize: 14, color: 'rgba(255,255,255,0.8)', lineHeight: 20 },
+  
+  predictionItem: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     justifyContent: 'space-between',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 8,
   },
-  actionCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
-    alignItems: 'center',
-    width: '48%',
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  actionIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  actionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-  },
-  activityCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  activityItem: {
+  predTime: { fontSize: 14, color: '#FFFFFF', fontWeight: '600' },
+  predAQI: { fontSize: 14, color: '#00E676', fontWeight: '600' },
+  confidence: { fontSize: 12, color: 'rgba(255,255,255,0.6)' },
+  
+  sourceItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 8,
   },
-  activityIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#f8f9fa',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  activityContent: {
-    flex: 1,
-  },
-  activityTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  activityTime: {
-    fontSize: 14,
-    color: '#666',
-  },
-  statsCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
+  sourceName: { flex: 1, fontSize: 14, color: '#FFFFFF', marginLeft: 10 },
+  sourcePercent: { fontSize: 14, color: '#00E676', fontWeight: '600' },
+  
+  bulletinCard: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
     padding: 20,
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 4,
+    borderRadius: 15,
+    borderColor: 'rgba(0,230,118,0.3)',
+    borderWidth: 1,
   },
-  statItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#667eea',
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-  },
-  statDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: '#e9ecef',
+  bulletinText: { fontSize: 14, color: 'rgba(255,255,255,0.9)', lineHeight: 20, marginBottom: 10 },
+  bulletinTime: { fontSize: 12, color: 'rgba(255,255,255,0.6)', fontStyle: 'italic' },
+  
+  bottomSpacer: {
+    height: 100, // Extra space to prevent navigation overlap
+    backgroundColor: 'transparent',
   },
 });
 

@@ -11,13 +11,18 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
+  Dimensions,
+  StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
-import { registerUser } from  '../api/auth';
+import { registerUser } from '../api/auth';
 
 const RegisterScreen = ({ navigation }) => {
+  const { width, height } = Dimensions.get('window');
+  const isSmallDevice = height < 700;
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -116,10 +121,12 @@ const RegisterScreen = ({ navigation }) => {
     if (!validateForm()) return;
 
     setLoading(true);
+    console.log('Starting registration process');
+
     try {
       const formDataToSend = new FormData();
-      formDataToSend.append('name', formData.name);
-      formDataToSend.append('email', formData.email);
+      formDataToSend.append('name', formData.name.trim());
+      formDataToSend.append('email', formData.email.trim());
       formDataToSend.append('password', formData.password);
 
       // Avatar is required based on the backend controller
@@ -131,7 +138,9 @@ const RegisterScreen = ({ navigation }) => {
         });
       }
 
+      console.log('Sending registration request');
       const response = await registerUser(formDataToSend);
+      console.log('Registration response received:', response);
 
       Alert.alert(
         'Registration Successful!',
@@ -144,9 +153,10 @@ const RegisterScreen = ({ navigation }) => {
       console.error('Registration error:', error);
       Alert.alert(
         'Registration Failed',
-        error.message || 'An error occurred during registration'
+        error.message || error.response?.data?.message || 'An error occurred during registration'
       );
     } finally {
+      console.log('Registration process completed, setting loading to false');
       setLoading(false);
     }
   }, [formData, loading, validateForm, navigation]);
@@ -161,18 +171,27 @@ const RegisterScreen = ({ navigation }) => {
   }, []);
 
   const navigateToLogin = useCallback(() => {
+    if (loading) return;
     navigation.navigate('Login');
-  }, [navigation]);
+  }, [navigation, loading]);
 
   const goBack = useCallback(() => {
+    if (loading) return;
     navigation.goBack();
-  }, [navigation]);
+  }, [navigation, loading]);
 
   return (
     <LinearGradient
-      colors={['#667eea', '#764ba2']}
+      colors={['#1a1a2e', '#16213e', '#0f3460']}
       style={styles.container}
     >
+      {/* Set StatusBar style */}
+      <StatusBar 
+        barStyle="light-content" 
+        backgroundColor="transparent" 
+        translucent={true} 
+      />
+      
       <SafeAreaView style={styles.safeArea}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -182,13 +201,14 @@ const RegisterScreen = ({ navigation }) => {
           <ScrollView
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled" // This is crucial for preventing touch issues
+            keyboardShouldPersistTaps="handled"
           >
             {/* Header */}
-            <View style={styles.header}>
+            <View style={[styles.header, isSmallDevice && styles.headerSmall]}>
               <TouchableOpacity
                 style={styles.backButton}
                 onPress={goBack}
+                disabled={loading}
                 activeOpacity={0.7}
               >
                 <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -198,8 +218,8 @@ const RegisterScreen = ({ navigation }) => {
             </View>
 
             {/* Form Container */}
-            <View style={styles.formContainer}>
-              <View style={styles.welcomeSection}>
+            <View style={[styles.formContainer, isSmallDevice && styles.formContainerSmall]}>
+              <View style={[styles.welcomeSection, isSmallDevice && styles.welcomeSectionSmall]}>
                 <Text style={styles.welcomeText}>Create Account</Text>
                 <Text style={styles.subtitleText}>
                   Join us and start your journey
@@ -214,6 +234,7 @@ const RegisterScreen = ({ navigation }) => {
                     errors.profileImage && styles.imagePickerError
                   ]} 
                   onPress={pickImage}
+                  disabled={loading}
                   activeOpacity={0.7}
                 >
                   {formData.profileImage ? (
@@ -222,7 +243,7 @@ const RegisterScreen = ({ navigation }) => {
                     </View>
                   ) : (
                     <View style={styles.imagePickerPlaceholder}>
-                      <Ionicons name="camera-outline" size={30} color="#999" />
+                      <Ionicons name="camera-outline" size={30} color="#4CAF50" />
                       <Text style={styles.imagePickerText}>Add Photo</Text>
                     </View>
                   )}
@@ -231,68 +252,72 @@ const RegisterScreen = ({ navigation }) => {
               </View>
 
               {/* Name Input */}
-              <View style={styles.inputContainer}>
+              <View style={[styles.inputContainer, isSmallDevice && styles.inputContainerSmall]}>
                 <Text style={styles.inputLabel}>Full Name</Text>
                 <View style={[styles.inputWrapper, errors.name && styles.inputError]}>
-                  <Ionicons name="person-outline" size={20} color="#999" style={styles.inputIcon} />
+                  <Ionicons name="person-outline" size={20} color="#4CAF50" style={styles.inputIcon} />
                   <TextInput
                     style={styles.textInput}
                     placeholder="Enter your full name"
-                    placeholderTextColor="#999"
+                    placeholderTextColor="rgba(255, 255, 255, 0.6)"
                     value={formData.name}
                     onChangeText={(text) => handleInputChange('name', text)}
                     autoCapitalize="words"
                     maxLength={30}
                     returnKeyType="next"
+                    editable={!loading}
                   />
                 </View>
                 {errors.name ? <Text style={styles.errorText}>{errors.name}</Text> : null}
               </View>
 
               {/* Email Input */}
-              <View style={styles.inputContainer}>
+              <View style={[styles.inputContainer, isSmallDevice && styles.inputContainerSmall]}>
                 <Text style={styles.inputLabel}>Email</Text>
                 <View style={[styles.inputWrapper, errors.email && styles.inputError]}>
-                  <Ionicons name="mail-outline" size={20} color="#999" style={styles.inputIcon} />
+                  <Ionicons name="mail-outline" size={20} color="#4CAF50" style={styles.inputIcon} />
                   <TextInput
                     style={styles.textInput}
                     placeholder="Enter your email"
-                    placeholderTextColor="#999"
+                    placeholderTextColor="rgba(255, 255, 255, 0.6)"
                     value={formData.email}
                     onChangeText={(text) => handleInputChange('email', text)}
                     keyboardType="email-address"
                     autoCapitalize="none"
                     autoCorrect={false}
                     returnKeyType="next"
+                    editable={!loading}
                   />
                 </View>
                 {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
               </View>
 
               {/* Password Input */}
-              <View style={styles.inputContainer}>
+              <View style={[styles.inputContainer, isSmallDevice && styles.inputContainerSmall]}>
                 <Text style={styles.inputLabel}>Password</Text>
                 <View style={[styles.inputWrapper, errors.password && styles.inputError]}>
-                  <Ionicons name="lock-closed-outline" size={20} color="#999" style={styles.inputIcon} />
+                  <Ionicons name="lock-closed-outline" size={20} color="#4CAF50" style={styles.inputIcon} />
                   <TextInput
                     style={styles.textInput}
                     placeholder="Create password"
-                    placeholderTextColor="#999"
+                    placeholderTextColor="rgba(255, 255, 255, 0.6)"
                     value={formData.password}
                     onChangeText={(text) => handleInputChange('password', text)}
                     secureTextEntry={!showPassword}
                     autoCapitalize="none"
                     returnKeyType="next"
+                    editable={!loading}
                   />
                   <TouchableOpacity
                     style={styles.eyeIcon}
                     onPress={toggleShowPassword}
+                    disabled={loading}
                     activeOpacity={0.7}
                   >
                     <Ionicons
                       name={showPassword ? "eye-off-outline" : "eye-outline"}
                       size={20}
-                      color="#999"
+                      color="#4CAF50"
                     />
                   </TouchableOpacity>
                 </View>
@@ -300,29 +325,32 @@ const RegisterScreen = ({ navigation }) => {
               </View>
 
               {/* Confirm Password Input */}
-              <View style={styles.inputContainer}>
+              <View style={[styles.inputContainer, isSmallDevice && styles.inputContainerSmall]}>
                 <Text style={styles.inputLabel}>Confirm Password</Text>
                 <View style={[styles.inputWrapper, errors.confirmPassword && styles.inputError]}>
-                  <Ionicons name="lock-closed-outline" size={20} color="#999" style={styles.inputIcon} />
+                  <Ionicons name="lock-closed-outline" size={20} color="#4CAF50" style={styles.inputIcon} />
                   <TextInput
                     style={styles.textInput}
                     placeholder="Confirm password"
-                    placeholderTextColor="#999"
+                    placeholderTextColor="rgba(255, 255, 255, 0.6)"
                     value={formData.confirmPassword}
                     onChangeText={(text) => handleInputChange('confirmPassword', text)}
                     secureTextEntry={!showConfirmPassword}
                     autoCapitalize="none"
                     returnKeyType="done"
+                    editable={!loading}
+                    onSubmitEditing={handleRegister}
                   />
                   <TouchableOpacity
                     style={styles.eyeIcon}
                     onPress={toggleShowConfirmPassword}
+                    disabled={loading}
                     activeOpacity={0.7}
                   >
                     <Ionicons
                       name={showConfirmPassword ? "eye-off-outline" : "eye-outline"}
                       size={20}
-                      color="#999"
+                      color="#4CAF50"
                     />
                   </TouchableOpacity>
                 </View>
@@ -331,23 +359,39 @@ const RegisterScreen = ({ navigation }) => {
 
               {/* Register Button */}
               <TouchableOpacity
-                style={[styles.registerButton, loading && styles.registerButtonDisabled]}
+                style={[styles.registerButton, loading && styles.registerButtonDisabled, isSmallDevice && styles.registerButtonSmall]}
                 onPress={handleRegister}
                 disabled={loading}
-                activeOpacity={0.8}
+                activeOpacity={0.9}
               >
-                {loading ? (
-                  <ActivityIndicator size="small" color="#667eea" />
-                ) : (
-                  <Text style={styles.registerButtonText}>Create Account</Text>
-                )}
+                <LinearGradient
+                  colors={loading ? ['#ccc', '#ccc'] : ['#4CAF50', '#45a049']}
+                  style={styles.buttonGradient}
+                >
+                  {loading ? (
+                    <View style={styles.loadingContainer}>
+                      <ActivityIndicator size="small" color="#fff" />
+                      <Text style={styles.loadingText}>Creating Account...</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.registerButtonText}>Create Account</Text>
+                  )}
+                </LinearGradient>
               </TouchableOpacity>
 
               {/* Login Link */}
               <View style={styles.loginContainer}>
-                <Text style={styles.loginText}>Already have an account? </Text>
-                <TouchableOpacity onPress={navigateToLogin} activeOpacity={0.7}>
-                  <Text style={styles.loginLink}>Sign In</Text>
+                <Text style={[styles.loginText, loading && styles.disabledText]}>
+                  Already have an account? 
+                </Text>
+                <TouchableOpacity 
+                  onPress={navigateToLogin} 
+                  disabled={loading}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.loginLink, loading && styles.disabledText]}>
+                    Sign In
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -361,6 +405,7 @@ const RegisterScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   safeArea: {
     flex: 1,
@@ -370,6 +415,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
+    paddingBottom: Platform.OS === 'android' ? 20 : 0, // Add bottom padding for Android
   },
   header: {
     flexDirection: 'row',
@@ -377,6 +423,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingTop: 20,
+    paddingBottom: 30,
+  },
+  headerSmall: {
+    paddingTop: 10,
     paddingBottom: 20,
   },
   backButton: {
@@ -397,39 +447,51 @@ const styles = StyleSheet.create({
   },
   formContainer: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     paddingHorizontal: 30,
+    paddingTop: 40,
+    paddingBottom: 40, // Increased bottom padding
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    marginBottom: Platform.OS === 'android' ? 20 : 0, // Add margin bottom for Android
+  },
+  formContainerSmall: {
+    paddingHorizontal: 20,
     paddingTop: 30,
-    paddingBottom: 20,
+    paddingBottom: 30, // Increased bottom padding for small devices
+    marginBottom: Platform.OS === 'android' ? 15 : 0,
   },
   welcomeSection: {
     alignItems: 'center',
     marginBottom: 30,
   },
+  welcomeSectionSmall: {
+    marginBottom: 20,
+  },
   welcomeText: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#ffffff',
     marginBottom: 8,
   },
   subtitleText: {
-    fontSize: 16,
-    color: '#666',
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.7)',
     textAlign: 'center',
   },
   imagePickerContainer: {
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: 25,
   },
   imagePicker: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderWidth: 2,
-    borderColor: '#e9ecef',
+    borderColor: 'rgba(255, 255, 255, 0.2)',
     borderStyle: 'dashed',
     justifyContent: 'center',
     alignItems: 'center',
@@ -442,14 +504,14 @@ const styles = StyleSheet.create({
   },
   imagePickerText: {
     fontSize: 12,
-    color: '#999',
+    color: 'rgba(255, 255, 255, 0.6)',
     marginTop: 4,
   },
   imagePreview: {
     width: '100%',
     height: '100%',
     borderRadius: 40,
-    backgroundColor: '#667eea',
+    backgroundColor: '#4CAF50',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -461,19 +523,22 @@ const styles = StyleSheet.create({
   inputContainer: {
     marginBottom: 20,
   },
+  inputContainerSmall: {
+    marginBottom: 15,
+  },
   inputLabel: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#333',
+    color: '#ffffff',
     marginBottom: 8,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e9ecef',
+    borderColor: 'rgba(255, 255, 255, 0.2)',
     paddingHorizontal: 15,
     height: 50,
   },
@@ -485,8 +550,8 @@ const styles = StyleSheet.create({
   },
   textInput: {
     flex: 1,
-    fontSize: 16,
-    color: '#333',
+    fontSize: 14,
+    color: '#ffffff',
   },
   eyeIcon: {
     padding: 5,
@@ -497,30 +562,38 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   registerButton: {
-    backgroundColor: '#667eea',
-    paddingVertical: 16,
-    borderRadius: 12,
+    borderRadius: 25,
+    overflow: 'hidden',
     marginTop: 10,
     marginBottom: 30,
-    shadowColor: '#667eea',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 4.65,
-    elevation: 8,
   },
   registerButtonDisabled: {
-    backgroundColor: '#ccc',
-    shadowOpacity: 0,
-    elevation: 0,
+    opacity: 0.7,
+  },
+  registerButtonSmall: {
+    marginTop: 5,
+    marginBottom: 20,
+  },
+  buttonGradient: {
+    paddingVertical: 16,
+    alignItems: 'center',
   },
   registerButtonText: {
-    color: '#fff',
-    fontSize: 18,
+    color: '#ffffff',
+    fontSize: 16,
     fontWeight: 'bold',
     textAlign: 'center',
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 10,
   },
   loginContainer: {
     flexDirection: 'row',
@@ -528,13 +601,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loginText: {
-    color: '#666',
-    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 14,
   },
   loginLink: {
-    color: '#667eea',
-    fontSize: 16,
+    color: '#4CAF50',
+    fontSize: 14,
     fontWeight: '600',
+  },
+  disabledText: {
+    opacity: 0.5,
   },
 });
 

@@ -11,15 +11,20 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
+  Dimensions,
+  StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useDispatch } from 'react-redux';
 import { loginUser } from '../api/auth';
-import { setUser } from '../redux/authSlice'; // Import your auth action
+import { setUser } from '../redux/authSlice';
 
 const LoginScreen = ({ navigation }) => {
   const dispatch = useDispatch();
+  const { width, height } = Dimensions.get('window');
+  const isSmallDevice = height < 700;
+  
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -43,7 +48,6 @@ const LoginScreen = ({ navigation }) => {
 
   const validateForm = () => {
     const newErrors = {};
-
     if (!formData.email.trim()) {
       newErrors.email = 'Email is required';
     } else if (!/\S+@\S+\.\S+/.test(formData.email.trim())) {
@@ -61,7 +65,7 @@ const LoginScreen = ({ navigation }) => {
   };
 
   const handleLogin = async () => {
-    console.log('Login button pressed'); // Debug log
+    console.log('Login button pressed');
     
     if (loading) {
       console.log('Already loading, ignoring press');
@@ -125,9 +129,16 @@ const LoginScreen = ({ navigation }) => {
 
   return (
     <LinearGradient
-      colors={['#667eea', '#764ba2']}
+      colors={['#1a1a2e', '#16213e', '#0f3460']}
       style={styles.container}
     >
+      {/* Set StatusBar style */}
+      <StatusBar 
+        barStyle="light-content" 
+        backgroundColor="transparent" 
+        translucent={true} 
+      />
+      
       <SafeAreaView style={styles.safeArea}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -139,7 +150,7 @@ const LoginScreen = ({ navigation }) => {
             keyboardShouldPersistTaps="handled"
           >
             {/* Header */}
-            <View style={styles.header}>
+            <View style={[styles.header, isSmallDevice && styles.headerSmall]}>
               <TouchableOpacity
                 style={styles.backButton}
                 onPress={handleGoBack}
@@ -153,8 +164,8 @@ const LoginScreen = ({ navigation }) => {
             </View>
 
             {/* Form Container */}
-            <View style={styles.formContainer}>
-              <View style={styles.welcomeSection}>
+            <View style={[styles.formContainer, isSmallDevice && styles.formContainerSmall]}>
+              <View style={[styles.welcomeSection, isSmallDevice && styles.welcomeSectionSmall]}>
                 <Text style={styles.welcomeText}>Welcome Back!</Text>
                 <Text style={styles.subtitleText}>
                   Please sign in to your account
@@ -162,14 +173,14 @@ const LoginScreen = ({ navigation }) => {
               </View>
 
               {/* Email Input */}
-              <View style={styles.inputContainer}>
+              <View style={[styles.inputContainer, isSmallDevice && styles.inputContainerSmall]}>
                 <Text style={styles.inputLabel}>Email</Text>
                 <View style={[styles.inputWrapper, errors.email && styles.inputError]}>
-                  <Ionicons name="mail-outline" size={20} color="#999" style={styles.inputIcon} />
+                  <Ionicons name="mail-outline" size={20} color="#4CAF50" style={styles.inputIcon} />
                   <TextInput
                     style={styles.textInput}
                     placeholder="Enter your email"
-                    placeholderTextColor="#999"
+                    placeholderTextColor="rgba(255, 255, 255, 0.6)"
                     value={formData.email}
                     onChangeText={(text) => handleInputChange('email', text)}
                     keyboardType="email-address"
@@ -183,14 +194,14 @@ const LoginScreen = ({ navigation }) => {
               </View>
 
               {/* Password Input */}
-              <View style={styles.inputContainer}>
+              <View style={[styles.inputContainer, isSmallDevice && styles.inputContainerSmall]}>
                 <Text style={styles.inputLabel}>Password</Text>
                 <View style={[styles.inputWrapper, errors.password && styles.inputError]}>
-                  <Ionicons name="lock-closed-outline" size={20} color="#999" style={styles.inputIcon} />
+                  <Ionicons name="lock-closed-outline" size={20} color="#4CAF50" style={styles.inputIcon} />
                   <TextInput
                     style={styles.textInput}
                     placeholder="Enter your password"
-                    placeholderTextColor="#999"
+                    placeholderTextColor="rgba(255, 255, 255, 0.6)"
                     value={formData.password}
                     onChangeText={(text) => handleInputChange('password', text)}
                     secureTextEntry={!showPassword}
@@ -208,7 +219,7 @@ const LoginScreen = ({ navigation }) => {
                     <Ionicons
                       name={showPassword ? "eye-off-outline" : "eye-outline"}
                       size={20}
-                      color="#999"
+                      color="#4CAF50"
                     />
                   </TouchableOpacity>
                 </View>
@@ -217,7 +228,7 @@ const LoginScreen = ({ navigation }) => {
 
               {/* Forgot Password */}
               <TouchableOpacity 
-                style={styles.forgotPassword}
+                style={[styles.forgotPassword, isSmallDevice && styles.forgotPasswordSmall]}
                 onPress={handleForgotPassword}
                 disabled={loading}
                 activeOpacity={0.7}
@@ -229,19 +240,24 @@ const LoginScreen = ({ navigation }) => {
 
               {/* Login Button */}
               <TouchableOpacity
-                style={[styles.loginButton, loading && styles.loginButtonDisabled]}
+                style={[styles.loginButton, loading && styles.loginButtonDisabled, isSmallDevice && styles.loginButtonSmall]}
                 onPress={handleLogin}
                 disabled={loading}
-                activeOpacity={0.8}
+                activeOpacity={0.9}
               >
-                {loading ? (
-                  <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="small" color="#fff" />
-                    <Text style={styles.loadingText}>Signing In...</Text>
-                  </View>
-                ) : (
-                  <Text style={styles.loginButtonText}>Sign In</Text>
-                )}
+                <LinearGradient
+                  colors={loading ? ['#ccc', '#ccc'] : ['#4CAF50', '#45a049']}
+                  style={styles.buttonGradient}
+                >
+                  {loading ? (
+                    <View style={styles.loadingContainer}>
+                      <ActivityIndicator size="small" color="#fff" />
+                      <Text style={styles.loadingText}>Signing In...</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.loginButtonText}>Sign In</Text>
+                  )}
+                </LinearGradient>
               </TouchableOpacity>
 
               {/* Register Link */}
@@ -270,6 +286,7 @@ const LoginScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0, // Add this line
   },
   safeArea: {
     flex: 1,
@@ -287,6 +304,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 30,
+  },
+  headerSmall: {
+    paddingTop: 10,
+    paddingBottom: 20,
   },
   backButton: {
     width: 40,
@@ -306,44 +327,54 @@ const styles = StyleSheet.create({
   },
   formContainer: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     paddingHorizontal: 30,
     paddingTop: 40,
     paddingBottom: 30,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  formContainerSmall: {
+    paddingHorizontal: 20,
+    paddingTop: 30,
+    paddingBottom: 20,
   },
   welcomeSection: {
     alignItems: 'center',
     marginBottom: 40,
   },
+  welcomeSectionSmall: {
+    marginBottom: 25,
+  },
   welcomeText: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#ffffff',
     marginBottom: 8,
   },
   subtitleText: {
-    fontSize: 16,
-    color: '#666',
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.7)',
     textAlign: 'center',
   },
   inputContainer: {
     marginBottom: 20,
   },
   inputLabel: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#333',
+    color: '#ffffff',
     marginBottom: 8,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e9ecef',
+    borderColor: 'rgba(255, 255, 255, 0.2)',
     paddingHorizontal: 15,
     height: 50,
   },
@@ -355,8 +386,8 @@ const styles = StyleSheet.create({
   },
   textInput: {
     flex: 1,
-    fontSize: 16,
-    color: '#333',
+    fontSize: 14,
+    color: '#ffffff',
   },
   eyeIcon: {
     padding: 5,
@@ -371,32 +402,25 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   forgotPasswordText: {
-    color: '#667eea',
+    color: '#4CAF50',
     fontSize: 14,
     fontWeight: '600',
   },
   loginButton: {
-    backgroundColor: '#667eea',
-    paddingVertical: 16,
-    borderRadius: 12,
+    borderRadius: 25,
+    overflow: 'hidden',
     marginBottom: 30,
-    shadowColor: '#667eea',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 4.65,
-    elevation: 8,
   },
   loginButtonDisabled: {
-    backgroundColor: '#ccc',
-    shadowOpacity: 0,
-    elevation: 0,
+    opacity: 0.7,
+  },
+  buttonGradient: {
+    paddingVertical: 16,
+    alignItems: 'center',
   },
   loginButtonText: {
-    color: '#fff',
-    fontSize: 18,
+    color: '#ffffff',
+    fontSize: 16,
     fontWeight: 'bold',
     textAlign: 'center',
   },
@@ -417,12 +441,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   registerText: {
-    color: '#666',
-    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 14,
   },
   registerLink: {
-    color: '#667eea',
-    fontSize: 16,
+    color: '#4CAF50',
+    fontSize: 14,
     fontWeight: '600',
   },
   disabledText: {

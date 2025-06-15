@@ -10,6 +10,8 @@ import {
   Alert,
   Platform,
   Modal,
+  StatusBar,
+  Image, // Added Image import
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,7 +21,6 @@ import { logout } from '../redux/authSlice'; // Adjust path as needed
 // Custom Alert Component for Web Compatibility
 const CustomAlert = ({ visible, title, message, buttons, onClose }) => {
   if (!visible) return null;
-
   return (
     <Modal
       transparent={true}
@@ -70,10 +71,10 @@ const SettingsScreen = ({ navigation }) => {
   
   // Settings state
   const [notifications, setNotifications] = useState(true);
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(true);
   const [biometric, setBiometric] = useState(false);
   const [autoSync, setAutoSync] = useState(true);
-
+  
   // Custom alert state
   const [alertConfig, setAlertConfig] = useState({
     visible: false,
@@ -126,6 +127,11 @@ const SettingsScreen = ({ navigation }) => {
     );
   };
 
+  const getInitials = (name) => {
+    if (!name) return user?.email?.charAt(0).toUpperCase() || 'U';
+    return name.split(' ').map(n => n.charAt(0)).join('').toUpperCase().slice(0, 2);
+  };
+
   const settingsGroups = [
     {
       title: 'Preferences',
@@ -137,7 +143,7 @@ const SettingsScreen = ({ navigation }) => {
           type: 'switch',
           value: notifications,
           onValueChange: setNotifications,
-          color: '#667eea',
+          color: '#00E676',
         },
         {
           id: 2,
@@ -146,7 +152,7 @@ const SettingsScreen = ({ navigation }) => {
           type: 'switch',
           value: darkMode,
           onValueChange: setDarkMode,
-          color: '#764ba2',
+          color: '#00E676',
         },
         {
           id: 3,
@@ -155,7 +161,7 @@ const SettingsScreen = ({ navigation }) => {
           type: 'switch',
           value: biometric,
           onValueChange: setBiometric,
-          color: '#51cf66',
+          color: '#00E676',
         },
         {
           id: 4,
@@ -164,7 +170,7 @@ const SettingsScreen = ({ navigation }) => {
           type: 'switch',
           value: autoSync,
           onValueChange: setAutoSync,
-          color: '#ff8cc8',
+          color: '#00E676',
         },
       ],
     },
@@ -177,7 +183,7 @@ const SettingsScreen = ({ navigation }) => {
           icon: 'help-circle-outline',
           type: 'button',
           onPress: () => showAlert('Help Center', 'Help center coming soon!', [{ text: 'OK' }]),
-          color: '#667eea',
+          color: '#00E676',
         },
         {
           id: 6,
@@ -185,7 +191,7 @@ const SettingsScreen = ({ navigation }) => {
           icon: 'mail-outline',
           type: 'button',
           onPress: () => showAlert('Contact Support', 'Support contact coming soon!', [{ text: 'OK' }]),
-          color: '#764ba2',
+          color: '#00E676',
         },
         {
           id: 7,
@@ -193,7 +199,7 @@ const SettingsScreen = ({ navigation }) => {
           icon: 'bug-outline',
           type: 'button',
           onPress: () => showAlert('Report Bug', 'Bug reporting coming soon!', [{ text: 'OK' }]),
-          color: '#ff6b6b',
+          color: '#00E676',
         },
       ],
     },
@@ -206,7 +212,7 @@ const SettingsScreen = ({ navigation }) => {
           icon: 'document-text-outline',
           type: 'button',
           onPress: () => showAlert('Privacy Policy', 'Privacy policy coming soon!', [{ text: 'OK' }]),
-          color: '#51cf66',
+          color: '#00E676',
         },
         {
           id: 9,
@@ -214,7 +220,7 @@ const SettingsScreen = ({ navigation }) => {
           icon: 'clipboard-outline',
           type: 'button',
           onPress: () => showAlert('Terms of Service', 'Terms of service coming soon!', [{ text: 'OK' }]),
-          color: '#ff8cc8',
+          color: '#00E676',
         },
         {
           id: 10,
@@ -222,7 +228,7 @@ const SettingsScreen = ({ navigation }) => {
           icon: 'information-circle-outline',
           type: 'info',
           rightText: '1.0.0',
-          color: '#999',
+          color: 'rgba(255,255,255,0.6)',
         },
       ],
     },
@@ -234,16 +240,16 @@ const SettingsScreen = ({ navigation }) => {
         return (
           <View key={item.id} style={styles.settingItem}>
             <View style={styles.settingLeft}>
-              <View style={[styles.settingIconContainer, { backgroundColor: item.color }]}>
-                <Ionicons name={item.icon} size={20} color="#fff" />
+              <View style={[styles.settingIconContainer, { backgroundColor: 'rgba(0,230,118,0.2)' }]}>
+                <Ionicons name={item.icon} size={18} color="#00E676" />
               </View>
               <Text style={styles.settingTitle}>{item.title}</Text>
             </View>
             <Switch
               value={item.value}
               onValueChange={item.onValueChange}
-              trackColor={{ false: '#e9ecef', true: item.color }}
-              thumbColor="#fff"
+              trackColor={{ false: 'rgba(255,255,255,0.2)', true: '#00E676' }}
+              thumbColor="#FFFFFF"
             />
           </View>
         );
@@ -254,15 +260,15 @@ const SettingsScreen = ({ navigation }) => {
             key={item.id}
             style={styles.settingItem}
             onPress={item.onPress}
-            activeOpacity={0.7}
+            activeOpacity={0.8}
           >
             <View style={styles.settingLeft}>
-              <View style={[styles.settingIconContainer, { backgroundColor: item.color }]}>
-                <Ionicons name={item.icon} size={20} color="#fff" />
+              <View style={[styles.settingIconContainer, { backgroundColor: 'rgba(0,230,118,0.2)' }]}>
+                <Ionicons name={item.icon} size={18} color="#00E676" />
               </View>
               <Text style={styles.settingTitle}>{item.title}</Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color="#ccc" />
+            <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.6)" />
           </TouchableOpacity>
         );
       
@@ -270,8 +276,8 @@ const SettingsScreen = ({ navigation }) => {
         return (
           <View key={item.id} style={styles.settingItem}>
             <View style={styles.settingLeft}>
-              <View style={[styles.settingIconContainer, { backgroundColor: item.color }]}>
-                <Ionicons name={item.icon} size={20} color="#fff" />
+              <View style={[styles.settingIconContainer, { backgroundColor: 'rgba(255,255,255,0.05)' }]}>
+                <Ionicons name={item.icon} size={18} color="rgba(255,255,255,0.6)" />
               </View>
               <Text style={styles.settingTitle}>{item.title}</Text>
             </View>
@@ -285,188 +291,241 @@ const SettingsScreen = ({ navigation }) => {
   };
 
   return (
-    <LinearGradient
-      colors={['#667eea', '#764ba2']}
-      style={styles.container}
-    >
-      <SafeAreaView style={styles.safeArea}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="arrow-back" size={24} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Settings</Text>
-          <View style={styles.placeholder} />
-        </View>
-
-        {/* Content */}
-        <ScrollView
-          style={styles.content}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
-          {/* User Info Card */}
-          <View style={styles.userCard}>
-            <View style={styles.userAvatar}>
-              <Ionicons name="person" size={32} color="#667eea" />
-            </View>
-            <View style={styles.userInfo}>
-              <Text style={styles.userNameText}>
-                {user?.name || user?.email?.split('@')[0] || 'User'}
-              </Text>
-              <Text style={styles.userEmailText}>{user?.email}</Text>
-            </View>
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      <LinearGradient colors={['#0A0A0A', '#1A1A2E', '#16213E']} style={styles.gradient}>
+        <SafeAreaView style={styles.safeArea}>
+          
+          {/* Header */}
+          <View style={styles.header}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Settings</Text>
+            <View style={styles.placeholder} />
           </View>
 
-          {/* Settings Groups */}
-          {settingsGroups.map((group, groupIndex) => (
-            <View key={groupIndex} style={styles.settingsGroup}>
-              <Text style={styles.groupTitle}>{group.title}</Text>
-              <View style={styles.groupCard}>
-                {group.items.map((item, itemIndex) => (
-                  <View key={item.id}>
-                    {renderSettingItem(item)}
-                    {itemIndex < group.items.length - 1 && <View style={styles.separator} />}
-                  </View>
-                ))}
-              </View>
-            </View>
-          ))}
-
-          {/* Logout Button */}
-          <TouchableOpacity
-            style={styles.logoutButton}
-            onPress={handleLogout}
-            activeOpacity={0.8}
+          {/* Content */}
+          <ScrollView
+            style={styles.content}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
           >
-            <Ionicons name="log-out-outline" size={20} color="#fff" />
-            <Text style={styles.logoutButtonText}>Logout</Text>
-          </TouchableOpacity>
-        </ScrollView>
+            {/* User Info Card with Avatar Display */}
+            <TouchableOpacity 
+              style={styles.profileCard}
+              onPress={() => navigation.navigate('Profile')}
+              activeOpacity={0.8}
+            >
+              <View style={styles.avatarSection}>
+                <View style={styles.avatar}>
+                  {user?.avatar?.url ? (
+                    <Image
+                      source={{ uri: user.avatar.url }}
+                      style={styles.avatarImage}
+                      onError={() => console.log('Avatar image failed to load')}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <Text style={styles.avatarText}>
+                      {getInitials(user?.name)}
+                    </Text>
+                  )}
+                </View>
+              </View>
+              
+              <View style={styles.userInfo}>
+                <Text style={styles.userName}>
+                  {user?.name || user?.email?.split('@')[0] || 'User'}
+                </Text>
+                <Text style={styles.userEmail}>{user?.email}</Text>
+                
+                <View style={styles.roleBadge}>
+                  <Ionicons name="star" size={10} color="#00E676" />
+                  <Text style={styles.roleText}>{user?.role || 'User'}</Text>
+                </View>
+              </View>
+              
+              <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.6)" />
+            </TouchableOpacity>
 
-        {/* Custom Alert for Web */}
-        <CustomAlert
-          visible={alertConfig.visible}
-          title={alertConfig.title}
-          message={alertConfig.message}
-          buttons={alertConfig.buttons}
-          onClose={closeAlert}
-        />
-      </SafeAreaView>
-    </LinearGradient>
+            {/* Settings Groups */}
+            {settingsGroups.map((group, groupIndex) => (
+              <View key={groupIndex} style={styles.section}>
+                <Text style={styles.sectionTitle}>{group.title}</Text>
+                <View style={styles.formCard}>
+                  {group.items.map((item, itemIndex) => (
+                    <View key={item.id}>
+                      {renderSettingItem(item)}
+                      {itemIndex < group.items.length - 1 && <View style={styles.separator} />}
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ))}
+
+            {/* Logout Button */}
+            <TouchableOpacity
+              style={styles.logoutButton}
+              onPress={handleLogout}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="log-out-outline" size={18} color="#FFFFFF" />
+              <Text style={styles.logoutButtonText}>Logout</Text>
+            </TouchableOpacity>
+          </ScrollView>
+
+          {/* Custom Alert for Web */}
+          <CustomAlert
+            visible={alertConfig.visible}
+            title={alertConfig.title}
+            message={alertConfig.message}
+            buttons={alertConfig.buttons}
+            onClose={closeAlert}
+          />
+        </SafeAreaView>
+      </LinearGradient>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#0A0A0A',
+  },
+  gradient: {
+    flex: 1,
   },
   safeArea: {
     flex: 1,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 30,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 20,
+    paddingBottom: 20,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
+    borderColor: 'rgba(0,230,118,0.3)',
+    borderWidth: 1,
   },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    flex: 1,
   },
   placeholder: {
-    width: 40,
+    width: 36,
   },
   content: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
+    paddingHorizontal: 20,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 30,
+    paddingBottom: 100,
   },
-  userCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
+  profileCard: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 20,
+    padding: 18,
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 30,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 4,
+    marginBottom: 25,
+    borderColor: 'rgba(0,230,118,0.3)',
+    borderWidth: 1,
   },
-  userAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#f0f2ff',
+  avatarSection: {
+    marginRight: 14,
+  },
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(0,230,118,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    borderWidth: 2,
+    borderColor: '#00E676',
+    overflow: 'hidden', // Added to ensure image fits properly
+  },
+  avatarImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+  avatarText: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#FFFFFF',
   },
   userInfo: {
     flex: 1,
   },
-  userNameText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 4,
+  userName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 3,
   },
-  userEmailText: {
-    fontSize: 14,
-    color: '#666',
+  userEmail: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginBottom: 6,
   },
-  settingsGroup: {
-    marginBottom: 30,
+  roleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,230,118,0.2)',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: 'rgba(0,230,118,0.3)',
   },
-  groupTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
+  roleText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#00E676',
+    marginLeft: 3,
+  },
+  section: {
+    marginBottom: 25,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
     marginBottom: 12,
   },
-  groupCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 4,
+  formCard: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 15,
+    borderColor: 'rgba(0,230,118,0.3)',
+    borderWidth: 1,
   },
   settingItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
+    padding: 14,
+    minHeight: 52,
   },
   settingLeft: {
     flexDirection: 'row',
@@ -474,117 +533,107 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   settingIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0,230,118,0.3)',
   },
   settingTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#333',
+    color: '#FFFFFF',
   },
   settingRightText: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.7)',
     fontWeight: '500',
   },
   separator: {
     height: 1,
-    backgroundColor: '#f8f9fa',
-    marginLeft: 56,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    marginLeft: 46,
   },
   logoutButton: {
-    backgroundColor: '#ff6b6b',
+    backgroundColor: '#E91E63',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
+    paddingVertical: 14,
     borderRadius: 12,
     marginTop: 20,
-    shadowColor: '#ff6b6b',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 4.65,
-    elevation: 8,
+    borderColor: 'rgba(233, 30, 99, 0.3)',
+    borderWidth: 1,
   },
   logoutButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginLeft: 8,
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 6,
   },
   // Custom Alert Styles
   alertOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   alertContainer: {
-    backgroundColor: '#fff',
+    backgroundColor: '#1A1A2E',
     borderRadius: 16,
-    padding: 24,
+    padding: 20,
     minWidth: 280,
     maxWidth: 400,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 10,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 10,
+    borderColor: 'rgba(0, 230, 118, 0.3)',
+    borderWidth: 1,
   },
   alertTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
+    color: '#FFFFFF',
+    marginBottom: 6,
     textAlign: 'center',
   },
   alertMessage: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 20,
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginBottom: 16,
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 18,
   },
   alertButtonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 12,
+    gap: 10,
   },
   alertButton: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     borderRadius: 8,
-    backgroundColor: '#667eea',
+    backgroundColor: '#00E676',
     alignItems: 'center',
   },
   alertButtonCancel: {
-    backgroundColor: '#e9ecef',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
   },
   alertButtonDestructive: {
-    backgroundColor: '#ff6b6b',
+    backgroundColor: '#E91E63',
   },
   alertButtonText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#fff',
+    color: '#0A0A0A',
   },
   alertButtonTextCancel: {
-    color: '#666',
+    color: '#FFFFFF',
   },
   alertButtonTextDestructive: {
-    color: '#fff',
+    color: '#FFFFFF',
   },
 });
 
