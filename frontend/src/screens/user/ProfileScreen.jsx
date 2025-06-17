@@ -33,7 +33,7 @@ const ProfileScreen = ({ navigation }) => {
   const [profileData, setProfileData] = useState({
     name: user?.name || '',
     email: user?.email || '',
-    phone: user?.phone || '',
+    city: user?.city || '',
   });
   const [imageUri, setImageUri] = useState(user?.avatar?.url || null);
   const [isImageLoading, setIsImageLoading] = useState(false);
@@ -43,7 +43,7 @@ const ProfileScreen = ({ navigation }) => {
     setProfileData({
       name: user?.name || '',
       email: user?.email || '',
-      phone: user?.phone || '',
+      city: user?.city || '',
     });
     setImageUri(user?.avatar?.url || null);
   }, [user]);
@@ -74,7 +74,7 @@ const ProfileScreen = ({ navigation }) => {
       
       // Add text fields
       formData.append('name', profileData.name);
-      formData.append('phone', profileData.phone);
+      formData.append('city', profileData.city);
 
       // Handle image upload properly
       if (imageUri && imageUri !== user?.avatar?.url) {
@@ -108,7 +108,7 @@ const ProfileScreen = ({ navigation }) => {
     setProfileData({
       name: user?.name || '',
       email: user?.email || '',
-      phone: user?.phone || '',
+      city: user?.city || '',
     });
     setImageUri(user?.avatar?.url || null);
   };
@@ -376,18 +376,17 @@ const ProfileScreen = ({ navigation }) => {
                 </View>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Phone Number</Text>
+                  <Text style={styles.inputLabel}>City</Text>
                   <View style={[styles.inputContainer, isEditing && styles.inputContainerActive]}>
-                    <Ionicons name="call-outline" size={18} color="#00E676" />
+                    <Ionicons name="location-outline" size={18} color="#00E676" />
                     <TextInput
                       style={[styles.textInput, !isEditing && styles.textInputDisabled]}
-                      value={profileData.phone}
-                      onChangeText={(text) => handleInputChange('phone', text)}
-                      placeholder="Enter your phone number"
+                      value={profileData.city}
+                      onChangeText={(text) => handleInputChange('city', text)}
+                      placeholder="Enter your city"
                       placeholderTextColor="rgba(255,255,255,0.5)"
                       editable={isEditing}
-                      keyboardType="phone-pad"
-                      returnKeyType="done"
+                      returnKeyType="next"
                     />
                     {isEditing && <Ionicons name="create-outline" size={14} color="#00E676" />}
                   </View>

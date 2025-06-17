@@ -30,6 +30,10 @@ const userSchema = new mongoose.Schema({
             type: String,
         }
     },
+    city: {
+        type: String,
+        required: [true, 'Please enter your City'],
+    },
     role: {
         type: String,
         default: 'user'

@@ -28,8 +28,10 @@ const RegisterScreen = ({ navigation }) => {
     email: '',
     password: '',
     confirmPassword: '',
+    city: '',
     profileImage: null,
   });
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -107,6 +109,14 @@ const RegisterScreen = ({ navigation }) => {
       newErrors.confirmPassword = 'Passwords do not match';
     }
 
+    if (!formData.city.trim()) {
+      newErrors.city = 'City is required';
+    } else if (formData.city.trim().length < 2) {
+      newErrors.city = 'City must be at least 2 characters';
+    } else if (formData.city.trim().length > 50) {
+      newErrors.city = 'City cannot exceed 50 characters';
+    }
+
     if (!formData.profileImage) {
       newErrors.profileImage = 'Profile image is required';
     }
@@ -128,6 +138,7 @@ const RegisterScreen = ({ navigation }) => {
       formDataToSend.append('name', formData.name.trim());
       formDataToSend.append('email', formData.email.trim());
       formDataToSend.append('password', formData.password);
+      formDataToSend.append('city', formData.city.trim());
 
       // Avatar is required based on the backend controller
       if (formData.profileImage) {
@@ -290,6 +301,26 @@ const RegisterScreen = ({ navigation }) => {
                   />
                 </View>
                 {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
+              </View>
+
+              {/* City Input */}
+              <View style={[styles.inputContainer, isSmallDevice && styles.inputContainerSmall]}>
+                <Text style={styles.inputLabel}>City</Text>
+                <View style={[styles.inputWrapper, errors.city && styles.inputError]}>
+                  <Ionicons name="location-outline" size={20} color="#4CAF50" style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Enter your city"
+                    placeholderTextColor="rgba(255, 255, 255, 0.6)"
+                    value={formData.city}
+                    onChangeText={(text) => handleInputChange('city', text)}
+                    autoCapitalize="words"
+                    maxLength={50}
+                    returnKeyType="next"
+                    editable={!loading}
+                  />
+                </View>
+                {errors.city ? <Text style={styles.errorText}>{errors.city}</Text> : null}
               </View>
 
               {/* Password Input */}

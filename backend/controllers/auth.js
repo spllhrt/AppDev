@@ -24,12 +24,13 @@ exports.registerUser = async (req, res, next) => {
             stream.end(req.file.buffer);
         });
 
-        const { name, email, password } = req.body;
+        const { name, email, city, password } = req.body;
 
         const user = await User.create({
             name,
             email,
             password,
+            city,
             avatar: {
                 public_id: result.public_id,
                 url: result.secure_url,
@@ -83,6 +84,7 @@ exports.updateProfile = async (req, res, next) => {
         const newUserData = {
             name: req.body.name,
             email: req.body.email,
+            city: req.body.city,
         };
 
         if (req.file && req.file.buffer) {
