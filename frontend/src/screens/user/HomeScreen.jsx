@@ -4,11 +4,132 @@ import {
   TextInput, ActivityIndicator, RefreshControl, Dimensions,
   Keyboard, Alert,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // Fixed import
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
+import * as TaskManager from 'expo-task-manager';
+import * as BackgroundFetch from 'expo-background-fetch';
 import { useSelector } from 'react-redux';
+import { storeAQIWeatherSnapshot } from '../../api/aqiwea'; // Import your API function
 
 const { width } = Dimensions.get('window');
+
+// Background task name
+const BACKGROUND_FETCH_TASK = 'background-aqi-weather-store';
+const STORAGE_KEYS = {
+  USE_GPS: 'useGPS',
+  SAVED_LOCATION: 'savedLocation',
+};
+
+// Helper function to get stored location preferences
+const getStoredLocationPreferences = async () => {
+  try {
+    const [useGPSStr, savedLocationStr] = await Promise.all([
+      AsyncStorage.getItem(STORAGE_KEYS.USE_GPS),
+      AsyncStorage.getItem(STORAGE_KEYS.SAVED_LOCATION),
+    ]);
+    
+    const useGPS = useGPSStr === 'true';
+    const savedLocation = savedLocationStr ? JSON.parse(savedLocationStr) : null;
+    
+    return { useGPS, savedLocation };
+  } catch (error) {
+    console.error('Error getting stored location preferences:', error);
+    return { useGPS: false, savedLocation: null };
+  }
+};
+
+// Helper function to get coordinates from city name
+const getCityCoordinates = async (cityName) => {
+  try {
+    const response = await fetch(
+      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&count=1&language=en&format=json`
+    );
+    
+    if (response.ok) {
+      const data = await response.json();
+      if (data?.results?.length > 0) {
+        const result = data.results[0];
+        return {
+          lat: result.latitude,
+          lon: result.longitude,
+          city: `${result.name}, ${result.country}`,
+          country: result.country,
+          timezone: result.timezone || 'auto'
+        };
+      }
+    }
+    return null;
+  } catch (error) {
+    console.error('Error getting city coordinates:', error);
+    return null;
+  }
+};
+
+// Define the background task with flexible location handling
+TaskManager.defineTask(BACKGROUND_FETCH_TASK, async () => {
+  try {
+    console.log('Background task: Starting AQI weather storage...');
+    
+    // Get stored location preferences
+    const { useGPS, savedLocation } = await getStoredLocationPreferences();
+    
+    let latitude, longitude;
+    
+    if (useGPS) {
+      // Try to get GPS location
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          console.log('Background task: Location permission not granted, falling back to saved location');
+          
+          if (savedLocation) {
+            latitude = savedLocation.lat;
+            longitude = savedLocation.lon;
+          } else {
+            console.log('Background task: No saved location available');
+            return BackgroundFetch.BackgroundFetchResult.Failed;
+          }
+        } else {
+          const location = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+            timeout: 15000, // Increased timeout for background task
+          });
+          latitude = location.coords.latitude;
+          longitude = location.coords.longitude;
+        }
+      } catch (locationError) {
+        console.log('Background task: GPS failed, using saved location:', locationError.message);
+        
+        if (savedLocation) {
+          latitude = savedLocation.lat;
+          longitude = savedLocation.lon;
+        } else {
+          console.log('Background task: No fallback location available');
+          return BackgroundFetch.BackgroundFetchResult.Failed;
+        }
+      }
+    } else {
+      // Use saved location
+      if (savedLocation) {
+        latitude = savedLocation.lat;
+        longitude = savedLocation.lon;
+      } else {
+        console.log('Background task: No saved location available');
+        return BackgroundFetch.BackgroundFetchResult.Failed;
+      }
+    }
+
+    // Store the snapshot using your API
+    await storeAQIWeatherSnapshot(latitude, longitude);
+
+    console.log(`Background task: AQI weather snapshot stored successfully for location: ${latitude}, ${longitude}`);
+    return BackgroundFetch.BackgroundFetchResult.NewData;
+  } catch (error) {
+    console.error('Background task error:', error);
+    return BackgroundFetch.BackgroundFetchResult.Failed;
+  }
+});
 
 // Utility functions
 const debounce = (func, wait) => {
@@ -71,39 +192,18 @@ const getWeatherDescription = (code) => {
   return descriptions[code] || 'Cloudy';
 };
 
+const getWindDirection = (degrees) => {
+  const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  const index = Math.round(degrees / 45) % 8;
+  return directions[index];
+};
+
 const formatHourTime = (timeString) => {
   const date = new Date(timeString);
   const now = new Date();
   const isToday = date.toDateString() === now.toDateString();
   const timeStr = date.getHours().toString().padStart(2, '0') + ':00';
   return (isToday && date.getHours() === now.getHours()) ? 'Now' : timeStr;
-};
-
-// Helper function to get coordinates from city name
-const getCityCoordinates = async (cityName) => {
-  try {
-    const response = await fetch(
-      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&count=1&language=en&format=json`
-    );
-    
-    if (response.ok) {
-      const data = await response.json();
-      if (data?.results?.length > 0) {
-        const result = data.results[0];
-        return {
-          lat: result.latitude,
-          lon: result.longitude,
-          city: `${result.name}, ${result.country}`,
-          country: result.country,
-          timezone: result.timezone || 'auto'
-        };
-      }
-    }
-    return null;
-  } catch (error) {
-    console.error('Error getting city coordinates:', error);
-    return null;
-  }
 };
 
 // Components
@@ -165,64 +265,6 @@ const LocationToggle = ({ useGPS, onToggle, savedLocation, currentLocation }) =>
   </View>
 );
 
-const LocationSearch = ({ 
-  showSearch, onToggle, locationInput, onInputChange, 
-  locationSearching, suggestions, onSelectLocation 
-}) => (
-  <>
-    <TouchableOpacity style={styles.searchToggle} onPress={onToggle}>
-      <Text style={styles.searchToggleText}>
-        🔍 {showSearch ? 'Hide' : 'Change'} Saved Location
-      </Text>
-    </TouchableOpacity>
-
-    {showSearch && (
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={styles.searchInput}
-          value={locationInput}
-          onChangeText={onInputChange}
-          placeholder="Search for any city worldwide..."
-          placeholderTextColor="#9ca3af"
-          editable={!locationSearching}
-          onSubmitEditing={() => Keyboard.dismiss()}
-          returnKeyType="search"
-        />
-        
-        {locationSearching && (
-          <View style={styles.searchingIndicator}>
-            <ActivityIndicator size="small" color="#10b981" />
-            <Text style={styles.searchingText}>Searching...</Text>
-          </View>
-        )}
-
-        {suggestions.length > 0 && (
-          <ScrollView 
-            style={styles.suggestionsList}
-            nestedScrollEnabled={true}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
-            {suggestions.map((item, index) => (
-              <TouchableOpacity
-                key={`${item.id}-${index}`}
-                style={styles.suggestionItem}
-                onPress={() => onSelectLocation(item)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.suggestionName}>{item.name}</Text>
-                <Text style={styles.suggestionDetails}>
-                  {item.admin1 && `${item.admin1}, `}{item.country}
-                  {item.population && ` • Pop: ${item.population.toLocaleString()}`}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        )}
-      </View>
-    )}
-  </>
-);
 
 const AQICard = ({ currentData }) => {
   const aqiInfo = getAQIStatus(currentData?.aqi?.us_aqi || 85);
@@ -352,6 +394,60 @@ const HomeScreen = () => {
   const [locationSearching, setLocationSearching] = useState(false);
   const [locationSuggestions, setLocationSuggestions] = useState([]);
 
+  // Store location preferences to AsyncStorage
+  const storeLocationPreferences = async (useGPSPref, savedLoc) => {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.USE_GPS, useGPSPref.toString());
+      if (savedLoc) {
+        await AsyncStorage.setItem(STORAGE_KEYS.SAVED_LOCATION, JSON.stringify(savedLoc));
+      }
+    } catch (error) {
+      console.error('Error storing location preferences:', error);
+    }
+  };
+
+  // Setup background task when component mounts
+  useEffect(() => {
+    const setupBackgroundTask = async () => {
+      try {
+        // Register the background fetch task
+        await BackgroundFetch.registerTaskAsync(BACKGROUND_FETCH_TASK, {
+          minimumInterval: 24 * 60 * 60 * 1000, // 24 hours in milliseconds
+          stopOnTerminate: false, // Continue running when app is terminated
+          startOnBoot: true, // Start when device reboots
+        });
+        
+        console.log('Background task registered successfully');
+      } catch (error) {
+        console.error('Failed to register background task:', error);
+      }
+    };
+
+    setupBackgroundTask();
+
+    // Cleanup on unmount
+    return () => {
+      BackgroundFetch.unregisterTaskAsync(BACKGROUND_FETCH_TASK);
+    };
+  }, []);
+
+  // Store current data manually (for immediate storage)
+  const storeCurrentSnapshot = async () => {
+    try {
+      const location = getCurrentLocation();
+      if (!location) {
+        Alert.alert('Error', 'No location available for storing snapshot');
+        return;
+      }
+
+      await storeAQIWeatherSnapshot(location.lat, location.lon);
+      Alert.alert('Success', 'AQI & Weather snapshot stored successfully!');
+    } catch (error) {
+      console.error('Error storing snapshot:', error);
+      Alert.alert('Error', 'Failed to store snapshot: ' + error.message);
+    }
+  };
+
   // Get current location for display
   const getCurrentLocation = () => useGPS ? gpsLocation : savedLocation;
 
@@ -423,15 +519,19 @@ const HomeScreen = () => {
       const coordinates = await getCityCoordinates(user.city);
       if (coordinates) {
         setSavedLocation(coordinates);
+        // Store the saved location in AsyncStorage
+        await storeLocationPreferences(useGPS, coordinates);
       } else {
         // Fallback if geocoding fails
-        setSavedLocation({
+        const fallbackLocation = {
           city: user.city,
           lat: 40.7128, // Default to NYC coordinates
           lon: -74.0060,
           country: 'Unknown',
           timezone: 'auto'
-        });
+        };
+        setSavedLocation(fallbackLocation);
+        await storeLocationPreferences(useGPS, fallbackLocation);
       }
     }
   };
@@ -443,12 +543,15 @@ const HomeScreen = () => {
       if (location) {
         setGpsLocation(location);
         setUseGPS(true);
+        await storeLocationPreferences(true, savedLocation);
       } else {
         setUseGPS(false);
+        await storeLocationPreferences(false, savedLocation);
       }
       setLoading(false);
     } else {
       setUseGPS(useGPSLocation);
+      await storeLocationPreferences(useGPSLocation, savedLocation);
     }
   };
 
@@ -477,34 +580,7 @@ const HomeScreen = () => {
     }
   };
 
-  const debouncedSearch = useCallback(debounce(searchLocationAPI, 500), []);
-
-  const handleLocationInputChange = (text) => {
-    setLocationInput(text);
-    if (text.length >= 3) {
-      debouncedSearch(text);
-    } else {
-      setLocationSuggestions([]);
-      setLocationSearching(false);
-    }
-  };
-
-  const selectLocation = async (selectedLocation) => {
-    const newLocation = {
-      city: `${selectedLocation.name}, ${selectedLocation.country}`,
-      lat: selectedLocation.latitude,
-      lon: selectedLocation.longitude,
-      country: selectedLocation.country,
-      timezone: selectedLocation.timezone || 'auto'
-    };
-    
-    setSavedLocation(newLocation);
-    setShowLocationSearch(false);
-    setLocationInput('');
-    setLocationSuggestions([]);
-    Keyboard.dismiss();
-  };
-
+ 
   const generateFallbackData = () => {
     const generateHourlyData = (baseValue, variation, hours = 24) => {
       return Array.from({ length: hours }, (_, i) => {
@@ -686,268 +762,195 @@ const HomeScreen = () => {
 
   const aqiInfo = getAQIStatus(currentData?.aqi?.us_aqi || 85);
   const avgAQI = Math.round(
-    forecastData?.hourlyAQI?.us_aqi?.reduce((a, b) => a + b, 0) / 
-    (forecastData?.hourlyAQI?.us_aqi?.length || 1) || 85
-  );
+    // Continue from where the code was cut off:
+    forecastData?.hourlyAQI?.us_aqi?.length || 1
+  ) || 85;
 
   return (
-    <View style={styles.container}>
-      <ScrollView 
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        nestedScrollEnabled={true}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerContent}>
-            <Text style={styles.title}>Weather & Air Quality</Text>
-            <Text style={styles.location}>
-              📍 {currentLocation ? currentLocation.city : 'No Location'}
-              {useGPS && ' (GPS)'}
-            </Text>
-            <Text style={styles.lastUpdated}>
-              🕐 Updated: {lastUpdated.toLocaleTimeString()}
-            </Text>
-          </View>
-          
-          <TouchableOpacity 
-            style={styles.refreshButton}
-            onPress={onRefresh}
-            disabled={refreshing}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.refreshButtonText}>
-              {refreshing ? '⏳' : '🔄'} Refresh
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Location Toggle */}
-        <LocationToggle 
-          useGPS={useGPS}
-          onToggle={handleLocationToggle}
-          savedLocation={savedLocation}
-          currentLocation={gpsLocation}
+    <ScrollView 
+      style={styles.container}
+      contentContainerStyle={styles.contentContainer}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={['#10b981']}
+          tintColor="#10b981"
         />
+      }
+    >
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Air Quality & Weather</Text>
+        <Text style={styles.headerSubtitle}>
+          📍 {currentLocation?.city || 'Loading...'}
+        </Text>
+        <Text style={styles.lastUpdated}>
+          Last updated: {lastUpdated.toLocaleString()}
+        </Text>
+      </View>
 
-        {/* Location Search (only for saved location) */}
-        {!useGPS && (
-          <LocationSearch 
-            showSearch={showLocationSearch}
-            onToggle={() => setShowLocationSearch(!showLocationSearch)}
-            locationInput={locationInput}
-            onInputChange={handleLocationInputChange}
-            locationSearching={locationSearching}
-            suggestions={locationSuggestions}
-            onSelectLocation={selectLocation}
-          />
-        )}
+      {/* Location Controls */}
+      <LocationToggle
+        useGPS={useGPS}
+        onToggle={handleLocationToggle}
+        savedLocation={savedLocation}
+        currentLocation={gpsLocation}
+      />
 
-        {/* Current Conditions */}
-        <View style={styles.currentConditions}>
-          <AQICard currentData={currentData} />
-          <WeatherCard currentData={currentData} forecastData={forecastData} />
-        </View>
 
-        {/* Hourly Forecasts */}
-        <HourlyForecast 
-          title="📊 Today's AQI Forecast"
-          data={forecastData?.hourlyAQI?.us_aqi || []}
+      {/* Manual Store Button */}
+      <TouchableOpacity 
+        style={styles.storeButton}
+        onPress={storeCurrentSnapshot}
+      >
+        <Text style={styles.storeButtonText}>📊 Store Current Snapshot</Text>
+      </TouchableOpacity>
+
+      {/* AQI Card */}
+      <AQICard currentData={currentData} />
+
+      {/* Weather Card */}
+      <WeatherCard currentData={currentData} forecastData={forecastData} />
+
+      {/* Hourly AQI Forecast */}
+      {forecastData?.hourlyAQI?.us_aqi?.length > 0 && (
+        <HourlyForecast
+          title={`🌬️ 24-Hour AQI Forecast (Avg: ${avgAQI})`}
+          data={forecastData.hourlyAQI.us_aqi}
           renderItem={renderHourlyAQI}
         />
+      )}
 
-        <HourlyForecast 
-          title="🌤️ Today's Weather Forecast"
-          data={forecastData?.hourlyWeather?.temperature_2m || []}
+      {/* Hourly Weather Forecast */}
+      {forecastData?.hourlyWeather?.temperature_2m?.length > 0 && (
+        <HourlyForecast
+          title="🌡️ 24-Hour Weather Forecast"
+          data={forecastData.hourlyWeather.temperature_2m}
           renderItem={renderHourlyWeather}
         />
+      )}
 
-        {/* Today's Summary */}
+      {/* Summary Cards */}
+      <View style={styles.summaryCards}>
         <View style={styles.summaryCard}>
-          <Text style={styles.sectionTitle}>📅 Today's Summary</Text>
-          <View style={styles.summaryContent}>
-            <View style={styles.summaryWeather}>
-              <Text style={styles.summaryEmoji}>
-                {getWeatherEmoji(forecastData?.dailyWeather?.weather_code?.[0] || 1)}
-              </Text>
-              <Text style={styles.summaryTemp}>
-                {Math.round(forecastData?.dailyWeather?.temperature_2m_max?.[0] || 32)}° / {Math.round(forecastData?.dailyWeather?.temperature_2m_min?.[0] || 24)}°
-              </Text>
-            </View>
-            <View style={styles.summaryAQI}>
-              <Text style={styles.summaryAQILabel}>Avg AQI</Text>
-              <View style={[styles.summaryAQIBadge, { backgroundColor: getAQIStatus(avgAQI).color[0] }]}>
-                <Text style={styles.summaryAQIValue}>{avgAQI}</Text>
-              </View>
-            </View>
-          </View>
+          <Text style={styles.summaryTitle}>Today's Air Quality</Text>
+          <Text style={styles.summaryValue}>
+            {aqiInfo.status} ({currentData?.aqi?.us_aqi || 85})
+          </Text>
           <Text style={styles.summaryDescription}>
-            {getWeatherDescription(forecastData?.dailyWeather?.weather_code?.[0] || 1)} with {getAQIStatus(avgAQI).status.toLowerCase()} air quality
+            Primary pollutant: PM2.5 ({(currentData?.aqi?.pm2_5 || 28.8).toFixed(1)} μg/m³)
           </Text>
         </View>
-      </ScrollView>
-    </View>
+
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryTitle}>Weather Summary</Text>
+          <Text style={styles.summaryValue}>
+            {Math.round(currentData?.weather?.temperature_2m || 28)}°C
+          </Text>
+          <Text style={styles.summaryDescription}>
+            {getWeatherDescription(currentData?.weather?.weather_code || 1)}
+            {currentData?.weather?.precipitation > 0 && 
+              ` • ${currentData.weather.precipitation.toFixed(1)}mm rain`
+            }
+          </Text>
+        </View>
+      </View>
+    </ScrollView>
   );
 };
-
-
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#111827' },
-  scrollView: { flex: 1 },
-  scrollContent: { paddingBottom: 100 },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#111827' },
-  loadingText: { color: 'white', fontSize: 18, marginTop: 10, fontWeight: '600' },
-  loadingSubtext: { color: '#9ca3af', fontSize: 14, marginTop: 5 },
-  header: { backgroundColor: 'rgba(0,0,0,0.4)', padding: 20, paddingTop: 50, borderBottomWidth: 1, borderBottomColor: 'rgba(16, 185, 129, 0.2)' },
-  headerContent: { marginBottom: 15 },
-  title: { fontSize: 24, fontWeight: 'bold', color: 'white', marginBottom: 5 },
-  location: { color: '#d1d5db', fontSize: 14, marginBottom: 2 },
-  lastUpdated: { color: '#9ca3af', fontSize: 12 },
-  refreshButton: { backgroundColor: 'rgba(16, 185, 129, 0.2)', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.3)', alignSelf: 'flex-start' },
-  refreshButtonText: { color: 'white', fontSize: 14, fontWeight: '600' },
+  // Container & Layout
+  container: { flex: 1, backgroundColor: '#0f172a' },
+  contentContainer: { paddingBottom: 100 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f172a' },
   
- locationToggleContainer: { margin: 20, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 15, padding: 20, borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.3)' },
-  locationToggleTitle: { color: 'white', fontSize: 16, fontWeight: '600', marginBottom: 15, textAlign: 'center' },
-  locationToggleButtons: { flexDirection: 'row', gap: 10 },
-  toggleButton: { flex: 1, backgroundColor: 'rgba(255,255,255,0.1)', padding: 15, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
-  toggleButtonActive: { backgroundColor: 'rgba(16, 185, 129, 0.3)', borderColor: 'rgba(16, 185, 129, 0.5)' },
-  toggleButtonText: { color: '#d1d5db', fontSize: 14, fontWeight: '600', textAlign: 'center', marginBottom: 5 },
-  toggleButtonTextActive: { color: 'white' },
-  toggleButtonSubtext: { color: '#9ca3af', fontSize: 12, textAlign: 'center' },
-  toggleButtonSubtextActive: { color: '#d1d5db' },
-
-  // Search Styles
-  searchToggle: { marginHorizontal: 20, marginBottom: 10, backgroundColor: 'rgba(16, 185, 129, 0.2)', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.3)' },
-  searchToggleText: { color: 'white', fontSize: 14, fontWeight: '600', textAlign: 'center' },
-  searchContainer: { marginHorizontal: 20, marginBottom: 20, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 15, padding: 15, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
-  searchInput: { backgroundColor: 'rgba(255,255,255,0.1)', color: 'white', padding: 15, borderRadius: 10, fontSize: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
-  searchingIndicator: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 10, gap: 10 },
-  searchingText: { color: '#9ca3af', fontSize: 14 },
-  suggestionsList: { maxHeight: 200, marginTop: 10 },
-  suggestionItem: { backgroundColor: 'rgba(255,255,255,0.1)', padding: 15, borderRadius: 10, marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
-  suggestionName: { color: 'white', fontSize: 16, fontWeight: '600', marginBottom: 4 },
-  suggestionDetails: { color: '#9ca3af', fontSize: 12 },
-
-  // Current Conditions
-  currentConditions: { paddingHorizontal: 20, gap: 15 },
+  // Loading States
+  loadingText: { color: '#f8fafc', fontSize: 16, marginTop: 16, fontWeight: '500' },
+  loadingSubtext: { color: '#64748b', fontSize: 12, marginTop: 8 },
+  
+  // Header Section
+  header: { padding: 20, paddingTop: 50 },
+  headerTitle: { fontSize: 24, fontWeight: '700', color: '#f8fafc', marginBottom: 8 },
+  headerSubtitle: { color: '#cbd5e1', fontSize: 14, marginBottom: 4 },
+  lastUpdated: { color: '#64748b', fontSize: 11 },
+  
+  // Location Toggle
+  locationToggleContainer: { marginHorizontal: 20, marginBottom: 16, backgroundColor: 'rgba(30, 41, 59, 0.6)', borderRadius: 12, padding: 16 },
+  locationToggleTitle: { color: '#f8fafc', fontSize: 12, fontWeight: '600', marginBottom: 12, textAlign: 'center' },
+  locationToggleButtons: { flexDirection: 'row', gap: 8 },
+  toggleButton: { flex: 1, backgroundColor: 'rgba(51, 65, 85, 0.5)', padding: 12, borderRadius: 8 },
+  toggleButtonActive: { backgroundColor: 'rgba(14, 165, 233, 0.2)' },
+  toggleButtonText: { color: '#cbd5e1', fontSize: 11, fontWeight: '500', textAlign: 'center', marginBottom: 4 },
+  toggleButtonTextActive: { color: '#f8fafc' },
+  toggleButtonSubtext: { color: '#64748b', fontSize: 10, textAlign: 'center' },
+  toggleButtonSubtextActive: { color: '#cbd5e1' },
+  
+  // Search Components
+  searchToggle: { marginHorizontal: 20, marginBottom: 16, backgroundColor: 'rgba(14, 165, 233, 0.1)', padding: 14, borderRadius: 12 },
+  searchToggleText: { color: '#f8fafc', fontSize: 12, fontWeight: '500', textAlign: 'center' },
+  searchContainer: { marginHorizontal: 20, marginBottom: 20, backgroundColor: 'rgba(30, 41, 59, 0.6)', borderRadius: 16, padding: 16 },
+  searchInput: { backgroundColor: 'rgba(51, 65, 85, 0.5)', color: '#f8fafc', padding: 16, borderRadius: 12, fontSize: 14 },
+  searchingIndicator: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 12, gap: 10 },
+  searchingText: { color: '#64748b', fontSize: 12 },
+  suggestionsList: { maxHeight: 200, marginTop: 12 },
+  suggestionItem: { backgroundColor: 'rgba(51, 65, 85, 0.5)', padding: 16, borderRadius: 12, marginBottom: 8 },
+  suggestionName: { color: '#f8fafc', fontSize: 14, fontWeight: '500', marginBottom: 4 },
+  suggestionDetails: { color: '#64748b', fontSize: 11 },
+  
+  // Store Button
+  storeButton: { marginHorizontal: 20, marginBottom: 16, backgroundColor: 'rgba(16, 185, 129, 0.15)', padding: 12, borderRadius: 10 },
+  storeButtonText: { color: '#f8fafc', fontSize: 12, fontWeight: '600', textAlign: 'center' },
   
   // AQI Card
-  aqiCard: { borderRadius: 20, padding: 20, marginBottom: 15 },
+  aqiCard: { marginHorizontal: 20, borderRadius: 16, padding: 20, marginBottom: 20 },
   aqiHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
-  aqiLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: '600', letterSpacing: 1 },
-  aqiValue: { color: 'white', fontSize: 48, fontWeight: 'bold', marginVertical: 5 },
-  aqiStatus: { color: 'white', fontSize: 16, fontWeight: '600' },
+  aqiLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 11, fontWeight: '600', letterSpacing: 1 },
+  aqiValue: { color: '#fff', fontSize: 42, fontWeight: '700', marginVertical: 8 },
+  aqiStatus: { color: '#fff', fontSize: 16, fontWeight: '600' },
   aqiIcon: { alignItems: 'center' },
-  aqiEmoji: { fontSize: 40 },
-  pollutants: { flexDirection: 'row', justifyContent: 'space-between' },
+  aqiEmoji: { fontSize: 36 },
+  pollutants: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
   pollutant: { alignItems: 'center', flex: 1 },
-  pollutantLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 11, fontWeight: '600' },
-  pollutantValue: { color: 'white', fontSize: 16, fontWeight: 'bold', marginVertical: 2 },
-  pollutantUnit: { color: 'rgba(255,255,255,0.6)', fontSize: 10 },
-
+  pollutantLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 10, fontWeight: '600' },
+  pollutantValue: { color: '#fff', fontSize: 16, fontWeight: '600', marginVertical: 4 },
+  pollutantUnit: { color: 'rgba(255,255,255,0.7)', fontSize: 9 },
+  
   // Weather Card
-  weatherCard: { backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20, padding: 20, marginBottom: 15, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
+  weatherCard: { marginHorizontal: 20, backgroundColor: 'rgba(30, 41, 59, 0.6)', borderRadius: 16, padding: 20, marginBottom: 20 },
   weatherHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
-  weatherLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: '600', letterSpacing: 1 },
-  temperature: { color: 'white', fontSize: 48, fontWeight: 'bold', marginVertical: 5 },
-  feelsLike: { color: 'rgba(255,255,255,0.7)', fontSize: 14 },
-  weatherCondition: { color: 'white', fontSize: 16, fontWeight: '600', marginTop: 5 },
+  weatherLabel: { color: 'rgba(248, 250, 252, 0.8)', fontSize: 11, fontWeight: '600', letterSpacing: 1 },
+  temperature: { color: '#f8fafc', fontSize: 42, fontWeight: '700', marginVertical: 8 },
+  feelsLike: { color: 'rgba(248, 250, 252, 0.7)', fontSize: 12, fontWeight: '400' },
+  weatherCondition: { color: '#f8fafc', fontSize: 16, fontWeight: '600', marginTop: 6 },
   weatherIcon: { alignItems: 'center' },
-  emoji: { fontSize: 40, marginBottom: 5 },
-  highLow: { color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: '600' },
-  weatherDetails: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  weatherDetail: { width: '48%', marginBottom: 10 },
-  detailLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: '600' },
-  detailValue: { color: 'white', fontSize: 16, fontWeight: 'bold', marginTop: 2 },
-
+  emoji: { fontSize: 36, marginBottom: 8 },
+  highLow: { color: 'rgba(248, 250, 252, 0.8)', fontSize: 12, fontWeight: '500', marginBottom: 2 },
+  weatherDetails: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12 },
+  weatherDetail: { width: '47%', backgroundColor: 'rgba(51, 65, 85, 0.3)', borderRadius: 12, padding: 14 },
+  detailLabel: { color: 'rgba(248, 250, 252, 0.8)', fontSize: 11, fontWeight: '500' },
+  detailValue: { color: '#f8fafc', fontSize: 14, fontWeight: '600', marginTop: 4 },
+  
   // Hourly Forecast
-  hourlySection: { marginHorizontal: 20, marginBottom: 20 },
-  sectionTitle: { color: 'white', fontSize: 18, fontWeight: 'bold', marginBottom: 15 },
-  hourlyList: { paddingHorizontal: 5 },
-  hourlyItem: { backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 15, padding: 15, marginRight: 12, alignItems: 'center', minWidth: 90, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
-  hourlyTime: { color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: '600', marginBottom: 8 },
-  hourlyAQIBadge: { borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4, marginBottom: 5 },
-  hourlyAQIValue: { color: 'white', fontSize: 16, fontWeight: 'bold' },
-  hourlyAQIStatus: { color: 'rgba(255,255,255,0.8)', fontSize: 10, fontWeight: '600', textAlign: 'center' },
-  hourlyPollutant: { color: 'rgba(255,255,255,0.6)', fontSize: 9, marginTop: 2 },
-  hourlyWeatherEmoji: { fontSize: 24, marginBottom: 5 },
-  hourlyTemp: { color: 'white', fontSize: 16, fontWeight: 'bold', marginBottom: 2 },
-  hourlyHumidity: { color: 'rgba(255,255,255,0.6)', fontSize: 10 },
-  hourlyPrecip: { color: '#60a5fa', fontSize: 10, fontWeight: '600' },
-
-  // Summary Card Styles - Updated for better presentation
-summaryCard: { 
-  margin: 20, 
-  backgroundColor: 'rgba(255,255,255,0.1)', 
-  borderRadius: 20, 
-  padding: 25, 
-  borderWidth: 1, 
-  borderColor: 'rgba(16, 185, 129, 0.3)',
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: 4 },
-  shadowOpacity: 0.3,
-  shadowRadius: 8,
-  elevation: 6
-},
-summaryContent: { 
-  flexDirection: 'row', 
-  justifyContent: 'space-between', 
-  alignItems: 'center',
-  marginBottom: 20
-},
-summaryWeather: { 
-  alignItems: 'center', 
-  flex: 1 
-},
-summaryEmoji: { 
-  fontSize: 40, 
-  marginBottom: 10 
-},
-summaryTemp: { 
-  color: 'white', 
-  fontSize: 20, 
-  fontWeight: 'bold', 
-  marginBottom: 5 
-},
-summaryAQI: { 
-  alignItems: 'center', 
-  flex: 1 
-},
-summaryAQILabel: { 
-  color: 'rgba(255,255,255,0.8)', 
-  fontSize: 12, 
-  marginBottom: 8, 
-  fontWeight: '600',
-  letterSpacing: 0.5
-},
-summaryAQIBadge: { 
-  borderRadius: 15, 
-  paddingHorizontal: 12, 
-  paddingVertical: 6, 
-  marginBottom: 5,
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.25,
-  shadowRadius: 4,
-  elevation: 3
-},
-summaryAQIValue: { 
-  color: 'white', 
-  fontSize: 18, 
-  fontWeight: 'bold' 
-},
-summaryDescription: { 
-  color: '#d1d5db', 
-  fontSize: 14, 
-  textAlign: 'center',
-  fontWeight: '500',
-  lineHeight: 20,
-  backgroundColor: 'rgba(0,0,0,0.2)',
-  padding: 12,
-  borderRadius: 10,
-  marginTop: 5
-}
+  hourlySection: { marginHorizontal: 20, marginBottom: 24 },
+  sectionTitle: { color: '#f8fafc', fontSize: 18, fontWeight: '700', marginBottom: 16 },
+  hourlyList: { paddingHorizontal: 8 },
+  hourlyItem: { backgroundColor: 'rgba(30, 41, 59, 0.6)', borderRadius: 12, padding: 14, marginRight: 12, alignItems: 'center', minWidth: 90 },
+  hourlyTime: { color: 'rgba(248, 250, 252, 0.8)', fontSize: 11, fontWeight: '500', marginBottom: 10 },
+  hourlyAQIBadge: { borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 6 },
+  hourlyAQIValue: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  hourlyAQIStatus: { color: 'rgba(248, 250, 252, 0.8)', fontSize: 9, fontWeight: '500', textAlign: 'center', marginBottom: 4 },
+  hourlyPollutant: { color: 'rgba(248, 250, 252, 0.6)', fontSize: 8, marginTop: 2 },
+  hourlyWeatherEmoji: { fontSize: 24, marginBottom: 8 },
+  hourlyTemp: { color: '#f8fafc', fontSize: 16, fontWeight: '700', marginBottom: 4 },
+  hourlyHumidity: { color: 'rgba(248, 250, 252, 0.6)', fontSize: 9, marginBottom: 2 },
+  hourlyPrecip: { color: '#3b82f6', fontSize: 9, fontWeight: '500' },
+  
+  // Summary Cards
+  summaryCards: { paddingHorizontal: 20, gap: 16 },
+  summaryCard: { backgroundColor: 'rgba(30, 41, 59, 0.6)', borderRadius: 16, padding: 20 },
+  summaryTitle: { color: 'rgba(248, 250, 252, 0.8)', fontSize: 12, fontWeight: '600', letterSpacing: 0.5, marginBottom: 12 },
+  summaryValue: { color: '#f8fafc', fontSize: 22, fontWeight: '700', marginBottom: 8 },
+  summaryDescription: { color: '#cbd5e1', fontSize: 12, fontWeight: '400', lineHeight: 18, backgroundColor: 'rgba(0,0,0,0.2)', padding: 12, borderRadius: 10 }
 });
 export default HomeScreen;
