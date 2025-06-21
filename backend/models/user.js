@@ -3,7 +3,6 @@ const validator = require('validator');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
-
 const userSchema = new mongoose.Schema({
     name: {
         type: String,
@@ -42,15 +41,68 @@ const userSchema = new mongoose.Schema({
         type: String,
         default: 'active'
     },
+    // Health-related fields for risk assessment
+    age: {
+        type: Number,
+        min: [1, 'Age must be at least 1'],
+        max: [120, 'Age cannot exceed 120']
+    },
+    gender: {
+        type: String,
+        enum: ['male', 'female', 'other', 'prefer_not_to_say']
+    },
+    isPregnant: {
+        type: Boolean,
+        default: false
+    },
+    isSmoker: {
+        type: Boolean,
+        default: false
+    },
+    hasAsthma: {
+        type: Boolean,
+        default: false
+    },
+    hasHeartDisease: {
+        type: Boolean,
+        default: false
+    },
+    hasRespiratoryIssues: {
+        type: Boolean,
+        default: false
+    },
+    outdoorExposure: {
+        type: String,
+        enum: ['low', 'moderate', 'high'],
+        default: 'moderate'
+    },
+    // Store latest assessment results
+    lastAssessment: {
+        riskScore: {
+            type: Number,
+            min: 0,
+            max: 100
+        },
+        riskLevel: {
+            type: String,
+            enum: ['low', 'moderate', 'high', 'very_high']
+        },
+        aqi: Number,
+        pm25: Number,
+        pm10: Number,
+        recommendations: [String],
+        assessedAt: {
+            type: Date,
+            default: Date.now
+        }
+    },
     createdAt: {
         type: Date,
         default: Date.now
     },
     resetPasswordToken: String,
     resetPasswordExpire: Date
-})
-
-
+});
 
 userSchema.pre('save', async function (next) {
     if (!this.isModified('password')) {

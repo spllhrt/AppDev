@@ -14,8 +14,11 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import HomeScreen from '../screens/user/HomeScreen';
+import WeatherScreen from '../screens/user/WeatherScreen';
+import AqiScreen from '../screens/user/AqiScreen';
 import ProfileScreen from '../screens/user/ProfileScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import HealthAssessmentScreen from '../screens/user/HealthAssessmentScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -82,6 +85,12 @@ const CustomTabBar = ({ state, descriptors, navigation }) => {
             iconName = isFocused ? 'home' : 'home-outline';
           } else if (route.name === 'Settings') {
             iconName = isFocused ? 'settings' : 'settings-outline';
+          } else if (route.name === 'Weather') {
+            iconName = isFocused ? 'cloud' : 'cloud-outline';
+          } else if (route.name === 'Aqi') {
+            iconName = isFocused ? 'leaf' : 'leaf-outline';
+          } else if (route.name === 'Health') {
+            iconName = isFocused ? 'heart' : 'heart-outline';
           }
 
           return (
@@ -148,6 +157,30 @@ const MainTabNavigator = () => {
         options={{
           title: 'Home',
           tabBarLabel: 'Home',
+        }}
+      />
+      <Tab.Screen 
+        name="Aqi" 
+        component={AqiScreen}
+        options={{
+          title: 'Aqi',
+          tabBarLabel: 'Aqi',
+        }}
+      />
+      <Tab.Screen 
+        name="Weather" 
+        component={WeatherScreen}
+        options={{
+          title: 'Weather',
+          tabBarLabel: 'Weather',
+        }}
+      />
+      <Tab.Screen 
+        name="Health" 
+        component={HealthAssessmentScreen}
+        options={{
+          title: 'Health',
+          tabBarLabel: 'Health',
         }}
       />
       <Tab.Screen 
