@@ -1,12 +1,16 @@
 const User = require("../models/user");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+const Assessment = require('../models/assessment');
 
-// Health Risk Assessment Controller
+// Initialize Gemini AI
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+// Health Risk Assessment Controller with Gemini AI
 exports.createHealthRiskAssessment = async (req, res, next) => {
     try {
         const userId = req.user.id;
         const { aqi, pm25, pm10, location } = req.body;
 
-        // Validate required environmental data
         if (!aqi || !pm25 || !pm10) {
             return res.status(400).json({
                 success: false,
@@ -14,7 +18,6 @@ exports.createHealthRiskAssessment = async (req, res, next) => {
             });
         }
 
-        // Get user data
         const user = await User.findById(userId);
         if (!user) {
             return res.status(404).json({
@@ -23,69 +26,260 @@ exports.createHealthRiskAssessment = async (req, res, next) => {
             });
         }
 
-        // Check if required health profile data exists
         const missingFields = [];
         if (!user.age) missingFields.push('age');
         if (!user.gender) missingFields.push('gender');
         if (!user.outdoorExposure) missingFields.push('outdoorExposure');
+        if (user.isPregnant === undefined || user.isPregnant === null) missingFields.push('isPregnant');
+        if (user.isSmoker === undefined || user.isSmoker === null) missingFields.push('isSmoker');
+        if (user.hasAsthma === undefined || user.hasAsthma === null) missingFields.push('hasAsthma');
+        if (user.hasHeartDisease === undefined || user.hasHeartDisease === null) missingFields.push('hasHeartDisease');
+        if (user.hasRespiratoryIssues === undefined || user.hasRespiratoryIssues === null) missingFields.push('hasRespiratoryIssues');
 
         if (missingFields.length > 0) {
             return res.status(400).json({
                 success: false,
                 message: "Please complete your health profile before creating an assessment",
-                missingFields: missingFields,
+                missingFields,
                 requiredFields: {
                     age: "Your age (required for risk calculation)",
                     gender: "Gender (male/female/other/prefer_not_to_say)",
-                    outdoorExposure: "Outdoor exposure level (low/moderate/high)"
+                    outdoorExposure: "Outdoor exposure level (low/moderate/high)",
+                    isPregnant: "Pregnancy status (true/false)",
+                    isSmoker: "Smoking status (true/false)",
+                    hasAsthma: "Asthma condition (true/false)",
+                    hasHeartDisease: "Heart disease condition (true/false)",
+                    hasRespiratoryIssues: "Respiratory issues condition (true/false)"
                 }
             });
         }
 
-        // Calculate risk score
-        const riskData = calculateHealthRiskScore(user, { aqi, pm25, pm10 });
+        const aiAssessment = await generateAIHealthRiskAssessment(user, { aqi, pm25, pm10 });
 
-        // Generate recommendations
-        const recommendations = generateRecommendations(riskData, user);
-
-        // Update user's last assessment
-        user.lastAssessment = {
-            riskScore: riskData.totalScore,
-            riskLevel: riskData.riskLevel,
+        // Save full history
+        const newAssessment = await Assessment.create({
+            user: user._id,
             aqi,
             pm25,
             pm10,
-            recommendations,
-            assessedAt: new Date()
+            riskScore: aiAssessment.riskScore,
+            riskLevel: aiAssessment.riskLevel,
+            recommendations: aiAssessment.recommendations,
+            breakdown: aiAssessment.breakdown,
+            aiInsights: aiAssessment.insights,
+            location: location || user.city,
+            generatedBy: 'Gemini AI'
+        });
+
+        // Update latest summary
+        user.lastAssessment = {
+            riskScore: aiAssessment.riskScore,
+            riskLevel: aiAssessment.riskLevel,
+            aqi,
+            pm25,
+            pm10,
+            recommendations: aiAssessment.recommendations,
+            breakdown: aiAssessment.breakdown,
+            aiInsights: aiAssessment.insights,
+            location: location || user.city,
+            assessedAt: newAssessment.assessedAt
         };
 
         await user.save();
 
         return res.status(200).json({
             success: true,
-            message: "Health risk assessment completed successfully",
-            assessment: {
-                riskScore: riskData.totalScore,
-                riskLevel: riskData.riskLevel,
-                breakdown: riskData.breakdown,
-                environmentalData: { aqi, pm25, pm10 },
-                recommendations,
-                assessedAt: user.lastAssessment.assessedAt,
-                location: location || user.city
-            }
+            message: "AI-powered health risk assessment completed successfully",
+            assessment: newAssessment
         });
 
     } catch (error) {
-        console.error("Error in health risk assessment:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Internal server error",
-            error: error.message
-        });
+        console.error("Error in AI health risk assessment:", error);
+        try {
+            const user = await User.findById(req.user.id);
+            if (!user) {
+                return res.status(404).json({ success: false, message: "User not found" });
+            }
+
+            const fallback = calculateHealthRiskScore(user, { aqi, pm25, pm10 });
+            const fallbackRecs = generateRecommendations(fallback, user);
+
+            const fallbackAssessment = await Assessment.create({
+                user: user._id,
+                aqi,
+                pm25,
+                pm10,
+                riskScore: fallback.totalScore,
+                riskLevel: fallback.riskLevel,
+                recommendations: fallbackRecs,
+                breakdown: fallback.breakdown,
+                location: location || user.city,
+                generatedBy: 'Rule-based (AI fallback)'
+            });
+
+            user.lastAssessment = {
+                riskScore: fallback.totalScore,
+                riskLevel: fallback.riskLevel,
+                aqi,
+                pm25,
+                pm10,
+                recommendations: fallbackRecs,
+                breakdown: fallback.breakdown,
+                location: fallbackAssessment.location,
+                assessedAt: fallbackAssessment.assessedAt
+            };
+
+            await user.save();
+
+            return res.status(200).json({
+                success: true,
+                message: "Health risk assessment completed (fallback mode)",
+                assessment: fallbackAssessment
+            });
+
+        } catch (fallbackError) {
+            console.error("Fallback assessment failed:", fallbackError);
+            return res.status(500).json({
+                success: false,
+                message: "Assessment service temporarily unavailable",
+                error: "Both AI and fallback systems encountered errors"
+            });
+        }
     }
 };
 
-// Update health profile
+// AI-powered risk assessment function
+async function generateAIHealthRiskAssessment(user, environmentalData) {
+    try {
+        // UPDATE: Use current model name
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+        // Rest of the function remains the same...
+        const prompt = `
+You are a health risk assessment expert. Analyze the following data and provide a comprehensive health risk assessment for air quality exposure.
+
+USER PROFILE:
+- Age: ${user.age}
+- Gender: ${user.gender}
+- Pregnant: ${user.isPregnant ? 'Yes' : 'No'}
+- Smoker: ${user.isSmoker ? 'Yes' : 'No'}
+- Has Asthma: ${user.hasAsthma ? 'Yes' : 'No'}
+- Has Heart Disease: ${user.hasHeartDisease ? 'Yes' : 'No'}
+- Has Respiratory Issues: ${user.hasRespiratoryIssues ? 'Yes' : 'No'}
+- Outdoor Exposure Level: ${user.outdoorExposure}
+
+ENVIRONMENTAL DATA:
+- Air Quality Index (AQI): ${environmentalData.aqi}
+- PM2.5: ${environmentalData.pm25} μg/m³
+- PM10: ${environmentalData.pm10} μg/m³
+
+TASK: Provide a detailed health risk assessment in the following JSON format:
+
+{
+  "riskScore": [0-100 integer],
+  "riskLevel": "[low/moderate/high/very_high]",
+  "breakdown": {
+    "environmental": [0-40 integer],
+    "age": [0-20 integer],
+    "healthConditions": [0-25 integer],
+    "lifestyle": [0-15 integer]
+  },
+  "recommendations": [
+    "specific actionable recommendation 1",
+    "specific actionable recommendation 2",
+    "specific actionable recommendation 3"
+  ],
+  "insights": [
+    "key health insight 1",
+    "key health insight 2",
+    "key health insight 3"
+  ]
+}
+
+GUIDELINES:
+1. Risk Score: 0-24 (low), 25-49 (moderate), 50-74 (high), 75-100 (very_high)
+2. Environmental score should be heavily weighted by AQI and PM values (MAX: 40 points)
+3. Age factor: higher risk for children under 12 and adults over 65 (MAX: 20 points)
+4. Health conditions significantly increase risk (MAX: 25 points)
+5. Lifestyle factors like smoking and outdoor exposure affect risk (MAX: 15 points)
+6. CRITICAL: Each breakdown score MUST NOT exceed its maximum value
+7. Recommendations should be specific, actionable, and personalized
+8. Insights should explain the reasoning behind the risk assessment
+9. Consider cumulative effects of multiple risk factors
+10. Be medically accurate but avoid providing direct medical advice
+
+Respond ONLY with the JSON object, no additional text.
+`;
+
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const text = response.text();
+
+        // Parse the AI response
+        let aiResponse;
+        try {
+            // Clean the response text (remove any markdown formatting)
+            const cleanText = text.replace(/```json\n?|\n?```/g, '').trim();
+            aiResponse = JSON.parse(cleanText);
+        } catch (parseError) {
+            console.error("Error parsing AI response:", parseError);
+            console.log("Raw AI response:", text);
+            throw new Error("Failed to parse AI response");
+        }
+
+        // Validate the AI response structure
+        if (!aiResponse.riskScore || !aiResponse.riskLevel || !aiResponse.breakdown || 
+            !aiResponse.recommendations || !aiResponse.insights) {
+            throw new Error("Invalid AI response structure");
+        }
+
+        // Ensure risk score is within bounds
+        aiResponse.riskScore = Math.max(0, Math.min(100, parseInt(aiResponse.riskScore)));
+
+        // CRITICAL FIX: Enforce maximum limits for breakdown scores
+        if (aiResponse.breakdown) {
+            aiResponse.breakdown.environmental = Math.max(0, Math.min(40, parseInt(aiResponse.breakdown.environmental || 0)));
+            aiResponse.breakdown.age = Math.max(0, Math.min(20, parseInt(aiResponse.breakdown.age || 0)));
+            aiResponse.breakdown.healthConditions = Math.max(0, Math.min(25, parseInt(aiResponse.breakdown.healthConditions || 0)));
+            aiResponse.breakdown.lifestyle = Math.max(0, Math.min(15, parseInt(aiResponse.breakdown.lifestyle || 0)));
+            
+            // Recalculate total risk score based on capped breakdown scores
+            const calculatedScore = aiResponse.breakdown.environmental + 
+                                  aiResponse.breakdown.age + 
+                                  aiResponse.breakdown.healthConditions + 
+                                  aiResponse.breakdown.lifestyle;
+            
+            // Use the calculated score if it's significantly different from the AI's original score
+            if (Math.abs(calculatedScore - aiResponse.riskScore) > 5) {
+                aiResponse.riskScore = Math.min(100, calculatedScore);
+            }
+        }
+
+        // Validate risk level matches score
+        const validRiskLevels = ['low', 'moderate', 'high', 'very_high'];
+        if (!validRiskLevels.includes(aiResponse.riskLevel)) {
+            // Auto-correct risk level based on score
+            if (aiResponse.riskScore >= 75) aiResponse.riskLevel = 'very_high';
+            else if (aiResponse.riskScore >= 50) aiResponse.riskLevel = 'high';
+            else if (aiResponse.riskScore >= 25) aiResponse.riskLevel = 'moderate';
+            else aiResponse.riskLevel = 'low';
+        }
+
+        // Double-check risk level matches the final score
+        if (aiResponse.riskScore >= 75 && aiResponse.riskLevel !== 'very_high') aiResponse.riskLevel = 'very_high';
+        else if (aiResponse.riskScore >= 50 && aiResponse.riskScore < 75 && aiResponse.riskLevel !== 'high') aiResponse.riskLevel = 'high';
+        else if (aiResponse.riskScore >= 25 && aiResponse.riskScore < 50 && aiResponse.riskLevel !== 'moderate') aiResponse.riskLevel = 'moderate';
+        else if (aiResponse.riskScore < 25 && aiResponse.riskLevel !== 'low') aiResponse.riskLevel = 'low';
+
+        return aiResponse;
+
+    } catch (error) {
+        console.error("Error in AI health risk assessment:", error);
+        throw error;
+    }
+}
+
+// Update health profile (unchanged)
 exports.updateHealthProfile = async (req, res, next) => {
     try {
         const userId = req.user.id;
@@ -174,7 +368,7 @@ exports.updateHealthProfile = async (req, res, next) => {
     }
 };
 
-// Get health profile
+// Get health profile (unchanged)
 exports.getHealthProfile = async (req, res, next) => {
     try {
         const userId = req.user.id;
@@ -220,7 +414,7 @@ exports.getHealthProfile = async (req, res, next) => {
     }
 };
 
-// Get latest assessment
+// Get latest assessment (unchanged)
 exports.getLatestAssessment = async (req, res, next) => {
     try {
         const userId = req.user.id;
@@ -255,7 +449,7 @@ exports.getLatestAssessment = async (req, res, next) => {
     }
 };
 
-// Helper function to calculate health risk score
+// Fallback rule-based functions (kept for reliability)
 function calculateHealthRiskScore(user, environmentalData) {
     let totalScore = 0;
     const breakdown = {};
@@ -340,7 +534,6 @@ function calculateLifestyleScore(user) {
     return score;
 }
 
-// Helper function to generate recommendations
 function generateRecommendations(riskData, user) {
     const recommendations = [];
     
@@ -385,4 +578,434 @@ function generateRecommendations(riskData, user) {
     }
     
     return recommendations;
+}
+
+// Get assessment history
+exports.getAssessmentHistory = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        const limit = parseInt(req.query.limit) || 10;
+
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
+            });
+        }
+
+        // For now, we only have lastAssessment. In a full implementation,
+        // you might store assessment history in a separate collection
+        const assessments = [];
+        if (user.lastAssessment && user.lastAssessment.riskScore) {
+            assessments.push(user.lastAssessment);
+        }
+
+        return res.status(200).json({
+            success: true,
+            assessments: assessments.slice(0, limit),
+            count: assessments.length
+        });
+
+    } catch (error) {
+        console.error("Error fetching assessment history:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+};
+
+// Get AI insights
+exports.getAIInsights = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        const { aqi, pm25, pm10, focusArea } = req.body;
+
+        // Validate required data
+        if (!aqi || !pm25 || !pm10) {
+            return res.status(400).json({
+                success: false,
+                message: "Air quality data (AQI, PM2.5, PM10) is required"
+            });
+        }
+
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
+            });
+        }
+
+        // Generate focused AI insights
+        const insights = await generateFocusedAIInsights(user, { aqi, pm25, pm10 }, focusArea);
+
+        return res.status(200).json({
+            success: true,
+            insights,
+            focusArea: focusArea || 'general',
+            generatedAt: new Date()
+        });
+
+    } catch (error) {
+        console.error("Error generating AI insights:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Failed to generate AI insights",
+            error: error.message
+        });
+    }
+};
+
+// Check profile completeness
+exports.checkProfileCompleteness = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        const user = await User.findById(userId);
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
+            });
+        }
+
+        const requiredFields = ['age', 'gender', 'outdoorExposure'];
+        const missingFields = requiredFields.filter(field => !user[field]);
+        const isComplete = missingFields.length === 0;
+
+        return res.status(200).json({
+            success: true,
+            isComplete,
+            missingFields,
+            requiredFields: {
+                age: "Your age (required for risk calculation)",
+                gender: "Gender (male/female/other/prefer_not_to_say)",
+                outdoorExposure: "Outdoor exposure level (low/moderate/high)"
+            },
+            completionPercentage: Math.round(((requiredFields.length - missingFields.length) / requiredFields.length) * 100)
+        });
+
+    } catch (error) {
+        console.error("Error checking profile completeness:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+};
+
+// Validate assessment data
+exports.validateAssessmentData = async (req, res, next) => {
+    try {
+        const { aqi, pm25, pm10, location } = req.body;
+
+        const validation = validateEnvironmentalData({ aqi, pm25, pm10, location });
+
+        return res.status(200).json({
+            success: true,
+            validation
+        });
+
+    } catch (error) {
+        console.error("Error validating assessment data:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+};
+
+// Get AQI information
+exports.getAQIInfo = async (req, res, next) => {
+    try {
+        const aqi = parseInt(req.params.aqi);
+
+        if (isNaN(aqi) || aqi < 0 || aqi > 500) {
+            return res.status(400).json({
+                success: false,
+                message: "AQI must be a number between 0 and 500"
+            });
+        }
+
+        const aqiInfo = getAQIInformation(aqi);
+
+        return res.status(200).json({
+            success: true,
+            aqi,
+            ...aqiInfo
+        });
+
+    } catch (error) {
+        console.error("Error getting AQI info:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+};
+
+// Check if reassessment is needed
+exports.checkReassessmentNeeded = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        const { currentAqi, currentPm25, currentPm10 } = req.body;
+
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
+            });
+        }
+
+        const reassessmentCheck = checkIfReassessmentNeeded(
+            user.lastAssessment,
+            { aqi: currentAqi, pm25: currentPm25, pm10: currentPm10 }
+        );
+
+        return res.status(200).json({
+            success: true,
+            ...reassessmentCheck,
+            lastAssessmentDate: user.lastAssessment?.assessedAt || null
+        });
+
+    } catch (error) {
+        console.error("Error checking reassessment need:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+};
+
+// Helper function to generate focused AI insights
+async function generateFocusedAIInsights(user, environmentalData, focusArea) {
+    try {
+        // UPDATE: Use current model name
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+        let focusPrompt = "";
+        switch (focusArea) {
+            case 'recommendations':
+                focusPrompt = "Focus primarily on actionable recommendations and protective measures.";
+                break;
+            case 'risk_factors':
+                focusPrompt = "Focus on explaining the specific risk factors and their impact on health.";
+                break;
+            case 'prevention':
+                focusPrompt = "Focus on prevention strategies and long-term health protection measures.";
+                break;
+            default:
+                focusPrompt = "Provide balanced insights covering recommendations, risks, and prevention.";
+        }
+
+        const prompt = `
+You are a health expert providing focused insights on air quality health risks.
+
+USER PROFILE:
+- Age: ${user.age}
+- Gender: ${user.gender}
+- Health conditions: ${getHealthConditionsSummary(user)}
+- Outdoor exposure: ${user.outdoorExposure}
+
+ENVIRONMENTAL DATA:
+- AQI: ${environmentalData.aqi}
+- PM2.5: ${environmentalData.pm25} μg/m³
+- PM10: ${environmentalData.pm10} μg/m³
+
+FOCUS: ${focusPrompt}
+
+Provide 3-5 specific, actionable insights in JSON format:
+{
+  "insights": [
+    "insight 1",
+    "insight 2",
+    "insight 3"
+  ]
+}
+
+Respond ONLY with the JSON object.
+`;
+
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const text = response.text();
+
+        const cleanText = text.replace(/```json\n?|\n?```/g, '').trim();
+        const aiResponse = JSON.parse(cleanText);
+
+        return aiResponse.insights || [];
+
+    } catch (error) {
+        console.error("Error generating focused AI insights:", error);
+        // Return fallback insights
+        return [
+            "Monitor air quality levels regularly throughout the day",
+            "Consider adjusting outdoor activities based on current conditions",
+            "Keep windows closed during high pollution periods"
+        ];
+    }
+}
+
+// Helper function to validate environmental data
+function validateEnvironmentalData(data) {
+    const errors = [];
+    const warnings = [];
+
+    // Validate AQI
+    if (!data.aqi || data.aqi < 0 || data.aqi > 500) {
+        errors.push('AQI must be between 0 and 500');
+    }
+
+    // Validate PM2.5
+    if (!data.pm25 || data.pm25 < 0) {
+        errors.push('PM2.5 must be a positive number');
+    } else if (data.pm25 > 500) {
+        warnings.push('PM2.5 value seems unusually high - please verify');
+    }
+
+    // Validate PM10
+    if (!data.pm10 || data.pm10 < 0) {
+        errors.push('PM10 must be a positive number');
+    } else if (data.pm10 > 600) {
+        warnings.push('PM10 value seems unusually high - please verify');
+    }
+
+    // Validate PM relationship
+    if (data.pm25 && data.pm10 && data.pm25 > data.pm10) {
+        warnings.push('PM2.5 is typically lower than PM10 - please verify your readings');
+    }
+
+    return {
+        isValid: errors.length === 0,
+        errors,
+        warnings,
+        severity: data.aqi ? getAQISeverity(data.aqi) : 'unknown'
+    };
+}
+
+// Helper function to get AQI information
+function getAQIInformation(aqi) {
+    let level, description, healthImplications, recommendations;
+
+    if (aqi <= 50) {
+        level = 'Good';
+        description = 'Air quality is satisfactory';
+        healthImplications = 'Air quality poses little or no risk';
+        recommendations = ['Normal outdoor activities are safe'];
+    } else if (aqi <= 100) {
+        level = 'Moderate';
+        description = 'Air quality is acceptable';
+        healthImplications = 'May cause minor issues for sensitive individuals';
+        recommendations = ['Sensitive individuals should consider limiting prolonged outdoor exertion'];
+    } else if (aqi <= 150) {
+        level = 'Unhealthy for Sensitive Groups';
+        description = 'Air quality may affect sensitive individuals';
+        healthImplications = 'Sensitive groups may experience minor to moderate symptoms';
+        recommendations = ['Sensitive individuals should limit outdoor activities'];
+    } else if (aqi <= 200) {
+        level = 'Unhealthy';
+        description = 'Air quality affects everyone';
+        healthImplications = 'Everyone may experience health effects';
+        recommendations = ['Everyone should limit outdoor activities'];
+    } else if (aqi <= 300) {
+        level = 'Very Unhealthy';
+        description = 'Air quality is hazardous';
+        healthImplications = 'Health alert: everyone may experience serious health effects';
+        recommendations = ['Everyone should avoid outdoor activities'];
+    } else {
+        level = 'Hazardous';
+        description = 'Emergency conditions';
+        healthImplications = 'Health warnings of emergency conditions';
+        recommendations = ['Everyone should avoid all outdoor activities'];
+    }
+
+    return {
+        level,
+        description,
+        healthImplications,
+        recommendations,
+        color: getAQIColor(aqi)
+    };
+}
+
+// Helper function to get AQI severity
+function getAQISeverity(aqi) {
+    if (aqi <= 50) return 'good';
+    if (aqi <= 100) return 'moderate';
+    if (aqi <= 150) return 'unhealthy_sensitive';
+    if (aqi <= 200) return 'unhealthy';
+    if (aqi <= 300) return 'very_unhealthy';
+    return 'hazardous';
+}
+
+// Helper function to get AQI color
+function getAQIColor(aqi) {
+    if (aqi <= 50) return '#00e400';      // Green
+    if (aqi <= 100) return '#ffff00';     // Yellow
+    if (aqi <= 150) return '#ff7e00';     // Orange
+    if (aqi <= 200) return '#ff0000';     // Red
+    if (aqi <= 300) return '#8f3f97';     // Purple
+    return '#7e0023';                     // Maroon
+}
+
+// Helper function to check if reassessment is needed
+function checkIfReassessmentNeeded(lastAssessment, currentEnvironmentalData) {
+    if (!lastAssessment) {
+        return { 
+            shouldReassess: true, 
+            reason: 'No previous assessment found',
+            urgency: 'normal'
+        };
+    }
+
+    const hoursSinceAssessment = (new Date() - new Date(lastAssessment.assessedAt)) / (1000 * 60 * 60);
+
+    // Suggest reassessment if more than 12 hours old
+    if (hoursSinceAssessment > 12) {
+        return { 
+            shouldReassess: true, 
+            reason: 'Assessment is over 12 hours old',
+            urgency: 'normal'
+        };
+    }
+
+    // Check for significant environmental changes
+    if (currentEnvironmentalData && currentEnvironmentalData.aqi) {
+        const aqiDiff = Math.abs(currentEnvironmentalData.aqi - lastAssessment.aqi);
+        if (aqiDiff > 50) {
+            return { 
+                shouldReassess: true, 
+                reason: 'Air quality has changed significantly',
+                urgency: 'high',
+                aqiChange: aqiDiff
+            };
+        }
+    }
+
+    return { 
+        shouldReassess: false, 
+        reason: 'Recent assessment is still valid',
+        urgency: 'none',
+        hoursSinceLastAssessment: Math.round(hoursSinceAssessment)
+    };
+}
+
+// Helper function to get health conditions summary
+function getHealthConditionsSummary(user) {
+    const conditions = [];
+    if (user.isPregnant) conditions.push('Pregnant');
+    if (user.isSmoker) conditions.push('Smoker');
+    if (user.hasAsthma) conditions.push('Asthma');
+    if (user.hasHeartDisease) conditions.push('Heart Disease');
+    if (user.hasRespiratoryIssues) conditions.push('Respiratory Issues');
+    
+    return conditions.length > 0 ? conditions.join(', ') : 'None reported';
 }

@@ -1,28 +1,31 @@
 const express = require('express');
 const router = express.Router();
 
-// Import controller functions
-const {
-    createHealthRiskAssessment,
-    updateHealthProfile,
-    getHealthProfile,
-    getLatestAssessment
-} = require('../controllers/health');
+// Import health controller
+const healthController = require('../controllers/health');
 
-// Import authentication middleware (assuming you have this from your auth setup)
 const { isAuthenticatedUser } = require('../middlewares/auth');
 
-// Health Profile Routes
-router.route('/health/profile')
-    .get(isAuthenticatedUser, getHealthProfile)       // GET /api/v1/health/profile
-    .put(isAuthenticatedUser, updateHealthProfile);   // PUT /api/v1/health/profile
+router.use(isAuthenticatedUser);
 
-// Health Risk Assessment Routes
-router.route('/health/assessment')
-    .post(isAuthenticatedUser, createHealthRiskAssessment);  // POST /api/v1/health/assessment
+router.get('/profile', healthController.getHealthProfile);
 
-// Get Latest Assessment
-router.route('/health/assessment/latest')
-    .get(isAuthenticatedUser, getLatestAssessment);    // GET /api/v1/health/assessment/latest
+router.put('/profile', healthController.updateHealthProfile);
+
+router.post('/assessment', healthController.createHealthRiskAssessment);
+
+router.get('/assessment/latest', healthController.getLatestAssessment);
+
+router.get('/assessment/history', healthController.getAssessmentHistory);
+
+router.post('/ai-insights', healthController.getAIInsights);
+
+router.get('/profile/completeness', healthController.checkProfileCompleteness);
+
+router.post('/validate-assessment', healthController.validateAssessmentData);
+
+router.get('/aqi-info/:aqi', healthController.getAQIInfo);
+
+router.post('/reassessment-check', healthController.checkReassessmentNeeded);
 
 module.exports = router;

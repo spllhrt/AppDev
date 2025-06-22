@@ -22,8 +22,10 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 const auth = require('./routes/auth');
+const sourceRoutes = require('./routes/sourceRoutes');
 // const aqiwea = require('./routes/aqiwea');
 const health = require('./routes/health');
+const assessment = require('./routes/assessment');
 
 connectDatabase();
 
@@ -34,8 +36,10 @@ cloudinary.config({
 });
 
 app.use('/api/', auth);
+app.use('/api/', sourceRoutes);
 // app.use('/api/', aqiwea);
 app.use('/api/', health);
+app.use('/api/', assessment);
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

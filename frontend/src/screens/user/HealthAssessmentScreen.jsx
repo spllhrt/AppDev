@@ -1,765 +1,517 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, RefreshControl, Modal, TextInput, Switch } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import * as Location from 'expo-location';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator, SafeAreaView, StatusBar, Platform, Modal } from 'react-native';
 import { useSelector } from 'react-redux';
 import { Ionicons } from '@expo/vector-icons';
-import { getHealthProfile, createHealthRiskAssessment, getLatestAssessment, checkHealthProfileComplete, updateHealthProfile, formatHealthProfileData } from '../../api/health';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Location from 'expo-location';
+import { createHealthRiskAssessment, getLatestAssessment } from '../../api/health';
 
-const HealthAssessmentScreen = ({ navigation }) => {
-  const { user, isAuthenticated } = useSelector(state => state.auth);
+const HealthRiskAssessmentScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [weatherData, setWeatherData] = useState(null);
   const [assessment, setAssessment] = useState(null);
-  const [healthProfile, setHealthProfile] = useState(null);
-  const [useGPS, setUseGPS] = useState(true);
+  const [showLocationModal, setShowLocationModal] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [currentAQI, setCurrentAQI] = useState(null);
+  const user = useSelector(state => state.auth.user);
 
-  // Modal states
-  const [healthProfileModalVisible, setHealthProfileModalVisible] = useState(false);
-  const [assessmentDetailsModalVisible, setAssessmentDetailsModalVisible] = useState(false);
-  const [modalLoading, setModalLoading] = useState(false);
-
-  // Health profile form data
-  const [healthFormData, setHealthFormData] = useState({
-    age: '',
-    gender: '',
-    isPregnant: false,
-    isSmoker: false,
-    hasAsthma: false,
-    hasHeartDisease: false,
-    hasRespiratoryIssues: false,
-    outdoorExposure: 'moderate'
-  });
-
-  useEffect(() => { 
-    if (isAuthenticated) loadInitialData(); 
-  }, [isAuthenticated]);
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchWeatherData();
-    }
-  }, [useGPS, isAuthenticated]);
-
-  const loadInitialData = async () => {
-    setLoading(true);
+  const getCityCoordinates = async (cityName) => {
     try {
-      await Promise.all([loadHealthProfile(), loadLatestAssessment()]);
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cityName.trim())}&limit=1`, 
+        { headers: { 'User-Agent': 'HealthRiskApp/1.0' } });
+      const data = await response.json();
+      if (data.length > 0) return { latitude: parseFloat(data[0].lat), longitude: parseFloat(data[0].lon) };
+      throw new Error(`Location "${cityName}" not found`);
     } catch (error) {
-      console.error('Error loading initial data:', error);
-    } finally {
-      setLoading(false);
+      throw new Error(`Unable to find coordinates for "${cityName}"`);
     }
   };
 
-  const loadHealthProfile = async () => {
+  const getCityFromCoordinates = async (latitude, longitude) => {
     try {
-      const profileData = await getHealthProfile();
-      setHealthProfile(profileData);
-      if (profileData.healthProfile) {
-        setHealthFormData({
-          age: profileData.healthProfile.age?.toString() || '',
-          gender: profileData.healthProfile.gender || '',
-          isPregnant: profileData.healthProfile.isPregnant || false,
-          isSmoker: profileData.healthProfile.isSmoker || false,
-          hasAsthma: profileData.healthProfile.hasAsthma || false,
-          hasHeartDisease: profileData.healthProfile.hasHeartDisease || false,
-          hasRespiratoryIssues: profileData.healthProfile.hasRespiratoryIssues || false,
-          outdoorExposure: profileData.healthProfile.outdoorExposure || 'moderate'
-        });
-      }
+      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10`, 
+        { headers: { 'User-Agent': 'HealthRiskApp/1.0' } });
+      const data = await response.json();
+      return data?.address?.city || data?.address?.town || data?.display_name?.split(',')[0] || 'Unknown Location';
     } catch (error) {
-      console.error('Error loading health profile:', error);
+      return `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+    }
+  };
+
+  const getGPSLocation = async () => {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') throw new Error('Location permission denied');
+    const location = await Location.getCurrentPositionAsync({});
+    return { latitude: location.coords.latitude, longitude: location.coords.longitude };
+  };
+
+  const fetchAQIData = async (coordinates) => {
+    const response = await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${coordinates.latitude}&longitude=${coordinates.longitude}&current=us_aqi,pm10,pm2_5&timezone=auto`);
+    const data = await response.json();
+    if (data.current) return { aqi: data.current.us_aqi, pm25: data.current.pm2_5, pm10: data.current.pm10, timestamp: data.current.time };
+    throw new Error('No air quality data available');
+  };
+
+  const performAssessment = async (useGPS = false) => {
+    try {
+      setLoading(true);
+      setShowLocationModal(false);
+      let coordinates, locationName;
+      
+      if (useGPS) {
+        coordinates = await getGPSLocation();
+        locationName = await getCityFromCoordinates(coordinates.latitude, coordinates.longitude);
+      } else {
+        if (!user?.city) throw new Error('No saved city found');
+        coordinates = await getCityCoordinates(user.city);
+        locationName = user.city;
+      }
+
+      const aqiData = await fetchAQIData(coordinates);
+      setCurrentAQI(aqiData);
+      const result = await createHealthRiskAssessment({ aqi: aqiData.aqi, pm25: aqiData.pm25, pm10: aqiData.pm10, location: locationName });
+      setAssessment(result.assessment);
+    } catch (error) {
+      Alert.alert('Assessment Failed', error.message || 'Unable to complete assessment');
+    } finally {
+      setLoading(false);
     }
   };
 
   const loadLatestAssessment = async () => {
     try {
-      const assessmentData = await getLatestAssessment();
-      setAssessment(assessmentData.assessment);
+      const result = await getLatestAssessment();
+      if (result.success) setAssessment(result.assessment);
     } catch (error) {
-      if (error.status === 404) {
-        console.log('No previous assessment found - normal for new users');
-        setAssessment(null);
-      } else {
-        console.error('Error loading assessment:', error);
-      }
+      console.log('No previous assessment found');
     }
   };
 
-  // Use the same location functions as HomeScreen
-  const getCurrentLocation = async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        throw new Error('Location permission not granted');
-      }
+  useEffect(() => { loadLatestAssessment(); }, []);
 
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-        timeout: 10000,
-      });
-
-      return {
-        lat: location.coords.latitude,
-        lon: location.coords.longitude,
-      };
-    } catch (error) {
-      throw new Error(`GPS location failed: ${error.message}`);
-    }
+  const getRiskColor = (level) => ({ low: '#00E676', moderate: '#FF9800', high: '#E91E63', very_high: '#9C27B0' }[level] || '#757575');
+  
+  const getAQILevel = (aqi) => {
+    if (aqi <= 50) return { level: 'Good', color: '#00E676' };
+    if (aqi <= 100) return { level: 'Moderate', color: '#FF9800' };
+    if (aqi <= 150) return { level: 'Unhealthy for Sensitive', color: '#FF6B35' };
+    if (aqi <= 200) return { level: 'Unhealthy', color: '#E91E63' };
+    if (aqi <= 300) return { level: 'Very Unhealthy', color: '#9C27B0' };
+    return { level: 'Hazardous', color: '#8B0000' };
   };
 
-  const reverseGeocode = async (lat, lon) => {
-    try {
-      const result = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lon });
-      if (result.length > 0) {
-        const address = result[0];
-        return address.city || address.subregion || address.region || 'Unknown Location';
-      }
-      return 'Unknown Location';
-    } catch (error) {
-      console.error('Reverse geocoding failed:', error);
-      return 'Unknown Location';
-    }
+  const checkProfileCompleteness = () => {
+    const required = ['age', 'gender', 'outdoorExposure', 'isPregnant', 'isSmoker', 'hasAsthma', 'hasHeartDisease', 'hasRespiratoryIssues'];
+    const missing = required.filter(field => user?.[field] === undefined || user?.[field] === null);
+    return { complete: missing.length === 0, missing };
   };
 
-  const getCityCoordinates = async (cityName) => {
-    try {
-      const result = await Location.geocodeAsync(cityName);
-      if (result.length > 0) {
-        return {
-          lat: result[0].latitude,
-          lon: result[0].longitude,
-          name: cityName,
-          country: null
-        };
-      }
-      throw new Error('City not found');
-    } catch (error) {
-      throw new Error(`Geocoding failed: ${error.message}`);
-    }
-  };
-
-  const getWeatherDescription = (code) => {
-    const descriptions = {
-      0: 'Clear Sky', 1: 'Mainly Clear', 2: 'Partly Cloudy', 3: 'Overcast',
-      45: 'Foggy', 48: 'Depositing Rime Fog', 51: 'Light Drizzle', 53: 'Moderate Drizzle',
-      55: 'Dense Drizzle', 61: 'Slight Rain', 63: 'Moderate Rain', 65: 'Heavy Rain',
-      71: 'Slight Snow', 73: 'Moderate Snow', 75: 'Heavy Snow', 80: 'Rain Showers',
-      81: 'Moderate Rain Showers', 82: 'Violent Rain Showers', 95: 'Thunderstorm'
-    };
-    return descriptions[code] || 'Unknown';
-  };
-
-  // Use the same weather fetching logic as HomeScreen
-  const fetchWeatherData = async (isRefreshing = false) => {
-    try {
-      if (isRefreshing) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
-
-      let coordinates, locationDisplayName;
-
-      if (useGPS) {
-        try {
-          coordinates = await getCurrentLocation();
-          locationDisplayName = await reverseGeocode(coordinates.lat, coordinates.lon);
-        } catch (gpsError) {
-          Alert.alert('GPS Error', 'Failed to get GPS location. Using your saved city instead.', [{ text: 'OK' }]);
-          const userCity = user?.city || 'Manila';
-          const cityCoords = await getCityCoordinates(userCity);
-          coordinates = { lat: cityCoords.lat, lon: cityCoords.lon };
-          locationDisplayName = cityCoords.country ? `${cityCoords.name}, ${cityCoords.country}` : cityCoords.name;
-          setUseGPS(false);
-        }
-      } else {
-        const userCity = user?.city || 'Manila';
-        const cityCoords = await getCityCoordinates(userCity);
-        coordinates = { lat: cityCoords.lat, lon: cityCoords.lon };
-        locationDisplayName = cityCoords.country ? `${cityCoords.name}, ${cityCoords.country}` : cityCoords.name;
-      }
-
-      const [weatherResponse, airQualityResponse] = await Promise.all([
-        fetch(`https://api.open-meteo.com/v1/forecast?latitude=${coordinates.lat}&longitude=${coordinates.lon}&current=temperature_2m,relative_humidity_2m,precipitation_probability,weather_code,wind_speed_10m,uv_index&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max&timezone=auto`),
-        fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${coordinates.lat}&longitude=${coordinates.lon}&current=us_aqi,pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone,aerosol_optical_depth,dust,uv_index,ammonia,alder_pollen,birch_pollen,grass_pollen,mugwort_pollen,olive_pollen,ragweed_pollen`)
-      ]);
-
-      if (!weatherResponse.ok) throw new Error(`Weather API error: ${weatherResponse.status}`);
-
-      const weather = await weatherResponse.json();
-      const airQuality = await airQualityResponse.json();
-
-      setWeatherData({
-        location: locationDisplayName,
-        temperature: Math.round(weather.current.temperature_2m),
-        humidity: weather.current.relative_humidity_2m,
-        windSpeed: Math.round(weather.current.wind_speed_10m * 10) / 10,
-        weatherCode: weather.current.weather_code,
-        aqi: Math.round(airQuality.current?.us_aqi || 50),
-        weather: getWeatherDescription(weather.current.weather_code),
-        // Include additional AQI data for assessment
-        pm25: airQuality.current?.pm2_5,
-        pm10: airQuality.current?.pm10,
-        coordinates: coordinates
-      });
-
-    } catch (error) {
-      Alert.alert('Error', `Failed to fetch weather data: ${error.message}`);
-      if (useGPS) setUseGPS(false);
-    } finally {
-      if (isRefreshing) {
-        setRefreshing(false);
-      } else {
-        setLoading(false);
-      }
-    }
-  };
-
-  const onRefresh = () => {
-    fetchWeatherData(true);
-    loadLatestAssessment();
-  };
-
-  const handleLocationToggle = async () => {
-    if (!useGPS) {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert('Location Permission Required', 'Please grant location permission to use GPS functionality.', [{ text: 'OK' }]);
-          return;
-        }
-      } catch (error) {
-        Alert.alert('GPS Unavailable', 'GPS functionality is not available on this device.', [{ text: 'OK' }]);
-        return;
-      }
-    }
-    setUseGPS(!useGPS);
-  };
-
-  const getAQIInfo = (aqi) => {
-    if (aqi <= 50) return { status: 'Good', colors: ['#10b981', '#34d399'], textColor: '#ffffff' };
-    if (aqi <= 100) return { status: 'Moderate', colors: ['#f59e0b', '#fbbf24'], textColor: '#ffffff' };
-    if (aqi <= 150) return { status: 'Unhealthy', colors: ['#f97316', '#fb923c'], textColor: '#ffffff' };
-    return { status: 'Hazardous', colors: ['#dc2626', '#ef4444'], textColor: '#ffffff' };
-  };
-
-  const getRiskLevelColor = (riskLevel) => {
-    const colors = { low: '#4CAF50', moderate: '#FFC107', high: '#FF9800', very_high: '#F44336' };
-    return colors[riskLevel] || '#9E9E9E';
-  };
-
-  const handleCreateAssessment = async () => {
-    if (!weatherData || !weatherData.pm25 || !weatherData.coordinates) {
-      Alert.alert('Missing Data', 'Please wait for environmental data to load.');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const profileCheck = await checkHealthProfileComplete();
-      if (!profileCheck.isComplete) {
-        Alert.alert('Incomplete Profile', `Please complete your health profile first. Missing: ${profileCheck.missingFields.join(', ')}`, [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Complete Profile', onPress: () => setHealthProfileModalVisible(true) }
-        ]);
-        return;
-      }
-
-      const assessmentData = { 
-        aqi: weatherData.aqi, 
-        pm25: weatherData.pm25, 
-        pm10: weatherData.pm10, 
-        location: weatherData.location 
-      };
-      const result = await createHealthRiskAssessment(assessmentData);
-      setAssessment(result.assessment);
-      
-      Alert.alert('Assessment Complete', `Risk Level: ${result.assessment.riskLevel.toUpperCase()}\nScore: ${result.assessment.riskScore}/100`, [
-        { text: 'View Details', onPress: () => setAssessmentDetailsModalVisible(true) }
-      ]);
-    } catch (error) {
-      console.error('Assessment error:', error);
-      Alert.alert('Error', error.message || 'Failed to create assessment');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleHealthProfileSubmit = async () => {
-    try {
-      setModalLoading(true);
-      const formattedData = formatHealthProfileData(healthFormData);
-      await updateHealthProfile(formattedData);
-      await loadHealthProfile();
-      setHealthProfileModalVisible(false);
-      Alert.alert('Success', 'Health profile updated successfully!');
-    } catch (error) {
-      console.error('Profile update error:', error);
-      Alert.alert('Error', error.message || 'Failed to update health profile');
-    } finally {
-      setModalLoading(false);
-    }
-  };
-
-  const HealthProfileModal = () => (
-    <Modal
-      visible={healthProfileModalVisible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={() => setHealthProfileModalVisible(false)}
-    >
-      <LinearGradient colors={['#0f172a', '#1e293b', '#334155']} style={styles.modalContainer}>
-        <ScrollView style={styles.modalScrollView}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={() => setHealthProfileModalVisible(false)}>
-              <Ionicons name="close" size={24} color="#ffffff" />
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>Health Profile</Text>
-            <View style={{ width: 24 }} />
-          </View>
-
-          <View style={styles.modalContent}>
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Age</Text>
-              <TextInput
-                style={styles.input}
-                value={healthFormData.age}
-                onChangeText={(text) => setHealthFormData({...healthFormData, age: text})}
-                placeholder="Enter your age"
-                placeholderTextColor="rgba(255,255,255,0.5)"
-                keyboardType="numeric"
-              />
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Gender</Text>
-              <View style={styles.genderContainer}>
-                {['male', 'female', 'other'].map((gender) => (
-                  <TouchableOpacity
-                    key={gender}
-                    style={[
-                      styles.genderButton,
-                      healthFormData.gender === gender && styles.genderButtonActive
-                    ]}
-                    onPress={() => setHealthFormData({...healthFormData, gender})}
-                  >
-                    <Text style={[
-                      styles.genderButtonText,
-                      healthFormData.gender === gender && styles.genderButtonTextActive
-                    ]}>
-                      {gender.charAt(0).toUpperCase() + gender.slice(1)}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Outdoor Exposure</Text>
-              <View style={styles.genderContainer}>
-                {['low', 'moderate', 'high'].map((exposure) => (
-                  <TouchableOpacity
-                    key={exposure}
-                    style={[
-                      styles.genderButton,
-                      healthFormData.outdoorExposure === exposure && styles.genderButtonActive
-                    ]}
-                    onPress={() => setHealthFormData({...healthFormData, outdoorExposure: exposure})}
-                  >
-                    <Text style={[
-                      styles.genderButtonText,
-                      healthFormData.outdoorExposure === exposure && styles.genderButtonTextActive
-                    ]}>
-                      {exposure.charAt(0).toUpperCase() + exposure.slice(1)}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            {/* Air Quality Data Display */}
-            {weatherData && (
-              <View style={styles.airQualitySection}>
-                <Text style={styles.sectionTitle}>Current Air Quality</Text>
-                <View style={styles.aqiContainer}>
-                  <View style={[styles.aqiCircle, { borderColor: getAQIInfo(weatherData.aqi)?.colors[0] }]}>
-                    <Text style={[styles.aqiValue, { color: getAQIInfo(weatherData.aqi)?.colors[0] }]}>{weatherData.aqi}</Text>
-                    <Text style={styles.aqiLabel}>AQI</Text>
-                  </View>
-                  <View style={styles.aqiInfo}>
-                    <Text style={[styles.aqiLevel, { color: getAQIInfo(weatherData.aqi)?.colors[0] }]}>{getAQIInfo(weatherData.aqi)?.status}</Text>
-                    <Text style={styles.aqiDescription}>
-                      PM2.5: {weatherData.pm25?.toFixed(1)} μg/m³{'\n'}PM10: {weatherData.pm10?.toFixed(1)} μg/m³
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            )}
-
-            {/* Health Conditions */}
-            <Text style={styles.sectionTitle}>Health Conditions</Text>
-            
-            {healthFormData.gender === 'female' && (
-              <View style={styles.switchRow}>
-                <Text style={styles.switchLabel}>Currently Pregnant</Text>
-                <Switch
-                  value={healthFormData.isPregnant}
-                  onValueChange={(value) => setHealthFormData({...healthFormData, isPregnant: value})}
-                  trackColor={{ false: '#767577', true: '#4CAF50' }}
-                  thumbColor={healthFormData.isPregnant ? '#ffffff' : '#f4f3f4'}
-                />
-              </View>
-            )}
-
-            <View style={styles.switchRow}>
-              <Text style={styles.switchLabel}>Smoker</Text>
-              <Switch
-                value={healthFormData.isSmoker}
-                onValueChange={(value) => setHealthFormData({...healthFormData, isSmoker: value})}
-                trackColor={{ false: '#767577', true: '#4CAF50' }}
-                thumbColor={healthFormData.isSmoker ? '#ffffff' : '#f4f3f4'}
-              />
-            </View>
-
-            <View style={styles.switchRow}>
-              <Text style={styles.switchLabel}>Asthma</Text>
-              <Switch
-                value={healthFormData.hasAsthma}
-                onValueChange={(value) => setHealthFormData({...healthFormData, hasAsthma: value})}
-                trackColor={{ false: '#767577', true: '#4CAF50' }}
-                thumbColor={healthFormData.hasAsthma ? '#ffffff' : '#f4f3f4'}
-              />
-            </View>
-
-            <View style={styles.switchRow}>
-              <Text style={styles.switchLabel}>Heart Disease</Text>
-              <Switch
-                value={healthFormData.hasHeartDisease}
-                onValueChange={(value) => setHealthFormData({...healthFormData, hasHeartDisease: value})}
-                trackColor={{ false: '#767577', true: '#4CAF50' }}
-                thumbColor={healthFormData.hasHeartDisease ? '#ffffff' : '#f4f3f4'}
-              />
-            </View>
-
-            <View style={styles.switchRow}>
-              <Text style={styles.switchLabel}>Respiratory Issues</Text>
-              <Switch
-                value={healthFormData.hasRespiratoryIssues}
-                onValueChange={(value) => setHealthFormData({...healthFormData, hasRespiratoryIssues: value})}
-                trackColor={{ false: '#767577', true: '#4CAF50' }}
-                thumbColor={healthFormData.hasRespiratoryIssues ? '#ffffff' : '#f4f3f4'}
-              />
-            </View>
-
-            <TouchableOpacity 
-              style={styles.modalButton} 
-              onPress={handleHealthProfileSubmit}
-              disabled={modalLoading}
-            >
-              <LinearGradient colors={['#4CAF50', '#45a049']} style={styles.buttonGradient}>
-                {modalLoading ? (
-                  <ActivityIndicator color="#ffffff" />
-                ) : (
-                  <Text style={styles.buttonText}>Save Health Profile</Text>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      </LinearGradient>
-    </Modal>
+  const HealthMetric = ({ icon, label, value, unit, color = '#00E676' }) => (
+    <View style={[styles.metricCard, { borderColor: color + '30' }]}>
+      <View style={styles.metricHeader}>
+        <Ionicons name={icon} size={16} color={color} />
+        <Text style={styles.metricLabel}>{label}</Text>
+      </View>
+      <Text style={[styles.metricValue, { color }]}>{value}</Text>
+      {unit && <Text style={styles.metricUnit}>{unit}</Text>}
+    </View>
   );
 
-  const AssessmentDetailsModal = () => (
-    <Modal
-      visible={assessmentDetailsModalVisible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={() => setAssessmentDetailsModalVisible(false)}
-    >
-      <LinearGradient colors={['#0f172a', '#1e293b', '#334155']} style={styles.modalContainer}>
-        <ScrollView style={styles.modalScrollView}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={() => setAssessmentDetailsModalVisible(false)}>
-              <Ionicons name="close" size={24} color="#ffffff" />
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>Assessment Details</Text>
-            <View style={{ width: 24 }} />
-          </View>
-
-          {assessment && (
-            <View style={styles.modalContent}>
-              <View style={styles.assessmentHeader}>
-                <View style={[styles.riskBadge, { backgroundColor: getRiskLevelColor(assessment.riskLevel) }]}>
-                  <Text style={styles.riskText}>{assessment.riskLevel.replace('_', ' ').toUpperCase()}</Text>
-                </View>
-                <Text style={styles.riskScore}>Risk Score: {assessment.riskScore}/100</Text>
-                <Text style={styles.assessmentDate}>Assessed: {new Date(assessment.assessedAt).toLocaleDateString()}</Text>
-              </View>
-
-              {/* Air Quality Data Display */}
-              {weatherData && (
-                <View style={styles.airQualitySection}>
-                  <Text style={styles.sectionTitle}>Air Quality Data</Text>
-                  <View style={styles.aqiContainer}>
-                    <View style={[styles.aqiCircle, { borderColor: getAQIInfo(weatherData.aqi)?.colors[0] }]}>
-                      <Text style={[styles.aqiValue, { color: getAQIInfo(weatherData.aqi)?.colors[0] }]}>{weatherData.aqi}</Text>
-                      <Text style={styles.aqiLabel}>AQI</Text>
-                    </View>
-                    <View style={styles.aqiInfo}>
-                      <Text style={[styles.aqiLevel, { color: getAQIInfo(weatherData.aqi)?.colors[0] }]}>{getAQIInfo(weatherData.aqi)?.status}</Text>
-                      <Text style={styles.aqiDescription}>
-                        PM2.5: {weatherData.pm25?.toFixed(1)} μg/m³{'\n'}PM10: {weatherData.pm10?.toFixed(1)} μg/m³
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              )}
-
-              {assessment.recommendations && assessment.recommendations.length > 0 && (
-                <View style={styles.recommendationsSection}>
-                  <Text style={styles.sectionTitle}>Recommendations</Text>
-                  {assessment.recommendations.map((rec, index) => (
-                    <View key={index} style={styles.recommendationItem}>
-                      <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
-                      <Text style={styles.recommendationText}>{rec}</Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-
-              {assessment.location && (
-                <View style={styles.locationSection}>
-                  <Text style={styles.sectionTitle}>Location</Text>
-                  <Text style={styles.locationText}>{assessment.location}</Text>
-                </View>
-              )}
-            </View>
-          )}
-        </ScrollView>
-      </LinearGradient>
-    </Modal>
+  const RiskFactorBar = ({ label, score, maxScore, color }) => (
+    <View style={styles.riskFactorItem}>
+      <View style={styles.riskFactorHeader}>
+        <Text style={styles.riskFactorLabel}>{label}</Text>
+        <Text style={styles.riskFactorScore}>{score}/{maxScore}</Text>
+      </View>
+      <View style={styles.riskFactorBar}>
+        <View style={[styles.riskFactorFill, { width: `${(score/maxScore)*100}%`, backgroundColor: color }]} />
+      </View>
+    </View>
   );
 
-  if (loading && !weatherData) {
+  const RiskIndicator = ({ level }) => {
+    const progress = level === 'low' ? 25 : level === 'moderate' ? 50 : level === 'high' ? 75 : 100;
+    const color = getRiskColor(level);
     return (
-      <LinearGradient colors={['#0f172a', '#1e293b', '#334155']} style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#4CAF50" />
-          <Text style={styles.loadingText}>Loading environmental data...</Text>
+      <View style={styles.riskIndicator}>
+        <View style={styles.progressBar}>
+          <View style={[styles.progressFill, { width: `${progress}%`, backgroundColor: color }]} />
         </View>
-      </LinearGradient>
+        <View style={styles.riskLabels}>
+          {['Low', 'Moderate', 'High', 'Critical'].map((label, i) => (
+            <Text key={label} style={[styles.riskLabel, { color: progress >= (i+1)*25 ? color : '#666' }]}>{label}</Text>
+          ))}
+        </View>
+      </View>
     );
-  }
+  };
 
   return (
-    <LinearGradient colors={['#0f172a', '#1e293b', '#334155']} style={styles.container}>
-      <ScrollView style={styles.scrollView} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#4CAF50" />}>
-        <View style={styles.content}>
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      <LinearGradient colors={['#0A0A0A', '#1A1A2E', '#16213E']} style={styles.gradient}>
+        <SafeAreaView style={styles.safeArea}>
+          
           <View style={styles.header}>
-            <Text style={styles.appName}>AirNet AI</Text>
-            <Text style={styles.subtitle}>Health Monitor</Text>
-          </View>
-
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <Ionicons name="location" size={24} color="#4CAF50" />
-              <Text style={styles.cardTitle}>Current Location</Text>
+            <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+              <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
+            </TouchableOpacity>
+            <View style={styles.headerCenter}>
+              <Text style={styles.headerTitle}>Health Risk Assessment</Text>
+              <Text style={styles.headerSubtitle}>Environmental Health Analysis</Text>
             </View>
-            <Text style={styles.locationText}>{weatherData?.location || 'Loading location...'}</Text>
-            <TouchableOpacity style={styles.refreshButton} onPress={handleLocationToggle}>
-              <Ionicons name={useGPS ? "location" : "location-outline"} size={16} color="#4CAF50" />
-              <Text style={styles.refreshButtonText}>{useGPS ? 'Using GPS' : 'Using Saved City'}</Text>
+            <TouchableOpacity style={styles.refreshButton} onPress={() => setShowLocationModal(true)}>
+              <Ionicons name="refresh" size={20} color="#00E676" />
             </TouchableOpacity>
           </View>
 
-          {assessment ? (
-            <View style={styles.card}>
-              <View style={styles.cardHeader}>
-                <Ionicons name="heart" size={24} color="#4CAF50" />
-                <Text style={styles.cardTitle}>Latest Assessment</Text>
+          <ScrollView style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+            
+            <View style={styles.statusBanner}>
+              <View style={styles.statusIndicator}>
+                <Ionicons name="pulse" size={18} color="#00E676" />
+                <Text style={styles.statusText}>Real-time Environmental Monitoring</Text>
               </View>
-              
-              <View style={styles.assessmentContainer}>
-                <View style={[styles.riskBadge, { backgroundColor: getRiskLevelColor(assessment.riskLevel) }]}>
-                  <Text style={styles.riskText}>{assessment.riskLevel.replace('_', ' ').toUpperCase()}</Text>
+              {assessment && <Text style={styles.lastUpdate}>Last updated: {new Date(assessment.assessedAt).toLocaleDateString()}</Text>}
+            </View>
+
+            {assessment ? (
+              <>
+                <View style={styles.card}>
+                  <View style={styles.cardHeader}>
+                    <View style={styles.cardHeaderLeft}>
+                      <Ionicons name="shield-checkmark-outline" size={20} color="#00E676" />
+                      <View>
+                        <Text style={styles.cardTitle}>Risk Assessment Score</Text>
+                        <Text style={styles.cardSubtitle}>Based on current conditions</Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity onPress={() => setShowDetailsModal(true)} style={styles.infoButton}>
+                      <Ionicons name="information-circle-outline" size={18} color="#00E676" />
+                    </TouchableOpacity>
+                  </View>
+                  
+                  <View style={[styles.riskCard, { backgroundColor: getRiskColor(assessment.riskLevel) + '15', borderColor: getRiskColor(assessment.riskLevel) + '30' }]}>
+                    <View style={styles.riskScoreContainer}>
+                      <Text style={[styles.riskScore, { color: getRiskColor(assessment.riskLevel) }]}>{assessment.riskScore}</Text>
+                      <Text style={styles.riskScoreMax}>/100</Text>
+                    </View>
+                    <Text style={[styles.riskLevel, { color: getRiskColor(assessment.riskLevel) }]}>
+                      {assessment.riskLevel.replace('_', ' ').toUpperCase()} RISK
+                    </Text>
+                    <RiskIndicator level={assessment.riskLevel} />
+                  </View>
                 </View>
-                <Text style={styles.riskScore}>Risk Score: {assessment.riskScore}/100</Text>
-                <Text style={styles.assessmentDate}>Assessed: {new Date(assessment.assessedAt).toLocaleDateString()}</Text>
-              </View>
 
-              {assessment.recommendations && assessment.recommendations.length > 0 && (
-                <View style={styles.recommendationsContainer}>
-                  <Text style={styles.recommendationsTitle}>Recommendations:</Text>
-                  {assessment.recommendations.slice(0, 2).map((rec, index) => (
-                    <Text key={index} style={styles.recommendationText}>• {rec}</Text>
-                  ))}
+                {/* Risk Factors Breakdown */}
+                {assessment.breakdown && (
+                  <View style={styles.card}>
+                    <View style={styles.cardHeader}>
+                      <Ionicons name="analytics-outline" size={20} color="#00E676" />
+                      <View>
+                        <Text style={styles.cardTitle}>Risk Factors Breakdown</Text>
+                        <Text style={styles.cardSubtitle}>Contributing factors to your score</Text>
+                      </View>
+                    </View>
+                    <View style={styles.riskFactorsContainer}>
+                      <RiskFactorBar label="Environmental" score={assessment.breakdown.environmental || 0} maxScore={40} color="#FF6B35" />
+                      <RiskFactorBar label="Age Factor" score={assessment.breakdown.age || 0} maxScore={20} color="#9C27B0" />
+                      <RiskFactorBar label="Health Conditions" score={assessment.breakdown.healthConditions || 0} maxScore={25} color="#E91E63" />
+                      <RiskFactorBar label="Lifestyle" score={assessment.breakdown.lifestyle || 0} maxScore={15} color="#FF9800" />
+                    </View>
+                  </View>
+                )}
+
+                {currentAQI && (
+                  <View style={styles.card}>
+                    <Text style={styles.cardTitle}>Environmental Metrics</Text>
+                    <View style={styles.metricsGrid}>
+                      <HealthMetric icon="speedometer-outline" label="Air Quality Index" value={currentAQI.aqi} color={getAQILevel(currentAQI.aqi).color} />
+                      <HealthMetric icon="analytics-outline" label="PM2.5" value={currentAQI.pm25?.toFixed(1)} unit="μg/m³" color="#FF6B35" />
+                      <HealthMetric icon="bar-chart-outline" label="PM10" value={currentAQI.pm10?.toFixed(1)} unit="μg/m³" color="#9C27B0" />
+                      <HealthMetric icon="location-outline" label="Location" value={assessment.location || 'Unknown'} color="#00E676" />
+                    </View>
+                  </View>
+                )}
+
+                {assessment.recommendations && (
+                  <View style={styles.card}>
+                    <View style={styles.cardHeader}>
+                      <Ionicons name="medical-outline" size={20} color="#00E676" />
+                      <View>
+                        <Text style={styles.cardTitle}>Health Recommendations</Text>
+                        <Text style={styles.cardSubtitle}>Personalized guidance</Text>
+                      </View>
+                    </View>
+                    <View style={styles.recommendationsContainer}>
+                      {assessment.recommendations.slice(0, 3).map((rec, index) => (
+                        <View key={index} style={styles.recommendationCard}>
+                          <View style={styles.recommendationIcon}>
+                            <Ionicons name={["shield-outline", "heart-outline", "fitness-outline"][index]} size={16} color="#00E676" />
+                          </View>
+                          <Text style={styles.recommendationText}>{rec}</Text>
+                        </View>
+                      ))}
+                    </View>
+                    {assessment.recommendations.length > 3 && (
+                      <TouchableOpacity style={styles.viewAllButton} onPress={() => setShowDetailsModal(true)}>
+                        <Text style={styles.viewAllText}>View All Recommendations</Text>
+                        <Ionicons name="chevron-forward" size={16} color="#00E676" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
+
+                <View style={styles.card}>
+                  <View style={styles.cardHeader}>
+                    <Ionicons name="document-text-outline" size={20} color="#00E676" />
+                    <Text style={styles.cardTitle}>Clinical Summary</Text>
+                  </View>
+                  <View style={styles.clinicalSummary}>
+                    <View style={styles.summaryRow}>
+                      <Text style={styles.summaryLabel}>Assessment Date:</Text>
+                      <Text style={styles.summaryValue}>{new Date(assessment.assessedAt).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}</Text>
+                    </View>
+                    <View style={styles.summaryRow}>
+                      <Text style={styles.summaryLabel}>Risk Category:</Text>
+                      <Text style={[styles.summaryValue, { color: getRiskColor(assessment.riskLevel) }]}>{assessment.riskLevel.replace('_', ' ').toUpperCase()}</Text>
+                    </View>
+                  </View>
                 </View>
-              )}
+              </>
+            ) : (
+              <View style={styles.emptyCard}>
+                <LinearGradient colors={['rgba(0,230,118,0.1)', 'rgba(0,230,118,0.05)']} style={styles.emptyGradient}>
+                  <Ionicons name="analytics-outline" size={48} color="rgba(0,230,118,0.6)" />
+                  <Text style={styles.emptyTitle}>No Assessment Available</Text>
+                  <Text style={styles.emptyText}>Get your personalized health risk assessment based on real-time environmental data</Text>
+                </LinearGradient>
+              </View>
+            )}
 
-              <TouchableOpacity 
-                style={styles.viewDetailsButton} 
-                onPress={() => setAssessmentDetailsModalVisible(true)}
-              >
-                <Text style={styles.viewDetailsText}>View Full Details</Text>
-                <Ionicons name="chevron-forward" size={16} color="#4CAF50" />
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={styles.card}>
-              <View style={styles.cardHeader}>
-                <Ionicons name="heart-outline" size={24} color="#4CAF50" />
-                <Text style={styles.cardTitle}>Health Assessment</Text>
-              </View>
-              <View style={styles.noAssessmentContainer}>
-                <Ionicons name="analytics-outline" size={48} color="rgba(255,255,255,0.5)" />
-                <Text style={styles.noAssessmentTitle}>No Previous Assessment</Text>
-                <Text style={styles.noAssessmentText}>Create your first health risk assessment based on current air quality conditions.</Text>
-              </View>
-            </View>
-          )}
-
-          {healthProfile && (
-            <View style={styles.card}>
-              <View style={styles.cardHeader}>
-                <Ionicons name="person" size={24} color="#4CAF50" />
-                <Text style={styles.cardTitle}>Health Profile</Text>
-              </View>
-              
-              <View style={styles.profileStatus}>
-                <Ionicons name={healthProfile.isComplete ? "checkmark-circle" : "warning"} size={24} color={healthProfile.isComplete ? "#4CAF50" : "#FFC107"} />
-                <Text style={styles.profileStatusText}>{healthProfile.isComplete ? 'Profile Complete' : 'Profile Incomplete'}</Text>
-              </View>
-              
-              {!healthProfile.isComplete && (
-                <TouchableOpacity style={styles.completeProfileButton} onPress={() => setHealthProfileModalVisible(true)}>
-                  <Text style={styles.completeProfileText}>Complete Profile</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
-
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity style={styles.button} onPress={handleCreateAssessment} disabled={loading}>
-              <LinearGradient colors={['#4CAF50', '#45a049']} style={styles.buttonGradient}>
-                {loading ? (
-                  <ActivityIndicator color="#ffffff" />
-                ) : (
+            <TouchableOpacity style={styles.assessButton} onPress={() => setShowLocationModal(true)} disabled={loading}>
+              <LinearGradient colors={['#00E676', '#00C765']} style={styles.assessButtonGradient}>
+                {loading ? <ActivityIndicator color="#FFFFFF" size="small" /> : (
                   <>
-                    <Ionicons name="analytics" size={20} color="#ffffff" />
-                    <Text style={styles.buttonText}>Create New Assessment</Text>
+                    <Ionicons name="add-circle-outline" size={18} color="#FFFFFF" />
+                    <Text style={styles.assessButtonText}>{assessment ? 'New Assessment' : 'Start Assessment'}</Text>
                   </>
                 )}
               </LinearGradient>
             </TouchableOpacity>
+          </ScrollView>
 
-            <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={() => setHealthProfileModalVisible(true)}>
-              <View style={styles.secondaryButtonContent}>
-                <Ionicons name="settings" size={20} color="#4CAF50" />
-                <Text style={styles.secondaryButtonText}>Manage Health Profile</Text>
+          <Modal visible={showLocationModal} transparent animationType="slide">
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <Text style={styles.modalTitle}>Assessment Requirements</Text>
+                {(() => {
+                  const profileCheck = checkProfileCompleteness();
+                  if (!profileCheck.complete) {
+                    return (
+                      <View style={styles.profileIncomplete}>
+                        <Ionicons name="warning-outline" size={24} color="#FF9800" />
+                        <Text style={styles.incompleteTitle}>Profile Incomplete</Text>
+                        <Text style={styles.incompleteText}>Please complete your health profile first:</Text>
+                        <View style={styles.missingFields}>
+                          {profileCheck.missing.map(field => (
+                            <Text key={field} style={styles.missingField}>• {field.replace(/([A-Z])/g, ' $1').toLowerCase()}</Text>
+                          ))}
+                        </View>
+                        <TouchableOpacity style={styles.profileButton} onPress={() => { setShowLocationModal(false); navigation.navigate('Profile'); }}>
+                          <Text style={styles.profileButtonText}>Complete Profile</Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  }
+                  return (
+                    <>
+                      <Text style={styles.modalSubtitle}>Select location source for assessment</Text>
+                      <TouchableOpacity style={styles.modalButton} onPress={() => performAssessment(false)} disabled={!user?.city}>
+                        <Ionicons name="home-outline" size={20} color="#FFFFFF" />
+                        <Text style={styles.modalButtonText}>Use Saved City {user?.city ? `(${user.city})` : '(Not Set)'}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.modalButton} onPress={() => performAssessment(true)}>
+                        <Ionicons name="location-outline" size={20} color="#FFFFFF" />
+                        <Text style={styles.modalButtonText}>Use Current GPS Location</Text>
+                      </TouchableOpacity>
+                    </>
+                  );
+                })()}
+                <TouchableOpacity style={styles.modalCancelButton} onPress={() => setShowLocationModal(false)}>
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
               </View>
-            </TouchableOpacity>
-          </View>
-        </View>
-       <View style={styles.bottomSpace} />
-      </ScrollView>
+            </View>
+          </Modal>
 
-      <HealthProfileModal />
-      <AssessmentDetailsModal />
-    </LinearGradient>
+          <Modal visible={showDetailsModal} transparent animationType="slide">
+            <View style={styles.modalOverlay}>
+              <View style={styles.detailsModal}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Detailed Assessment Report</Text>
+                  <TouchableOpacity onPress={() => setShowDetailsModal(false)}>
+                    <Ionicons name="close" size={24} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </View>
+                <ScrollView style={styles.detailsContent}>
+                  {currentAQI && (
+                    <View style={styles.aqiSection}>
+                      <Text style={styles.detailsSectionTitle}>Environmental Data</Text>
+                      <View style={[styles.aqiDetailCard, { backgroundColor: getAQILevel(currentAQI.aqi).color + '20', borderColor: getAQILevel(currentAQI.aqi).color + '40' }]}>
+                        <Text style={[styles.aqiValue, { color: getAQILevel(currentAQI.aqi).color }]}>{currentAQI.aqi}</Text>
+                        <Text style={[styles.aqiLabel, { color: getAQILevel(currentAQI.aqi).color }]}>{getAQILevel(currentAQI.aqi).level}</Text>
+                      </View>
+                      <View style={styles.pollutantRow}>
+                        <Text style={styles.pollutantText}>PM2.5: {currentAQI.pm25} μg/m³</Text>
+                        <Text style={styles.pollutantText}>PM10: {currentAQI.pm10} μg/m³</Text>
+                      </View>
+                    </View>
+                  )}
+                  {assessment?.recommendations && (
+                    <View style={styles.detailsSection}>
+                      <Text style={styles.detailsSectionTitle}>Complete Recommendations</Text>
+                      {assessment.recommendations.map((rec, index) => (
+                        <View key={index} style={styles.recommendationItem}>
+                          <View style={styles.bulletPoint} />
+                          <Text style={styles.recommendationText}>{rec}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                  {assessment?.insights && (
+                    <View style={styles.detailsSection}>
+                      <Text style={styles.detailsSectionTitle}>Clinical Insights</Text>
+                      {assessment.insights.map((insight, index) => (
+                        <View key={index} style={styles.insightItem}>
+                          <Ionicons name="bulb-outline" size={14} color="#00E676" />
+                          <Text style={styles.insightText}>{insight}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </ScrollView>
+              </View>
+            </View>
+          </Modal>
+        </SafeAreaView>
+      </LinearGradient>
+    </View>
   );
 };
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scrollView: { flex: 1 },
-  content: { flex: 1, paddingHorizontal: 20, paddingTop: 60, paddingBottom: 40 },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { color: '#cbd5e1', fontSize: 16, marginTop: 10 },
-  
-  header: { alignItems: 'center', marginBottom: 30 },
-  appName: { fontSize: 32, fontWeight: 'bold', color: '#ffffff', textAlign: 'center' },
-  subtitle: { fontSize: 18, fontWeight: '600', color: '#3b82f6', textAlign: 'center', marginTop: 5 },
-  
-  card: { backgroundColor: 'rgba(30, 41, 59, 0.5)', borderRadius: 20, padding: 20, marginBottom: 20, borderWidth: 1, borderColor: 'rgba(148, 163, 184, 0.2)' },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
-  cardTitle: { fontSize: 18, fontWeight: '600', color: '#ffffff', marginLeft: 10, flex: 1 },
-  
-  locationText: { fontSize: 16, color: '#cbd5e1', marginBottom: 10 },
-  refreshButton: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start' },
-  refreshButtonText: { color: '#3b82f6', fontSize: 14, marginLeft: 5 },
-  
-  assessmentContainer: { alignItems: 'center', marginBottom: 15 },
-  riskBadge: { paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20, marginBottom: 10 },
-  riskText: { color: '#ffffff', fontSize: 14, fontWeight: '600' },
-  riskScore: { fontSize: 18, fontWeight: '600', color: '#ffffff', marginBottom: 5 },
-  assessmentDate: { fontSize: 12, color: '#94a3b8' },
-  
-  recommendationsContainer: { marginTop: 15, paddingTop: 15, borderTopWidth: 1, borderTopColor: 'rgba(148, 163, 184, 0.2)' },
-  recommendationsTitle: { fontSize: 16, fontWeight: '600', color: '#ffffff', marginBottom: 10 },
-  recommendationText: { fontSize: 14, color: '#cbd5e1', lineHeight: 20, marginBottom: 5 },
-  
-  viewDetailsButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 10, paddingVertical: 8 },
-  viewDetailsText: { color: '#3b82f6', fontSize: 14, fontWeight: '600', marginRight: 5 },
-  
-  noAssessmentContainer: { alignItems: 'center', paddingVertical: 20 },
-  noAssessmentTitle: { fontSize: 18, fontWeight: '600', color: '#ffffff', marginTop: 15, marginBottom: 10 },
-  noAssessmentText: { fontSize: 14, color: '#cbd5e1', textAlign: 'center', lineHeight: 20 },
-  
-  profileStatus: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
-  profileStatusText: { fontSize: 16, color: '#ffffff', marginLeft: 10 },
-  completeProfileButton: { backgroundColor: 'rgba(59, 130, 246, 0.2)', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 12, borderWidth: 1, borderColor: '#3b82f6' },
-  completeProfileText: { color: '#3b82f6', fontSize: 14, fontWeight: '600', textAlign: 'center' },
-  
-  buttonContainer: { marginTop: 20 },
-  button: { width: '100%', borderRadius: 20, overflow: 'hidden', marginBottom: 15 },
-  buttonGradient: { paddingVertical: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' },
-  buttonText: { color: '#ffffff', fontSize: 16, fontWeight: '600', marginLeft: 8 },
-  
-  secondaryButton: { backgroundColor: 'rgba(30, 41, 59, 0.5)', borderWidth: 1, borderColor: 'rgba(148, 163, 184, 0.3)', borderRadius: 20 },
-  secondaryButtonContent: { paddingVertical: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' },
-  secondaryButtonText: { color: '#3b82f6', fontSize: 16, fontWeight: '600', marginLeft: 8 },
-  
-  bottomSpace: { height: 100 },
 
-  // Modal styles
-  modalContainer: { flex: 1 },
-  modalScrollView: { flex: 1 },
-  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 20, borderBottomWidth: 1, borderBottomColor: 'rgba(148, 163, 184, 0.2)' },
-  modalTitle: { fontSize: 20, fontWeight: '600', color: '#ffffff' },
-  modalContent: { flex: 1, padding: 20 },
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#0A0A0A' },
+  gradient: { flex: 1 },
+  safeArea: { flex: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 20, paddingBottom: 20 },
+  backButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255, 255, 255, 0.1)', justifyContent: 'center', alignItems: 'center', borderColor: 'rgba(0,230,118,0.3)', borderWidth: 1 },
+  refreshButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,230,118,0.2)', justifyContent: 'center', alignItems: 'center', borderColor: 'rgba(0,230,118,0.3)', borderWidth: 1 },
+  headerCenter: { flex: 1, alignItems: 'center' },
+  headerTitle: { fontSize: 17, fontWeight: '700', color: '#FFFFFF' },
+  headerSubtitle: { fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 2 },
+  content: { flex: 1, paddingHorizontal: 20 },
+  scrollContent: { paddingBottom: 100 },
+  statusBanner: { backgroundColor: 'rgba(0,230,118,0.1)', borderRadius: 12, padding: 16, marginBottom: 20, borderColor: 'rgba(0,230,118,0.3)', borderWidth: 1 },
+  statusIndicator: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  statusText: { fontSize: 14, fontWeight: '600', color: '#00E676', marginLeft: 8 },
+  lastUpdate: { fontSize: 12, color: 'rgba(255,255,255,0.7)' },
+  card: { backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 16, padding: 18, marginBottom: 20, borderColor: 'rgba(0,230,118,0.2)', borderWidth: 1 },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  cardHeaderLeft: { flexDirection: 'row', alignItems: 'center' },
+  cardTitle: { fontSize: 16, fontWeight: '700', color: '#FFFFFF', marginLeft: 8 },
+  cardSubtitle: { fontSize: 12, color: 'rgba(255,255,255,0.6)', marginLeft: 8, marginTop: 2 },
+  infoButton: { padding: 4 },
+  riskCard: { alignItems: 'center', padding: 24, borderRadius: 12, marginBottom: 16, borderWidth: 1 },
+  riskScoreContainer: { flexDirection: 'row', alignItems: 'baseline' },
+  riskScore: { fontSize: 48, fontWeight: '900' },
+  riskScoreMax: { fontSize: 24, color: 'rgba(255,255,255,0.5)', marginLeft: 4 },
+  riskLevel: { fontSize: 12, fontWeight: '700', marginTop: 8, letterSpacing: 1 },
+  riskIndicator: { marginTop: 16, width: '100%' },
+  progressBar: { height: 4, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 2, marginBottom: 8 },
+  progressFill: { height: '100%', borderRadius: 2 },
+  riskLabels: { flexDirection: 'row', justifyContent: 'space-between' },
+  riskLabel: { fontSize: 10, fontWeight: '600' },
+  riskFactorsContainer: { gap: 12 },
+  riskFactorItem: { marginBottom: 8 },
+  riskFactorHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  riskFactorLabel: { fontSize: 13, color: 'rgba(255,255,255,0.8)', fontWeight: '600' },
+  riskFactorScore: { fontSize: 12, color: '#00E676', fontWeight: '700' },
+  riskFactorBar: { height: 6, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 3 },
+  riskFactorFill: { height: '100%', borderRadius: 3 },
+  metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  metricCard: { flex: 1, minWidth: '45%', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 12, padding: 12, borderWidth: 1 },
+  metricHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  metricLabel: { fontSize: 12, color: 'rgba(255,255,255,0.7)', marginLeft: 6 },
+  metricValue: { fontSize: 20, fontWeight: '700' },
+  metricUnit: { fontSize: 10, color: 'rgba(255,255,255,0.5)', marginTop: 2 },
+  recommendationsContainer: { gap: 12 },
+  recommendationCard: { backgroundColor: 'rgba(0,230,118,0.05)', borderRadius: 12, padding: 12, flexDirection: 'row', alignItems: 'flex-start', borderColor: 'rgba(0,230,118,0.1)', borderWidth: 1 },
+  recommendationIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(0,230,118,0.2)', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  recommendationText: { fontSize: 13, color: 'rgba(255,255,255,0.9)', lineHeight: 18, flex: 1 },
+  viewAllButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 12, padding: 8 },
+  viewAllText: { fontSize: 14, color: '#00E676', fontWeight: '600', marginRight: 4 },
+  clinicalSummary: { gap: 12 },
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  summaryLabel: { fontSize: 14, color: 'rgba(255,255,255,0.7)' },
+  summaryValue: { fontSize: 14, fontWeight: '600', color: '#FFFFFF' },
+  emptyCard: { borderRadius: 16, marginBottom: 20, overflow: 'hidden', borderColor: 'rgba(0,230,118,0.2)', borderWidth: 1 },
+  emptyGradient: { padding: 40, alignItems: 'center' },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#FFFFFF', marginTop: 16, marginBottom: 8 },
+  emptyText: { fontSize: 14, color: 'rgba(255,255,255,0.7)', textAlign: 'center', lineHeight: 20 },
+  assessButton: { borderRadius: 12, marginBottom: 20, overflow: 'hidden' },
+  assessButtonGradient: { padding: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' },
+  assessButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700', marginLeft: 8 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
+  modalContent: { backgroundColor: '#1A1A2E', borderRadius: 16, padding: 24, margin: 20, width: '92%', maxWidth: 400 },
+ // Continuation from the cut-off point in the first document:
+  modalTitle: { fontSize: 18, fontWeight: '700', color: '#FFFFFF', marginBottom: 8 },
+  modalSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.7)', marginBottom: 20 },
   
-  // Health Profile Modal styles
-  formGroup: { marginBottom: 20 },
-  label: { fontSize: 16, fontWeight: '600', color: '#ffffff', marginBottom: 8 },
-  input: { backgroundColor: 'rgba(30, 41, 59, 0.5)', borderRadius: 12, paddingHorizontal: 15, paddingVertical: 12, fontSize: 16, color: '#ffffff', borderWidth: 1, borderColor: 'rgba(148, 163, 184, 0.3)' },
+  profileIncomplete: { alignItems: 'center', paddingVertical: 10 },
+  incompleteTitle: { fontSize: 16, fontWeight: '700', color: '#FF9800', marginTop: 8, marginBottom: 8 },
+  incompleteText: { fontSize: 14, color: 'rgba(255,255,255,0.8)', textAlign: 'center', marginBottom: 12 },
+  missingFields: { alignSelf: 'flex-start', marginBottom: 16 },
+  missingField: { fontSize: 12, color: '#FF9800', marginBottom: 2 },
+  profileButton: {
+    backgroundColor: '#FF9800', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8, marginBottom: 12
+  },
+  profileButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
   
-  genderContainer: { flexDirection: 'row', justifyContent: 'space-between' },
-  genderButton: { flex: 1, backgroundColor: 'rgba(30, 41, 59, 0.5)', paddingVertical: 12, paddingHorizontal: 15, borderRadius: 12, marginHorizontal: 5, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(148, 163, 184, 0.3)' },
-  genderButtonActive: { backgroundColor: '#3b82f6', borderColor: '#3b82f6' },
-  genderButtonText: { color: '#cbd5e1', fontSize: 14, fontWeight: '600' },
-  genderButtonTextActive: { color: '#ffffff' },
+  modalButton: {
+    backgroundColor: 'rgba(0,230,118,0.2)', padding: 16, borderRadius: 12,
+    flexDirection: 'row', alignItems: 'center', marginBottom: 12,
+    borderColor: '#00E676', borderWidth: 1
+  },
+  modalButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600', marginLeft: 12, flex: 1 },
+  modalCancelButton: { padding: 12, alignItems: 'center' },
+  modalCancelText: { color: 'rgba(255,255,255,0.7)', fontSize: 14 },
   
-  sectionTitle: { fontSize: 18, fontWeight: '600', color: '#ffffff', marginBottom: 15, marginTop: 10 },
-  switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(148, 163, 184, 0.1)' },
-  switchLabel: { fontSize: 16, color: '#ffffff', flex: 1 },
-  modalButton: { marginTop: 30, borderRadius: 20, overflow: 'hidden' },
+  detailsModal: { backgroundColor: '#1A1A2E', borderRadius: 16, margin: 20, maxHeight: '85%', width: '92%' },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20 },
+  detailsContent: { paddingHorizontal: 20, paddingBottom: 20 },
+  detailsSectionTitle: { fontSize: 16, fontWeight: '700', color: '#FFFFFF', marginBottom: 12 },
   
-  // Assessment Details Modal styles
-  assessmentHeader: { alignItems: 'center', marginBottom: 30 },
-  airQualitySection: { marginBottom: 25 },
-  aqiContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-  aqiCircle: { width: 80, height: 80, borderRadius: 40, borderWidth: 3, justifyContent: 'center', alignItems: 'center', marginRight: 20 },
-  aqiValue: { fontSize: 24, fontWeight: 'bold' },
-  aqiLabel: { fontSize: 12, color: '#94a3b8' },
-  aqiInfo: { flex: 1 },
-  aqiLevel: { fontSize: 18, fontWeight: '600', marginBottom: 5 },
-  aqiDescription: { fontSize: 14, color: '#cbd5e1', lineHeight: 20 },
+  aqiSection: { marginBottom: 20 },
+  aqiDetailCard: { alignItems: 'center', padding: 16, borderRadius: 12, marginBottom: 12, borderWidth: 1 },
+  aqiValue: { fontSize: 32, fontWeight: '900' },
+  aqiLabel: { fontSize: 12, fontWeight: '600', marginTop: 4 },
+  pollutantRow: { flexDirection: 'row', justifyContent: 'space-around' },
+  pollutantText: { fontSize: 13, color: '#FFFFFF', fontWeight: '600' },
   
-  recommendationsSection: { marginBottom: 25 },
-  recommendationItem: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
-  locationSection: { marginBottom: 20 }
+  detailsSection: { marginBottom: 20 },
+  recommendationItem: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 6 },
+  bulletPoint: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#00E676', marginTop: 6, marginRight: 10 },
+  insightItem: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 },
+  insightText: { fontSize: 13, color: 'rgba(255,255,255,0.9)', lineHeight: 18, flex: 1, marginLeft: 8, fontStyle: 'italic' },
+  
+  // Missing riskFactorsContainer and related styles
+  riskFactorsContainer: { gap: 12 },
+  riskFactorItem: { marginBottom: 8 },
+  riskFactorHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  riskFactorLabel: { fontSize: 13, color: 'rgba(255,255,255,0.8)', fontWeight: '600' },
+  riskFactorScore: { fontSize: 12, color: '#00E676', fontWeight: '700' },
+  riskFactorBar: { height: 6, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 3 },
+  riskFactorFill: { height: '100%', borderRadius: 3 }
 });
-export default HealthAssessmentScreen;
+
+export default HealthRiskAssessmentScreen;

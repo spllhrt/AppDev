@@ -44,7 +44,7 @@ const userSchema = new mongoose.Schema({
     // Health-related fields for risk assessment
     age: {
         type: Number,
-        min: [1, 'Age must be at least 1'],
+        min: [1],
         max: [120, 'Age cannot exceed 120']
     },
     gender: {
@@ -77,6 +77,7 @@ const userSchema = new mongoose.Schema({
         default: 'moderate'
     },
     // Store latest assessment results
+    // Updated lastAssessment field for User schema
     lastAssessment: {
         riskScore: {
             type: Number,
@@ -91,6 +92,15 @@ const userSchema = new mongoose.Schema({
         pm25: Number,
         pm10: Number,
         recommendations: [String],
+        // ADD THESE MISSING FIELDS:
+        breakdown: {
+            environmental: Number,
+            age: Number,
+            healthConditions: Number,
+            lifestyle: Number
+        },
+        aiInsights: [String],  // For storing AI-generated insights
+        location: String,      // For storing assessment location
         assessedAt: {
             type: Date,
             default: Date.now
