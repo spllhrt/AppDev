@@ -18,7 +18,9 @@ import WeatherScreen from '../screens/user/WeatherScreen';
 import AqiScreen from '../screens/user/AqiScreen';
 import ProfileScreen from '../screens/user/ProfileScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import MapScreen from '../screens/user/MapScreen';
 import HealthAssessmentScreen from '../screens/user/HealthAssessmentScreen';
+import HistoryScreen from '../screens/user/HistoryScreen'; // Assuming you have or will create this screen
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -85,12 +87,12 @@ const CustomTabBar = ({ state, descriptors, navigation }) => {
             iconName = isFocused ? 'home' : 'home-outline';
           } else if (route.name === 'Settings') {
             iconName = isFocused ? 'settings' : 'settings-outline';
-          } else if (route.name === 'Weather') {
-            iconName = isFocused ? 'cloud' : 'cloud-outline';
-          } else if (route.name === 'Aqi') {
-            iconName = isFocused ? 'leaf' : 'leaf-outline';
-          } else if (route.name === 'Health') {
+          } else if (route.name === 'Assessment') {
             iconName = isFocused ? 'heart' : 'heart-outline';
+          } else if (route.name === 'Map') {
+            iconName = isFocused ? 'map' : 'map-outline';
+          } else if (route.name === 'History') {
+            iconName = isFocused ? 'time' : 'time-outline';
           }
 
           return (
@@ -141,7 +143,7 @@ const CustomTabBar = ({ state, descriptors, navigation }) => {
   );
 };
 
-// Main Tab Navigator with Profile removed
+// Main Tab Navigator with 5 tabs: Home, History, Map, Assessment, Settings
 const MainTabNavigator = () => {
   return (
     <Tab.Navigator
@@ -160,27 +162,27 @@ const MainTabNavigator = () => {
         }}
       />
       <Tab.Screen 
-        name="Aqi" 
-        component={AqiScreen}
+        name="History" 
+        component={HistoryScreen}
         options={{
-          title: 'Aqi',
-          tabBarLabel: 'Aqi',
+          title: 'History',
+          tabBarLabel: 'History',
         }}
       />
       <Tab.Screen 
-        name="Weather" 
-        component={WeatherScreen}
+        name="Map" 
+        component={MapScreen}
         options={{
-          title: 'Weather',
-          tabBarLabel: 'Weather',
+          title: 'Map',
+          tabBarLabel: 'Map',
         }}
       />
       <Tab.Screen 
-        name="Health" 
+        name="Assessment" 
         component={HealthAssessmentScreen}
         options={{
-          title: 'Health',
-          tabBarLabel: 'Health',
+          title: 'Assessment',
+          tabBarLabel: 'Assessment',
         }}
       />
       <Tab.Screen 
@@ -241,7 +243,22 @@ const UserNavigator = () => {
         }}
       />
       
-      {/* Add other screens that should be accessible from the main tabs */}
+      {/* Weather and AQI screens as stack screens - accessible programmatically but not in tabs */}
+      <Stack.Screen 
+        name="Weather" 
+        component={WeatherScreen}
+        options={{
+          title: 'Weather',
+        }}
+      />
+      
+      <Stack.Screen 
+        name="Aqi" 
+        component={AqiScreen}
+        options={{
+          title: 'Air Quality',
+        }}
+      />
     </Stack.Navigator>
   );
 };
@@ -306,7 +323,12 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   activeTabButton: {
-    // Additional styling for active state if needed
+    transform: [{ scale: 1.05 }],
+    shadowColor: '#00E676',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 8,
   },
   activeIndicator: {
     position: 'absolute',

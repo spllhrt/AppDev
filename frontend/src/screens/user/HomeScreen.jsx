@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Dimensions, RefreshControl } from 'react-native';
 import { useSelector } from 'react-redux';
+import { useNavigation } from '@react-navigation/native'; // Add this import
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
 
 const { width } = Dimensions.get('window');
 
 const HomeScreen = () => {
+  const navigation = useNavigation(); // Add this hook
   const [currentTime, setCurrentTime] = useState(new Date());
   const [weatherData, setWeatherData] = useState(null);
   const [useGPS, setUseGPS] = useState(false);
@@ -15,6 +17,8 @@ const HomeScreen = () => {
 
   const { user } = useSelector(state => state.auth || {});
   const userModel = user || { name: 'User', city: 'Manila', country: 'Philippines' };
+
+  // ... (keep all your existing useEffect and functions)
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
@@ -162,7 +166,6 @@ const HomeScreen = () => {
         weather: getWeatherDescription(weather.current.weather_code)
       });
 
-      // Update current time when refreshing
       if (isRefreshing) {
         setCurrentTime(new Date());
       }
@@ -236,6 +239,26 @@ const HomeScreen = () => {
     setUseGPS(!useGPS);
   };
 
+  // Navigation handlers for Quick Access items
+  const handleQuickAccess = (item) => {
+    switch (item.title) {
+      case 'Weather Forecast':
+        navigation.navigate('Weather');
+        break;
+      case 'Air Quality Index':
+        navigation.navigate('Aqi');
+        break;
+      case 'Risk Assessment':
+        navigation.navigate('Health');
+        break;
+      case 'Locations':
+        navigation.navigate('Locations');
+        break;
+      default:
+        Alert.alert('Coming Soon', `${item.title} feature is coming soon!`);
+    }
+  };
+
   if (loading) {
     return (
       <LinearGradient colors={['#0f172a', '#1e293b']} style={[styles.container, styles.center]}>
@@ -295,59 +318,67 @@ const HomeScreen = () => {
           <Text style={styles.sectionTitle}>Current Conditions</Text>
           <View style={styles.forecastGrid}>
             {/* Weather Card */}
-            <LinearGradient colors={['#1e3a8a', '#3b82f6']} style={styles.weatherCard}>
-              <View style={styles.cardHeader}>
-                <Text style={styles.weatherEmoji}>{getWeatherEmoji(weatherData.weatherCode)}</Text>
-                <Text style={styles.cardTemp}>{weatherData.temperature}°</Text>
-              </View>
-              <Text style={styles.cardTitle}>Weather</Text>
-              <Text style={styles.cardSubtitle}>{weatherData.weather}</Text>
-              <View style={styles.weatherDetails}>
-                <Text style={styles.detailText}>💧 {weatherData.humidity}%</Text>
-                <Text style={styles.detailText}>💨 {weatherData.windSpeed} km/h</Text>
-              </View>
-            </LinearGradient>
+            <TouchableOpacity onPress={() => navigation.navigate('WeatherScreen')}>
+              <LinearGradient colors={['#1e3a8a', '#3b82f6']} style={styles.weatherCard}>
+                <View style={styles.cardHeader}>
+                  <Text style={styles.weatherEmoji}>{getWeatherEmoji(weatherData.weatherCode)}</Text>
+                  <Text style={styles.cardTemp}>{weatherData.temperature}°</Text>
+                </View>
+                <Text style={styles.cardTitle}>Weather</Text>
+                <Text style={styles.cardSubtitle}>{weatherData.weather}</Text>
+                <View style={styles.weatherDetails}>
+                  <Text style={styles.detailText}>💧 {weatherData.humidity}%</Text>
+                  <Text style={styles.detailText}>💨 {weatherData.windSpeed} km/h</Text>
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
 
             {/* AQI Card */}
-            <LinearGradient colors={aqiInfo.colors} style={styles.aqiCard}>
-              <View style={styles.cardHeader}>
-                <Text style={styles.aqiEmoji}>🌬️</Text>
-                <Text style={styles.cardAqi}>{weatherData.aqi}</Text>
-              </View>
-              <Text style={styles.cardTitle}>Air Quality</Text>
-              <Text style={styles.cardSubtitle}>{aqiInfo.status}</Text>
-              <Text style={styles.aqiStandard}>US AQI Standard</Text>
-            </LinearGradient>
+            <TouchableOpacity onPress={() => navigation.navigate('AqiScreen')}>
+              <LinearGradient colors={aqiInfo.colors} style={styles.aqiCard}>
+                <View style={styles.cardHeader}>
+                  <Text style={styles.aqiEmoji}>🌬️</Text>
+                  <Text style={styles.cardAqi}>{weatherData.aqi}</Text>
+                </View>
+                <Text style={styles.cardTitle}>Air Quality</Text>
+                <Text style={styles.cardSubtitle}>{aqiInfo.status}</Text>
+                <Text style={styles.aqiStandard}>US AQI Standard</Text>
+              </LinearGradient>
+            </TouchableOpacity>
           </View>
         </View>
 
         {/* Traffic Status */}
         <View style={styles.section}>
-          <LinearGradient colors={['rgba(245, 158, 11, 0.1)', 'rgba(245, 158, 11, 0.05)']} style={styles.trafficCard}>
-            <View style={styles.trafficContent}>
-              <View style={styles.trafficLeft}>
-                <Text style={styles.trafficIcon}>🚗</Text>
-                <View>
-                  <Text style={styles.trafficTitle}>Traffic Status</Text>
-                  <Text style={styles.trafficStatus}>Moderate Traffic</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Traffic')}>
+            <LinearGradient colors={['rgba(245, 158, 11, 0.1)', 'rgba(245, 158, 11, 0.05)']} style={styles.trafficCard}>
+              <View style={styles.trafficContent}>
+                <View style={styles.trafficLeft}>
+                  <Text style={styles.trafficIcon}>🚗</Text>
+                  <View>
+                    <Text style={styles.trafficTitle}>Traffic Status</Text>
+                    <Text style={styles.trafficStatus}>Moderate Traffic</Text>
+                  </View>
                 </View>
+                <Text style={styles.trafficTime}>Now</Text>
               </View>
-              <Text style={styles.trafficTime}>Now</Text>
-            </View>
-          </LinearGradient>
+            </LinearGradient>
+          </TouchableOpacity>
         </View>
 
         {/* Health Recommendation */}
         <View style={styles.section}>
-          <LinearGradient colors={[...healthRec.colors.map(c => c + '20'), ...healthRec.colors.map(c => c + '10')]} style={styles.healthCard}>
-            <View style={styles.healthContent}>
-              <Text style={styles.healthIcon}>{healthRec.icon}</Text>
-              <View style={styles.healthText}>
-                <Text style={[styles.healthTitle, { color: healthRec.colors[0] }]}>{healthRec.title}</Text>
-                <Text style={styles.healthDesc}>{healthRec.desc}</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('HealthRecommendations')}>
+            <LinearGradient colors={[...healthRec.colors.map(c => c + '20'), ...healthRec.colors.map(c => c + '10')]} style={styles.healthCard}>
+              <View style={styles.healthContent}>
+                <Text style={styles.healthIcon}>{healthRec.icon}</Text>
+                <View style={styles.healthText}>
+                  <Text style={[styles.healthTitle, { color: healthRec.colors[0] }]}>{healthRec.title}</Text>
+                  <Text style={styles.healthDesc}>{healthRec.desc}</Text>
+                </View>
               </View>
-            </View>
-          </LinearGradient>
+            </LinearGradient>
+          </TouchableOpacity>
         </View>
 
         {/* Quick Access */}
@@ -355,12 +386,12 @@ const HomeScreen = () => {
           <Text style={styles.sectionTitle}>Quick Access</Text>
           <View style={styles.quickGrid}>
             {[
-              { icon: '🌡️', title: 'Weather Details', colors: ['#3b82f6', '#1d4ed8'] },
-              { icon: '💨', title: 'AQI History', colors: ['#10b981', '#059669'] },
-              { icon: '📋', title: 'Health Report', colors: ['#ec4899', '#db2777'] },
+              { icon: '🌡️', title: 'Weather Forecast', colors: ['#3b82f6', '#1d4ed8'] },
+              { icon: '💨', title: 'Air Quality Index', colors: ['#10b981', '#059669'] },
+              { icon: '📋', title: 'Risk Assessment', colors: ['#ec4899', '#db2777'] },
               { icon: '📍', title: 'Locations', colors: ['#8b5cf6', '#7c3aed'] }
             ].map((item, index) => (
-              <TouchableOpacity key={index} style={styles.quickItem}>
+              <TouchableOpacity key={index} style={styles.quickItem} onPress={() => handleQuickAccess(item)}>
                 <LinearGradient colors={[...item.colors.map(c => c + '20'), ...item.colors.map(c => c + '10')]} style={styles.quickCard}>
                   <Text style={styles.quickIcon}>{item.icon}</Text>
                   <Text style={styles.quickTitle}>{item.title}</Text>
