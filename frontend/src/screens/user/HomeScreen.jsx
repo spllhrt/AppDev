@@ -318,7 +318,7 @@ const HomeScreen = () => {
           <Text style={styles.sectionTitle}>Current Conditions</Text>
           <View style={styles.forecastGrid}>
             {/* Weather Card */}
-            <TouchableOpacity onPress={() => navigation.navigate('WeatherScreen')}>
+            <TouchableOpacity>
               <LinearGradient colors={['#1e3a8a', '#3b82f6']} style={styles.weatherCard}>
                 <View style={styles.cardHeader}>
                   <Text style={styles.weatherEmoji}>{getWeatherEmoji(weatherData.weatherCode)}</Text>
@@ -334,7 +334,7 @@ const HomeScreen = () => {
             </TouchableOpacity>
 
             {/* AQI Card */}
-            <TouchableOpacity onPress={() => navigation.navigate('AqiScreen')}>
+            <TouchableOpacity>
               <LinearGradient colors={aqiInfo.colors} style={styles.aqiCard}>
                 <View style={styles.cardHeader}>
                   <Text style={styles.aqiEmoji}>🌬️</Text>

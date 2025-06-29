@@ -13,11 +13,32 @@ import {
   ActivityIndicator,
   Dimensions,
   StatusBar,
+  Modal,
+  FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { registerUser } from '../api/auth';
+
+const metroManilaCities = [
+  'Caloocan',
+  'Las Piñas',
+  'Makati',
+  'Malabon',
+  'Mandaluyong',
+  'Manila',
+  'Marikina',
+  'Muntinlupa',
+  'Navotas',
+  'Parañaque',
+  'Pasay',
+  'Pasig',
+  'Quezon City',
+  'San Juan',
+  'Taguig',
+  'Valenzuela',
+];
 
 const RegisterScreen = ({ navigation }) => {
   const { width, height } = Dimensions.get('window');
@@ -36,6 +57,7 @@ const RegisterScreen = ({ navigation }) => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [showCityDropdown, setShowCityDropdown] = useState(false);
 
   // Memoized function to prevent re-renders
   const handleInputChange = useCallback((field, value) => {
@@ -51,6 +73,20 @@ const RegisterScreen = ({ navigation }) => {
       }));
     }
   }, [errors]);
+
+  const handleCitySelect = useCallback((city) => {
+    setFormData(prev => ({
+      ...prev,
+      city
+    }));
+    setShowCityDropdown(false);
+    if (errors.city) {
+      setErrors(prev => ({
+        ...prev,
+        city: ''
+      }));
+    }
+  }, [errors.city]);
 
   const pickImage = useCallback(async () => {
     try {
@@ -111,10 +147,6 @@ const RegisterScreen = ({ navigation }) => {
 
     if (!formData.city.trim()) {
       newErrors.city = 'City is required';
-    } else if (formData.city.trim().length < 2) {
-      newErrors.city = 'City must be at least 2 characters';
-    } else if (formData.city.trim().length > 50) {
-      newErrors.city = 'City cannot exceed 50 characters';
     }
 
     if (!formData.profileImage) {
@@ -190,6 +222,19 @@ const RegisterScreen = ({ navigation }) => {
     if (loading) return;
     navigation.goBack();
   }, [navigation, loading]);
+
+  const toggleCityDropdown = useCallback(() => {
+    setShowCityDropdown(prev => !prev);
+  }, []);
+
+  const renderCityItem = useCallback(({ item }) => (
+    <TouchableOpacity
+      style={styles.cityItem}
+      onPress={() => handleCitySelect(item)}
+    >
+      <Text style={styles.cityText}>{item}</Text>
+    </TouchableOpacity>
+  ), []);
 
   return (
     <LinearGradient
@@ -306,22 +351,49 @@ const RegisterScreen = ({ navigation }) => {
               {/* City Input */}
               <View style={[styles.inputContainer, isSmallDevice && styles.inputContainerSmall]}>
                 <Text style={styles.inputLabel}>City</Text>
-                <View style={[styles.inputWrapper, errors.city && styles.inputError]}>
+                <TouchableOpacity
+                  style={[styles.inputWrapper, errors.city && styles.inputError]}
+                  onPress={toggleCityDropdown}
+                  disabled={loading}
+                  activeOpacity={0.8}
+                >
                   <Ionicons name="location-outline" size={20} color="#4CAF50" style={styles.inputIcon} />
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="Enter your city"
-                    placeholderTextColor="rgba(255, 255, 255, 0.6)"
-                    value={formData.city}
-                    onChangeText={(text) => handleInputChange('city', text)}
-                    autoCapitalize="words"
-                    maxLength={50}
-                    returnKeyType="next"
-                    editable={!loading}
+                  <Text style={[styles.cityInputText, !formData.city && { color: 'rgba(255, 255, 255, 0.6)' }]}>
+                    {formData.city || 'Select your city'}
+                  </Text>
+                  <Ionicons 
+                    name={showCityDropdown ? "chevron-up-outline" : "chevron-down-outline"} 
+                    size={20} 
+                    color="#4CAF50" 
+                    style={styles.cityDropdownIcon}
                   />
-                </View>
+                </TouchableOpacity>
                 {errors.city ? <Text style={styles.errorText}>{errors.city}</Text> : null}
               </View>
+
+              {/* City Dropdown Modal */}
+              <Modal
+                visible={showCityDropdown}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={toggleCityDropdown}
+              >
+                <TouchableOpacity
+                  style={styles.modalOverlay}
+                  activeOpacity={1}
+                  onPress={toggleCityDropdown}
+                >
+                  <View style={styles.modalContent}>
+                    <FlatList
+                      data={metroManilaCities}
+                      renderItem={renderCityItem}
+                      keyExtractor={(item) => item}
+                      style={styles.cityList}
+                      keyboardShouldPersistTaps="always"
+                    />
+                  </View>
+                </TouchableOpacity>
+              </Modal>
 
               {/* Password Input */}
               <View style={[styles.inputContainer, isSmallDevice && styles.inputContainerSmall]}>
@@ -446,7 +518,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingBottom: Platform.OS === 'android' ? 20 : 0, // Add bottom padding for Android
+    paddingBottom: Platform.OS === 'android' ? 20 : 0,
   },
   header: {
     flexDirection: 'row',
@@ -483,15 +555,15 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 30,
     paddingHorizontal: 30,
     paddingTop: 40,
-    paddingBottom: 40, // Increased bottom padding
+    paddingBottom: 40,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
-    marginBottom: Platform.OS === 'android' ? 20 : 0, // Add margin bottom for Android
+    marginBottom: Platform.OS === 'android' ? 20 : 0,
   },
   formContainerSmall: {
     paddingHorizontal: 20,
     paddingTop: 30,
-    paddingBottom: 30, // Increased bottom padding for small devices
+    paddingBottom: 30,
     marginBottom: Platform.OS === 'android' ? 15 : 0,
   },
   welcomeSection: {
@@ -584,6 +656,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#ffffff',
   },
+  cityInputText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#ffffff',
+  },
+  cityDropdownIcon: {
+    marginLeft: 10,
+  },
   eyeIcon: {
     padding: 5,
   },
@@ -639,10 +719,61 @@ const styles = StyleSheet.create({
     color: '#4CAF50',
     fontSize: 14,
     fontWeight: '600',
+    marginLeft: 5,
   },
   disabledText: {
     opacity: 0.5,
   },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#1a1a2e',
+    borderRadius: 12,
+    width: '80%',
+    maxHeight: '60%',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  cityList: {
+    padding: 10,
+  },
+  cityItem: {
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  cityText: {
+    color: '#ffffff',
+    fontSize: 16,
+  },
 });
 
 export default RegisterScreen;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

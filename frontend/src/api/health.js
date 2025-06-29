@@ -176,6 +176,17 @@ export const getLatestAssessment = async () => {
     
     return response.data;
   } catch (error) {
+    // Handle 404 as a normal case (no previous assessment found)
+    if (error.response?.status === 404) {
+      console.log('Health API: No previous assessment found (this is normal for new users)');
+      return {
+        success: false,
+        message: 'No previous assessment found',
+        assessment: null
+      };
+    }
+    
+    // Log other errors as actual errors
     console.error('Health API: Latest assessment fetch failed:', {
       message: error.message,
       status: error.response?.status,

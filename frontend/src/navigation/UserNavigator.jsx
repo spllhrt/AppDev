@@ -20,7 +20,7 @@ import ProfileScreen from '../screens/user/ProfileScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import MapScreen from '../screens/user/MapScreen';
 import HealthAssessmentScreen from '../screens/user/HealthAssessmentScreen';
-import HistoryScreen from '../screens/user/HistoryScreen'; // Assuming you have or will create this screen
+import HistoryScreen from '../screens/user/HistoryScreen'; // Keeping HistoryScreen import
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -41,7 +41,7 @@ const CustomTabBar = ({ state, descriptors, navigation }) => {
       styles.tabBarContainer,
       {
         paddingBottom: Math.max(insets.bottom, 8),
-        height: 55 + Math.max(insets.bottom, 8), // Reduced height since no labels
+        height: 55 + Math.max(insets.bottom, 8),
       }
     ]}>
       {/* Background Gradient */}
@@ -87,14 +87,11 @@ const CustomTabBar = ({ state, descriptors, navigation }) => {
             iconName = isFocused ? 'home' : 'home-outline';
           } else if (route.name === 'Settings') {
             iconName = isFocused ? 'settings' : 'settings-outline';
-          } else if (route.name === 'Assessment') {
-            iconName = isFocused ? 'heart' : 'heart-outline';
-          } else if (route.name === 'Map') {
+          }  else if (route.name === 'Map') {
             iconName = isFocused ? 'map' : 'map-outline';
-          } else if (route.name === 'History') {
-            iconName = isFocused ? 'time' : 'time-outline';
+          } else if (route.name === 'HealthAssessment') {
+            iconName = isFocused ? 'heart' : 'heart-outline';
           }
-
           return (
             <TouchableOpacity
               key={route.key}
@@ -130,7 +127,7 @@ const CustomTabBar = ({ state, descriptors, navigation }) => {
                 <View style={styles.iconContainer}>
                   <Ionicons
                     name={iconName}
-                    size={26} // Slightly larger since no label
+                    size={26}
                     color={isFocused ? '#00E676' : 'rgba(255, 255, 255, 0.6)'}
                   />
                 </View>
@@ -143,7 +140,7 @@ const CustomTabBar = ({ state, descriptors, navigation }) => {
   );
 };
 
-// Main Tab Navigator with 5 tabs: Home, History, Map, Assessment, Settings
+// Main Tab Navigator with the requested tabs (excluding History from bottom nav)
 const MainTabNavigator = () => {
   return (
     <Tab.Navigator
@@ -162,14 +159,6 @@ const MainTabNavigator = () => {
         }}
       />
       <Tab.Screen 
-        name="History" 
-        component={HistoryScreen}
-        options={{
-          title: 'History',
-          tabBarLabel: 'History',
-        }}
-      />
-      <Tab.Screen 
         name="Map" 
         component={MapScreen}
         options={{
@@ -178,11 +167,11 @@ const MainTabNavigator = () => {
         }}
       />
       <Tab.Screen 
-        name="Assessment" 
+        name="HealthAssessment" 
         component={HealthAssessmentScreen}
         options={{
-          title: 'Assessment',
-          tabBarLabel: 'Assessment',
+          title: 'Health Assessment',
+          tabBarLabel: 'Health',
         }}
       />
       <Tab.Screen 
@@ -197,7 +186,7 @@ const MainTabNavigator = () => {
   );
 };
 
-// Enhanced User Stack Navigator
+// Enhanced User Stack Navigator (History can be accessed programmatically)
 const UserNavigator = () => {
   return (
     <Stack.Navigator
@@ -230,11 +219,19 @@ const UserNavigator = () => {
         name="MainTabs" 
         component={MainTabNavigator}
         options={{
-          gestureEnabled: false, // Disable swipe for main tabs
+          gestureEnabled: false,
         }}
       />
       
-      {/* Profile screen as a stack screen - accessible programmatically but not in tabs */}
+      {/* History screen can be accessed programmatically but not via bottom tab */}
+      <Stack.Screen 
+        name="History" 
+        component={HistoryScreen}
+        options={{
+          title: 'History',
+        }}
+      />
+      
       <Stack.Screen 
         name="Profile" 
         component={ProfileScreen}
@@ -243,7 +240,6 @@ const UserNavigator = () => {
         }}
       />
       
-      {/* Weather and AQI screens as stack screens - accessible programmatically but not in tabs */}
       <Stack.Screen 
         name="Weather" 
         component={WeatherScreen}
@@ -289,7 +285,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingTop: 8,
-    height: 55, // Reduced height
+    height: 55,
   },
   tabButton: {
     flex: 1,
@@ -317,9 +313,9 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 16,
-    minHeight: 45, // Reduced height
+    minHeight: 45,
     width: '100%',
-    maxWidth: 60, // Reduced width since no label
+    maxWidth: 60,
     position: 'relative',
   },
   activeTabButton: {
@@ -346,7 +342,7 @@ const styles = StyleSheet.create({
   iconContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    height: 32, // Slightly larger for the icon
+    height: 32,
   },
 });
 

@@ -12,10 +12,19 @@ import { updateUserProfile } from '../../api/auth';
 import { updateHealthProfile, getHealthProfile } from '../../api/health';
 import * as ImagePicker from 'expo-image-picker';
 
+
+// List of all cities in Metro Manila
+const metroManilaCities = [
+  'Caloocan', 'Las Piñas', 'Makati', 'Malabon', 'Mandaluyong',
+  'Manila', 'Marikina', 'Muntinlupa', 'Navotas', 'Parañaque',
+  'Pasay', 'Pasig', 'Quezon City', 'San Juan', 'Taguig', 'Valenzuela'
+];
+
+
 const ProfileScreen = ({ navigation }) => {
   const { user } = useSelector((state) => state.auth);
   const dispatch = useDispatch();
-  
+ 
   const [isEditing, setIsEditing] = useState(false);
   const [profileData, setProfileData] = useState({
     name: user?.name || '',
@@ -34,9 +43,11 @@ const ProfileScreen = ({ navigation }) => {
   const [imageUri, setImageUri] = useState(user?.avatar?.url || null);
   const [showImageModal, setShowImageModal] = useState(false);
 
+
   useEffect(() => {
     loadProfileData();
   }, [user]);
+
 
   const loadProfileData = async () => {
     try {
@@ -61,22 +72,24 @@ const ProfileScreen = ({ navigation }) => {
     setImageUri(user?.avatar?.url || null);
   };
 
+
   const saveProfile = async () => {
     try {
       // Update user profile
       const formData = new FormData();
       formData.append('name', profileData.name);
       formData.append('city', profileData.city);
-      
+     
       if (imageUri && imageUri !== user?.avatar?.url) {
         const filename = imageUri.split('/').pop();
         const match = /\.(\w+)$/.exec(filename);
         const type = match ? `image/${match[1]}` : 'image/jpeg';
         formData.append('avatar', { uri: imageUri, name: filename || 'avatar.jpg', type });
       }
-      
+     
       const userResponse = await updateUserProfile(formData);
       dispatch(updateUser(userResponse.user));
+
 
       // Update health profile
       const healthData = {
@@ -89,9 +102,9 @@ const ProfileScreen = ({ navigation }) => {
         hasRespiratoryIssues: profileData.hasRespiratoryIssues,
         outdoorExposure: profileData.outdoorExposure || undefined,
       };
-      
+     
       await updateHealthProfile(healthData);
-      
+     
       setIsEditing(false);
       Alert.alert('Success', 'Profile updated successfully!');
     } catch (error) {
@@ -101,9 +114,10 @@ const ProfileScreen = ({ navigation }) => {
     }
   };
 
+
   const handleImagePick = async () => {
     if (!isEditing) return;
-    
+   
     Alert.alert('Select Photo', '', [
       { text: 'Camera', onPress: () => pickImage('camera') },
       { text: 'Gallery', onPress: () => pickImage('gallery') },
@@ -112,62 +126,100 @@ const ProfileScreen = ({ navigation }) => {
     ]);
   };
 
+
   const pickImage = async (source) => {
-    const result = source === 'camera' 
+    const result = source === 'camera'
       ? await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.8 })
       : await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.8 });
+
 
     if (!result.canceled && result.assets?.[0]?.uri) {
       setImageUri(result.assets[0].uri);
     }
   };
 
-  const renderInput = (field, label, icon, options = {}) => (
-    <View style={styles.inputGroup}>
-      <Text style={styles.label}>{label}</Text>
-      <View style={[styles.inputContainer, isEditing && styles.inputActive]}>
-        <Ionicons name={icon} size={16} color="#00E676" />
-        {options.type === 'picker' ? (
-          <Picker
-            selectedValue={profileData[field]}
-            onValueChange={(value) => setProfileData(prev => ({ ...prev, [field]: value }))}
-            style={styles.picker}
-            enabled={isEditing}
-          >
-            <Picker.Item label="Select..." value="" />
-            {options.items.map(item => (
-              <Picker.Item key={item.value} label={item.label} value={item.value} />
-            ))}
-          </Picker>
-        ) : options.type === 'switch' ? (
-          <TouchableOpacity
-            style={[styles.switch, profileData[field] && styles.switchActive]}
-            onPress={() => isEditing && setProfileData(prev => ({ ...prev, [field]: !prev[field] }))}
-            disabled={!isEditing}
-          >
-            <Text style={styles.switchText}>{profileData[field] ? 'Yes' : 'No'}</Text>
-          </TouchableOpacity>
-        ) : (
-          <TextInput
-            style={[styles.input, !isEditing && styles.inputDisabled]}
-            value={profileData[field]}
-            onChangeText={(text) => setProfileData(prev => ({ ...prev, [field]: text }))}
-            placeholder={options.placeholder || `Enter ${label.toLowerCase()}`}
-            placeholderTextColor="rgba(255,255,255,0.5)"
-            editable={isEditing && field !== 'email'}
-            keyboardType={options.keyboardType || 'default'}
-          />
-        )}
+
+  const renderInput = (field, label, icon, options = {}) => {
+    if (field === 'city') {
+      return (
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>{label}</Text>
+          <View style={[styles.inputContainer, isEditing && styles.inputActive]}>
+            <Ionicons name={icon} size={16} color="#00E676" />
+            {isEditing ? (
+              <Picker
+                selectedValue={profileData.city}
+                onValueChange={(value) => setProfileData(prev => ({ ...prev, city: value }))}
+                style={[styles.input, { flex: 1, marginLeft: 12 }]}
+                dropdownIconColor="#FFFFFF"
+              >
+                {metroManilaCities.map(city => (
+                  <Picker.Item key={city} label={city} value={city} />
+                ))}
+              </Picker>
+            ) : (
+              <TextInput
+                style={[styles.input, styles.inputDisabled]}
+                value={profileData.city}
+                editable={false}
+                placeholder="Select your city"
+                placeholderTextColor="rgba(255,255,255,0.5)"
+              />
+            )}
+          </View>
+        </View>
+      );
+    }
+
+
+    return (
+      <View style={styles.inputGroup}>
+        <Text style={styles.label}>{label}</Text>
+        <View style={[styles.inputContainer, isEditing && styles.inputActive]}>
+          <Ionicons name={icon} size={16} color="#00E676" />
+          {options.type === 'picker' ? (
+            <Picker
+              selectedValue={profileData[field]}
+              onValueChange={(value) => setProfileData(prev => ({ ...prev, [field]: value }))}
+              style={styles.picker}
+              enabled={isEditing}
+            >
+              <Picker.Item label="Select..." value="" />
+              {options.items.map(item => (
+                <Picker.Item key={item.value} label={item.label} value={item.value} />
+              ))}
+            </Picker>
+          ) : options.type === 'switch' ? (
+            <TouchableOpacity
+              style={[styles.switch, profileData[field] && styles.switchActive]}
+              onPress={() => isEditing && setProfileData(prev => ({ ...prev, [field]: !prev[field] }))}
+              disabled={!isEditing}
+            >
+              <Text style={styles.switchText}>{profileData[field] ? 'Yes' : 'No'}</Text>
+            </TouchableOpacity>
+          ) : (
+            <TextInput
+              style={[styles.input, !isEditing && styles.inputDisabled]}
+              value={profileData[field]}
+              onChangeText={(text) => setProfileData(prev => ({ ...prev, [field]: text }))}
+              placeholder={options.placeholder || `Enter ${label.toLowerCase()}`}
+              placeholderTextColor="rgba(255,255,255,0.5)"
+              editable={isEditing && field !== 'email'}
+              keyboardType={options.keyboardType || 'default'}
+            />
+          )}
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
+
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       <LinearGradient colors={['#0A0A0A', '#1A1A2E', '#16213E']} style={styles.gradient}>
         <SafeAreaView style={styles.safeArea}>
-          
+         
           {/* Header */}
           <View style={styles.header}>
             <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()}>
@@ -182,8 +234,9 @@ const ProfileScreen = ({ navigation }) => {
             </TouchableOpacity>
           </View>
 
+
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-            
+           
             {/* Profile Header */}
             <View style={styles.profileCard}>
               <TouchableOpacity style={styles.avatar} onPress={handleImagePick}>
@@ -206,6 +259,7 @@ const ProfileScreen = ({ navigation }) => {
               <Text style={styles.userEmail}>{profileData.email}</Text>
             </View>
 
+
             {/* Personal Info */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Personal Information</Text>
@@ -215,6 +269,7 @@ const ProfileScreen = ({ navigation }) => {
                 {renderInput('city', 'City', 'location-outline')}
               </View>
             </View>
+
 
             {/* Health Info */}
             <View style={styles.section}>
@@ -240,6 +295,7 @@ const ProfileScreen = ({ navigation }) => {
               </View>
             </View>
 
+
             {/* Health Conditions */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Health Conditions</Text>
@@ -252,6 +308,7 @@ const ProfileScreen = ({ navigation }) => {
               </View>
             </View>
 
+
             {isEditing && (
               <TouchableOpacity style={styles.cancelBtn} onPress={() => { setIsEditing(false); loadProfileData(); }}>
                 <Text style={styles.cancelText}>Cancel</Text>
@@ -260,6 +317,7 @@ const ProfileScreen = ({ navigation }) => {
           </ScrollView>
         </SafeAreaView>
       </LinearGradient>
+
 
       {/* Image Modal */}
       <Modal visible={showImageModal} transparent animationType="fade">
@@ -273,6 +331,7 @@ const ProfileScreen = ({ navigation }) => {
     </View>
   );
 };
+
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0A0A0A' },
@@ -361,4 +420,20 @@ const styles = StyleSheet.create({
   },
 });
 
+
 export default ProfileScreen;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

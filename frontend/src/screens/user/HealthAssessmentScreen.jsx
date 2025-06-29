@@ -78,13 +78,20 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
   };
 
   const loadLatestAssessment = async () => {
-    try {
-      const result = await getLatestAssessment();
-      if (result.success) setAssessment(result.assessment);
-    } catch (error) {
-      console.log('No previous assessment found');
+  try {
+    const result = await getLatestAssessment();
+    if (result.success) {
+      setAssessment(result.assessment);
     }
-  };
+  } catch (error) {
+    // Only log actual errors, not "no assessment found" cases
+    if (error.status !== 404) {
+      console.warn('Failed to load latest assessment:', error.message);
+    }
+    // For 404 (no previous assessment), silently continue with no assessment
+    // This is expected behavior for new users
+  }
+};
 
   useEffect(() => { loadLatestAssessment(); }, []);
 
@@ -159,9 +166,20 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
               <Text style={styles.headerTitle}>Health Risk Assessment</Text>
               <Text style={styles.headerSubtitle}>Environmental Health Analysis</Text>
             </View>
-            <TouchableOpacity style={styles.refreshButton} onPress={() => setShowLocationModal(true)}>
-              <Ionicons name="refresh" size={20} color="#00E676" />
-            </TouchableOpacity>
+            <View style={styles.headerRightButtons}>
+              <TouchableOpacity 
+                style={styles.historyButton} 
+                onPress={() => navigation.navigate('History')}
+              >
+                <Ionicons name="time-outline" size={20} color="#00E676" />
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.refreshButton} 
+                onPress={() => setShowLocationModal(true)}
+              >
+                <Ionicons name="refresh" size={20} color="#00E676" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
@@ -199,6 +217,13 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
                       {assessment.riskLevel.replace('_', ' ').toUpperCase()} RISK
                     </Text>
                     <RiskIndicator level={assessment.riskLevel} />
+                    <TouchableOpacity 
+                      style={styles.viewHistoryButton}
+                      onPress={() => navigation.navigate('History')}
+                    >
+                      <Text style={styles.viewHistoryText}>View Assessment History</Text>
+                      <Ionicons name="chevron-forward" size={16} color="#00E676" />
+                    </TouchableOpacity>
                   </View>
                 </View>
 
@@ -403,25 +428,85 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0A0A0A' },
   gradient: { flex: 1 },
   safeArea: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 20, paddingBottom: 20 },
-  backButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255, 255, 255, 0.1)', justifyContent: 'center', alignItems: 'center', borderColor: 'rgba(0,230,118,0.3)', borderWidth: 1 },
-  refreshButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,230,118,0.2)', justifyContent: 'center', alignItems: 'center', borderColor: 'rgba(0,230,118,0.3)', borderWidth: 1 },
+  header: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    paddingHorizontal: 20, 
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 20, 
+    paddingBottom: 20 
+  },
+  backButton: { 
+    width: 36, 
+    height: 36, 
+    borderRadius: 18, 
+    backgroundColor: 'rgba(255, 255, 255, 0.1)', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    borderColor: 'rgba(0,230,118,0.3)', 
+    borderWidth: 1 
+  },
+  headerRightButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  historyButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,230,118,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderColor: 'rgba(0,230,118,0.3)',
+    borderWidth: 1,
+  },
+  refreshButton: { 
+    width: 36, 
+    height: 36, 
+    borderRadius: 18, 
+    backgroundColor: 'rgba(0,230,118,0.2)', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    borderColor: 'rgba(0,230,118,0.3)', 
+    borderWidth: 1 
+  },
   headerCenter: { flex: 1, alignItems: 'center' },
   headerTitle: { fontSize: 17, fontWeight: '700', color: '#FFFFFF' },
   headerSubtitle: { fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 2 },
   content: { flex: 1, paddingHorizontal: 20 },
   scrollContent: { paddingBottom: 100 },
-  statusBanner: { backgroundColor: 'rgba(0,230,118,0.1)', borderRadius: 12, padding: 16, marginBottom: 20, borderColor: 'rgba(0,230,118,0.3)', borderWidth: 1 },
+  statusBanner: { 
+    backgroundColor: 'rgba(0,230,118,0.1)', 
+    borderRadius: 12, 
+    padding: 16, 
+    marginBottom: 20, 
+    borderColor: 'rgba(0,230,118,0.3)', 
+    borderWidth: 1 
+  },
   statusIndicator: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
   statusText: { fontSize: 14, fontWeight: '600', color: '#00E676', marginLeft: 8 },
   lastUpdate: { fontSize: 12, color: 'rgba(255,255,255,0.7)' },
-  card: { backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 16, padding: 18, marginBottom: 20, borderColor: 'rgba(0,230,118,0.2)', borderWidth: 1 },
+  card: { 
+    backgroundColor: 'rgba(255,255,255,0.08)', 
+    borderRadius: 16, 
+    padding: 18, 
+    marginBottom: 20, 
+    borderColor: 'rgba(0,230,118,0.2)', 
+    borderWidth: 1 
+  },
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
   cardHeaderLeft: { flexDirection: 'row', alignItems: 'center' },
   cardTitle: { fontSize: 16, fontWeight: '700', color: '#FFFFFF', marginLeft: 8 },
   cardSubtitle: { fontSize: 12, color: 'rgba(255,255,255,0.6)', marginLeft: 8, marginTop: 2 },
   infoButton: { padding: 4 },
-  riskCard: { alignItems: 'center', padding: 24, borderRadius: 12, marginBottom: 16, borderWidth: 1 },
+  riskCard: { 
+    alignItems: 'center', 
+    padding: 24, 
+    borderRadius: 12, 
+    marginBottom: 16, 
+    borderWidth: 1 
+  },
   riskScoreContainer: { flexDirection: 'row', alignItems: 'baseline' },
   riskScore: { fontSize: 48, fontWeight: '900' },
   riskScoreMax: { fontSize: 24, color: 'rgba(255,255,255,0.5)', marginLeft: 4 },
@@ -439,79 +524,164 @@ const styles = StyleSheet.create({
   riskFactorBar: { height: 6, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 3 },
   riskFactorFill: { height: '100%', borderRadius: 3 },
   metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  metricCard: { flex: 1, minWidth: '45%', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 12, padding: 12, borderWidth: 1 },
+  metricCard: { 
+    flex: 1, 
+    minWidth: '45%', 
+    backgroundColor: 'rgba(255,255,255,0.05)', 
+    borderRadius: 12, 
+    padding: 12, 
+    borderWidth: 1 
+  },
   metricHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   metricLabel: { fontSize: 12, color: 'rgba(255,255,255,0.7)', marginLeft: 6 },
   metricValue: { fontSize: 20, fontWeight: '700' },
   metricUnit: { fontSize: 10, color: 'rgba(255,255,255,0.5)', marginTop: 2 },
   recommendationsContainer: { gap: 12 },
-  recommendationCard: { backgroundColor: 'rgba(0,230,118,0.05)', borderRadius: 12, padding: 12, flexDirection: 'row', alignItems: 'flex-start', borderColor: 'rgba(0,230,118,0.1)', borderWidth: 1 },
-  recommendationIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(0,230,118,0.2)', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  recommendationCard: { 
+    backgroundColor: 'rgba(0,230,118,0.05)', 
+    borderRadius: 12, 
+    padding: 12, 
+    flexDirection: 'row', 
+    alignItems: 'flex-start', 
+    borderColor: 'rgba(0,230,118,0.1)', 
+    borderWidth: 1 
+  },
+  recommendationIcon: { 
+    width: 28, 
+    height: 28, 
+    borderRadius: 14, 
+    backgroundColor: 'rgba(0,230,118,0.2)', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginRight: 12 
+  },
   recommendationText: { fontSize: 13, color: 'rgba(255,255,255,0.9)', lineHeight: 18, flex: 1 },
-  viewAllButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 12, padding: 8 },
+  viewAllButton: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    marginTop: 12, 
+    padding: 8 
+  },
   viewAllText: { fontSize: 14, color: '#00E676', fontWeight: '600', marginRight: 4 },
+  viewHistoryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    padding: 8,
+  },
+  viewHistoryText: {
+    fontSize: 12,
+    color: '#00E676',
+    fontWeight: '600',
+    marginRight: 4,
+  },
   clinicalSummary: { gap: 12 },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   summaryLabel: { fontSize: 14, color: 'rgba(255,255,255,0.7)' },
   summaryValue: { fontSize: 14, fontWeight: '600', color: '#FFFFFF' },
-  emptyCard: { borderRadius: 16, marginBottom: 20, overflow: 'hidden', borderColor: 'rgba(0,230,118,0.2)', borderWidth: 1 },
+  emptyCard: { 
+    borderRadius: 16, 
+    marginBottom: 20, 
+    overflow: 'hidden', 
+    borderColor: 'rgba(0,230,118,0.2)', 
+    borderWidth: 1 
+  },
   emptyGradient: { padding: 40, alignItems: 'center' },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: '#FFFFFF', marginTop: 16, marginBottom: 8 },
   emptyText: { fontSize: 14, color: 'rgba(255,255,255,0.7)', textAlign: 'center', lineHeight: 20 },
   assessButton: { borderRadius: 12, marginBottom: 20, overflow: 'hidden' },
   assessButtonGradient: { padding: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' },
   assessButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700', marginLeft: 8 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
-  modalContent: { backgroundColor: '#1A1A2E', borderRadius: 16, padding: 24, margin: 20, width: '92%', maxWidth: 400 },
- // Continuation from the cut-off point in the first document:
+  modalOverlay: { 
+    flex: 1, 
+    backgroundColor: 'rgba(0,0,0,0.8)', 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  modalContent: { 
+    backgroundColor: '#1A1A2E', 
+    borderRadius: 16, 
+    padding: 24, 
+    margin: 20, 
+    width: '92%', 
+    maxWidth: 400 
+  },
   modalTitle: { fontSize: 18, fontWeight: '700', color: '#FFFFFF', marginBottom: 8 },
   modalSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.7)', marginBottom: 20 },
-  
   profileIncomplete: { alignItems: 'center', paddingVertical: 10 },
   incompleteTitle: { fontSize: 16, fontWeight: '700', color: '#FF9800', marginTop: 8, marginBottom: 8 },
   incompleteText: { fontSize: 14, color: 'rgba(255,255,255,0.8)', textAlign: 'center', marginBottom: 12 },
   missingFields: { alignSelf: 'flex-start', marginBottom: 16 },
   missingField: { fontSize: 12, color: '#FF9800', marginBottom: 2 },
   profileButton: {
-    backgroundColor: '#FF9800', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8, marginBottom: 12
+    backgroundColor: '#FF9800', 
+    paddingHorizontal: 24, 
+    paddingVertical: 12, 
+    borderRadius: 8, 
+    marginBottom: 12
   },
   profileButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
-  
   modalButton: {
-    backgroundColor: 'rgba(0,230,118,0.2)', padding: 16, borderRadius: 12,
-    flexDirection: 'row', alignItems: 'center', marginBottom: 12,
-    borderColor: '#00E676', borderWidth: 1
+    backgroundColor: 'rgba(0,230,118,0.2)', 
+    padding: 16, 
+    borderRadius: 12,
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    marginBottom: 12,
+    borderColor: '#00E676', 
+    borderWidth: 1
   },
   modalButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600', marginLeft: 12, flex: 1 },
   modalCancelButton: { padding: 12, alignItems: 'center' },
   modalCancelText: { color: 'rgba(255,255,255,0.7)', fontSize: 14 },
-  
-  detailsModal: { backgroundColor: '#1A1A2E', borderRadius: 16, margin: 20, maxHeight: '85%', width: '92%' },
-  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20 },
+  detailsModal: { 
+    backgroundColor: '#1A1A2E', 
+    borderRadius: 16, 
+    margin: 20, 
+    maxHeight: '85%', 
+    width: '92%' 
+  },
+  modalHeader: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    padding: 20 
+  },
   detailsContent: { paddingHorizontal: 20, paddingBottom: 20 },
   detailsSectionTitle: { fontSize: 16, fontWeight: '700', color: '#FFFFFF', marginBottom: 12 },
-  
   aqiSection: { marginBottom: 20 },
-  aqiDetailCard: { alignItems: 'center', padding: 16, borderRadius: 12, marginBottom: 12, borderWidth: 1 },
+  aqiDetailCard: { 
+    alignItems: 'center', 
+    padding: 16, 
+    borderRadius: 12, 
+    marginBottom: 12, 
+    borderWidth: 1 
+  },
   aqiValue: { fontSize: 32, fontWeight: '900' },
   aqiLabel: { fontSize: 12, fontWeight: '600', marginTop: 4 },
   pollutantRow: { flexDirection: 'row', justifyContent: 'space-around' },
   pollutantText: { fontSize: 13, color: '#FFFFFF', fontWeight: '600' },
-  
   detailsSection: { marginBottom: 20 },
   recommendationItem: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 6 },
-  bulletPoint: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#00E676', marginTop: 6, marginRight: 10 },
+  bulletPoint: { 
+    width: 4, 
+    height: 4, 
+    borderRadius: 2, 
+    backgroundColor: '#00E676', 
+    marginTop: 6, 
+    marginRight: 10 
+  },
   insightItem: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 },
-  insightText: { fontSize: 13, color: 'rgba(255,255,255,0.9)', lineHeight: 18, flex: 1, marginLeft: 8, fontStyle: 'italic' },
-  
-  // Missing riskFactorsContainer and related styles
-  riskFactorsContainer: { gap: 12 },
-  riskFactorItem: { marginBottom: 8 },
-  riskFactorHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  riskFactorLabel: { fontSize: 13, color: 'rgba(255,255,255,0.8)', fontWeight: '600' },
-  riskFactorScore: { fontSize: 12, color: '#00E676', fontWeight: '700' },
-  riskFactorBar: { height: 6, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 3 },
-  riskFactorFill: { height: '100%', borderRadius: 3 }
+  insightText: { 
+    fontSize: 13, 
+    color: 'rgba(255,255,255,0.9)', 
+    lineHeight: 18, 
+    flex: 1, 
+    marginLeft: 8, 
+    fontStyle: 'italic' 
+  },
 });
 
 export default HealthRiskAssessmentScreen;
