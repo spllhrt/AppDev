@@ -430,6 +430,7 @@ const AssessmentHistoryScreen = ({ navigation }) => {
         </View>
       </LinearGradient>
       {renderDetailsModal()}
+      <View style={styles.bottomSpace} />
     </View>
   );
 };
@@ -635,6 +636,7 @@ const styles = StyleSheet.create({
   recommendationText: { fontSize: 13, color: 'rgba(255,255,255,0.9)', lineHeight: 18, flex: 1 },
   insightItem: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 },
   insightText: { fontSize: 13, color: 'rgba(255,255,255,0.9)', lineHeight: 18, flex: 1, marginLeft: 8, fontStyle: 'italic' },
+  bottomSpace: { height: 40 }
 });
 
 export default AssessmentHistoryScreen;

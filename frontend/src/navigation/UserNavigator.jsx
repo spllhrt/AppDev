@@ -20,7 +20,8 @@ import ProfileScreen from '../screens/user/ProfileScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import MapScreen from '../screens/user/MapScreen';
 import HealthAssessmentScreen from '../screens/user/HealthAssessmentScreen';
-import HistoryScreen from '../screens/user/HistoryScreen'; // Keeping HistoryScreen import
+import HistoryScreen from '../screens/user/HistoryScreen';
+import ChatbotScreen from '../screens/user/ChatbotScreen'; // Added ChatbotScreen import
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -140,7 +141,7 @@ const CustomTabBar = ({ state, descriptors, navigation }) => {
   );
 };
 
-// Main Tab Navigator with the requested tabs (excluding History from bottom nav)
+// Main Tab Navigator with the requested tabs (excluding History and Chatbot from bottom nav)
 const MainTabNavigator = () => {
   return (
     <Tab.Navigator
@@ -186,7 +187,7 @@ const MainTabNavigator = () => {
   );
 };
 
-// Enhanced User Stack Navigator (History can be accessed programmatically)
+// Enhanced User Stack Navigator (History and Chatbot can be accessed programmatically)
 const UserNavigator = () => {
   return (
     <Stack.Navigator
@@ -229,6 +230,15 @@ const UserNavigator = () => {
         component={HistoryScreen}
         options={{
           title: 'History',
+        }}
+      />
+      
+      {/* Chatbot screen can be accessed programmatically but not via bottom tab */}
+      <Stack.Screen 
+        name="Chatbot" 
+        component={ChatbotScreen}
+        options={{
+          title: 'AI Assistant',
         }}
       />
       

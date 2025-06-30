@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
   import {
-    View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity,
+    View, Text, StyleSheet, SafeAreaView, TouchableOpacity,
     Dimensions, StatusBar, Platform, RefreshControl, Alert, Modal
   } from 'react-native';
+  import { ScrollView } from 'react-native-gesture-handler';
   import { WebView } from 'react-native-webview';
   import { Ionicons } from '@expo/vector-icons';
   import { LinearGradient } from 'expo-linear-gradient';

@@ -1,24 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Dimensions, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Dimensions, RefreshControl, StatusBar, Platform, SafeAreaView } from 'react-native';
 import { useSelector } from 'react-redux';
-import { useNavigation } from '@react-navigation/native'; // Add this import
+import { useNavigation } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
 
 const HomeScreen = () => {
-  const navigation = useNavigation(); // Add this hook
+  const navigation = useNavigation();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [weatherData, setWeatherData] = useState(null);
+  const [advisories, setAdvisories] = useState(null);
   const [useGPS, setUseGPS] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+ const [showChatLabel, setShowChatLabel] = useState(true);
+
 
   const { user } = useSelector(state => state.auth || {});
   const userModel = user || { name: 'User', city: 'Manila', country: 'Philippines' };
-
-  // ... (keep all your existing useEffect and functions)
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
@@ -28,6 +30,15 @@ const HomeScreen = () => {
   useEffect(() => {
     fetchWeatherData();
   }, [useGPS]);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowChatLabel(false);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, []);
+    const handleChatPress = () => {
+    navigation.navigate('Chatbot');
+  };
 
   const getCurrentLocation = async () => {
     try {
@@ -58,21 +69,16 @@ const HomeScreen = () => {
           if (!response.ok) continue;
           
           const data = await response.json();
-          if (data.results && data.results.length > 0) {
+          if (data.results?.length > 0) {
             const philippinesResult = data.results.find(result => result.country === 'Philippines' || result.country_code === 'PH');
             const result = philippinesResult || data.results[0];
             
             return {
-              lat: result.latitude,
-              lon: result.longitude,
-              name: result.name,
-              country: result.country || 'Philippines',
-              admin1: result.admin1 || ''
+              lat: result.latitude, lon: result.longitude, name: result.name,
+              country: result.country || 'Philippines', admin1: result.admin1 || ''
             };
           }
-        } catch (searchError) {
-          continue;
-        }
+        } catch (searchError) { continue; }
       }
       
       const knownCities = {
@@ -83,9 +89,7 @@ const HomeScreen = () => {
       };
       
       const normalizedCity = cleanCityName.toLowerCase();
-      if (knownCities[normalizedCity]) return knownCities[normalizedCity];
-      
-      return { lat: 14.5995, lon: 120.9842, name: 'Manila', country: 'Philippines', admin1: 'Metro Manila' };
+      return knownCities[normalizedCity] || { lat: 14.5995, lon: 120.9842, name: 'Manila', country: 'Philippines', admin1: 'Metro Manila' };
     } catch (error) {
       return { lat: 14.5995, lon: 120.9842, name: 'Manila', country: 'Philippines', admin1: 'Metro Manila' };
     }
@@ -99,7 +103,7 @@ const HomeScreen = () => {
       
       if (response.ok) {
         const data = await response.json();
-        if (data && data.address) {
+        if (data?.address) {
           const city = data.address.city || data.address.town || data.address.village || data.address.municipality || data.address.county || 'Unknown Location';
           const country = data.address.country || '';
           const state = data.address.state || data.address.province || '';
@@ -117,13 +121,74 @@ const HomeScreen = () => {
     }
   };
 
+  const generateAdvisories = async (weatherData) => {
+    try {
+      const prompt = `Based on the current weather and air quality conditions, provide a single paragraph advisory (maximum 120 words) with personalized health and activity recommendations. Make it engaging and actionable.
+
+Current conditions:
+- Temperature: ${weatherData.temperature}°C
+- Weather: ${weatherData.weather}
+- Humidity: ${weatherData.humidity}%
+- Wind Speed: ${weatherData.windSpeed} km/h
+- Air Quality Index: ${weatherData.aqi} (${getAQIInfo(weatherData.aqi).status})
+
+Format your response as a JSON object with a single 'text' property containing the paragraph. Example:
+{"text": "With excellent air quality and pleasant temperatures, it's a perfect day for outdoor activities like jogging or cycling. Stay hydrated due to moderate humidity levels, and consider wearing light clothing. The gentle breeze makes it ideal for spending time in parks or outdoor dining."}`;
+
+      const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=AIzaSyA2DYXABEdYm5YBxg0YAp1BvbrIWbmNU3Q', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.7, maxOutputTokens: 150 }
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (content) {
+          try {
+            const cleanContent = content.replace(/```json\n?|\n?```/g, '').trim();
+            return JSON.parse(cleanContent);
+          } catch (parseError) {
+            console.log('Parse error, using fallback advisory');
+          }
+        }
+      }
+    } catch (error) {
+      console.log('Advisory generation failed, using fallback');
+    }
+
+    // Fallback advisory based on conditions
+    const aqiInfo = getAQIInfo(weatherData.aqi);
+    let advisory = "";
+    
+    if (aqiInfo.status === 'Good') {
+      advisory += "Air quality is excellent today, making it perfect for outdoor activities and exercise. ";
+    } else if (aqiInfo.status === 'Moderate') {
+      advisory += "Air quality is moderate - light outdoor activities are recommended. ";
+    } else {
+      advisory += "Poor air quality detected - consider staying indoors and keeping windows closed. ";
+    }
+
+    if (weatherData.temperature > 30) {
+      advisory += "High temperatures call for staying hydrated and seeking shade during peak hours. ";
+    } else if (weatherData.temperature < 20) {
+      advisory += "Cool weather - dress warmly when heading out. ";
+    }
+
+    if (weatherData.humidity > 70) {
+      advisory += "High humidity levels mean you'll need extra hydration and breathable clothing.";
+    }
+
+    return { text: advisory || "Stay aware of current conditions and adjust your activities accordingly for optimal comfort and health." };
+  };
+
   const fetchWeatherData = async (isRefreshing = false) => {
     try {
-      if (isRefreshing) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
+      if (isRefreshing) setRefreshing(true);
+      else setLoading(true);
 
       let coordinates, locationDisplayName;
 
@@ -156,7 +221,7 @@ const HomeScreen = () => {
       const weather = await weatherResponse.json();
       const airQuality = await airQualityResponse.json();
 
-      setWeatherData({
+      const weatherDataObj = {
         location: locationDisplayName,
         temperature: Math.round(weather.current.temperature_2m),
         humidity: weather.current.relative_humidity_2m,
@@ -164,26 +229,25 @@ const HomeScreen = () => {
         weatherCode: weather.current.weather_code,
         aqi: Math.round(airQuality.current?.us_aqi || 50),
         weather: getWeatherDescription(weather.current.weather_code)
-      });
+      };
 
-      if (isRefreshing) {
-        setCurrentTime(new Date());
-      }
+      setWeatherData(weatherDataObj);
+      
+      // Generate advisories
+      const advisoryData = await generateAdvisories(weatherDataObj);
+      setAdvisories(advisoryData);
+
+      if (isRefreshing) setCurrentTime(new Date());
     } catch (error) {
       Alert.alert('Error', `Failed to fetch weather data: ${error.message}`);
       if (useGPS) setUseGPS(false);
     } finally {
-      if (isRefreshing) {
-        setRefreshing(false);
-      } else {
-        setLoading(false);
-      }
+      if (isRefreshing) setRefreshing(false);
+      else setLoading(false);
     }
   };
 
-  const onRefresh = () => {
-    fetchWeatherData(true);
-  };
+  const onRefresh = () => fetchWeatherData(true);
 
   const getWeatherDescription = (code) => {
     const descriptions = {
@@ -202,25 +266,22 @@ const HomeScreen = () => {
   });
 
   const getAQIInfo = (aqi) => {
-    if (aqi <= 50) return { status: 'Good', colors: ['#10b981', '#34d399'], textColor: '#ffffff' };
-    if (aqi <= 100) return { status: 'Moderate', colors: ['#f59e0b', '#fbbf24'], textColor: '#ffffff' };
-    if (aqi <= 150) return { status: 'Unhealthy', colors: ['#f97316', '#fb923c'], textColor: '#ffffff' };
-    return { status: 'Hazardous', colors: ['#dc2626', '#ef4444'], textColor: '#ffffff' };
+    if (aqi <= 50) return { status: 'Good', color: '#00E676', bgColor: 'rgba(0,230,118,0.15)' };
+    if (aqi <= 100) return { status: 'Moderate', color: '#FF9800', bgColor: 'rgba(255,152,0,0.15)' };
+    if (aqi <= 150) return { status: 'Unhealthy', color: '#FF6B35', bgColor: 'rgba(255,107,53,0.15)' };
+    return { status: 'Hazardous', color: '#E91E63', bgColor: 'rgba(233,30,99,0.15)' };
   };
 
-  const getHealthRecommendation = (aqi) => {
-    if (aqi <= 50) return { icon: '🏃‍♂️', title: 'Perfect for Outdoors', desc: 'Great air quality! Ideal for activities.', colors: ['#10b981', '#34d399'] };
-    if (aqi <= 100) return { icon: '⚠️', title: 'Good with Precautions', desc: 'Moderate air quality. Limit prolonged exertion.', colors: ['#f59e0b', '#fbbf24'] };
-    return { icon: '🏠', title: 'Stay Indoors', desc: 'Poor air quality. Consider wearing a mask.', colors: ['#dc2626', '#ef4444'] };
-  };
-
-  const getWeatherEmoji = (code) => {
-    const emojis = {
-      0: '☀️', 1: '🌤️', 2: '⛅', 3: '☁️', 45: '🌫️', 48: '🌫️',
-      51: '🌦️', 53: '🌦️', 55: '🌦️', 61: '🌦️', 63: '🌧️', 65: '🌧️',
-      71: '🌨️', 73: '🌨️', 75: '🌨️', 80: '🌧️', 81: '🌧️', 82: '⛈️', 95: '⛈️'
-    };
-    return emojis[code] || '☁️';
+  const getWeatherIcon = (code) => {
+    if (code === 0) return 'sunny';
+    if (code <= 2) return 'partly-sunny';
+    if (code === 3) return 'cloudy';
+    if (code >= 45 && code <= 48) return 'cloud';
+    if (code >= 51 && code <= 65) return 'rainy';
+    if (code >= 71 && code <= 75) return 'snow';
+    if (code >= 80 && code <= 82) return 'rainy';
+    if (code >= 95) return 'thunderstorm';
+    return 'partly-sunny';
   };
 
   const handleLocationToggle = async () => {
@@ -239,231 +300,300 @@ const HomeScreen = () => {
     setUseGPS(!useGPS);
   };
 
-  // Navigation handlers for Quick Access items
-  const handleQuickAccess = (item) => {
-    switch (item.title) {
-      case 'Weather Forecast':
-        navigation.navigate('Weather');
-        break;
-      case 'Air Quality Index':
-        navigation.navigate('Aqi');
-        break;
-      case 'Risk Assessment':
-        navigation.navigate('Health');
-        break;
-      case 'Locations':
-        navigation.navigate('Locations');
-        break;
-      default:
-        Alert.alert('Coming Soon', `${item.title} feature is coming soon!`);
+  const handleQuickAccess = (screen) => {
+    if (screen === 'Weather' || screen === 'Aqi') {
+      navigation.navigate(screen);
+    } else {
+      Alert.alert('Coming Soon', 'This feature is coming soon!');
     }
   };
 
   if (loading) {
     return (
-      <LinearGradient colors={['#0f172a', '#1e293b']} style={[styles.container, styles.center]}>
-        <Text style={styles.loadingText}>Loading...</Text>
-      </LinearGradient>
+      <View style={styles.container}>
+        <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+        <LinearGradient colors={['#0A0A0A', '#1A1A2E', '#16213E']} style={styles.gradient}>
+          <SafeAreaView style={[styles.safeArea, styles.center]}>
+            <Text style={styles.loadingText}>Loading...</Text>
+          </SafeAreaView>
+        </LinearGradient>
+      </View>
     );
   }
 
   if (!weatherData) {
     return (
-      <LinearGradient colors={['#0f172a', '#1e293b']} style={[styles.container, styles.center]}>
-        <Text style={styles.errorText}>Failed to load data</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={() => fetchWeatherData()}>
-          <Text style={styles.retryText}>Retry</Text>
-        </TouchableOpacity>
-      </LinearGradient>
+      <View style={styles.container}>
+        <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+        <LinearGradient colors={['#0A0A0A', '#1A1A2E', '#16213E']} style={styles.gradient}>
+          <SafeAreaView style={[styles.safeArea, styles.center]}>
+            <Text style={styles.errorText}>Failed to load data</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={() => fetchWeatherData()}>
+              <Text style={styles.retryText}>Retry</Text>
+            </TouchableOpacity>
+          </SafeAreaView>
+        </LinearGradient>
+      </View>
     );
   }
 
   const { date, time } = formatDateTime(currentTime);
   const aqiInfo = getAQIInfo(weatherData.aqi);
-  const healthRec = getHealthRecommendation(weatherData.aqi);
 
   return (
-    <LinearGradient colors={['#0f172a', '#1e293b', '#334155']} style={styles.container}>
-      <ScrollView 
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor="#ffffff"
-            colors={['#3b82f6']}
-            progressBackgroundColor="#1e293b"
-          />
-        }
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerTop}>
-            <View>
-              <Text style={styles.dateText}>{date}</Text>
-              <Text style={styles.timeText}>{time}</Text>
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      <LinearGradient colors={['#0A0A0A', '#1A1A2E', '#16213E']} style={styles.gradient}>
+        <SafeAreaView style={styles.safeArea}>
+          <ScrollView 
+            showsVerticalScrollIndicator={false}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00E676" colors={['#00E676']} progressBackgroundColor="#1A1A2E" />}
+            contentContainerStyle={styles.scrollContent}
+          >
+            {/* Header */}
+            <View style={styles.header}>
+              <View style={styles.headerTop}>
+                <View>
+                  <Text style={styles.dateText}>{date}</Text>
+                  <Text style={styles.timeText}>{time}</Text>
+                </View>
+                <TouchableOpacity style={styles.locationToggle} onPress={handleLocationToggle}>
+                  <Ionicons name={useGPS ? 'location' : 'home'} size={20} color="#00E676" />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.locationRow}>
+                <Ionicons name="location-outline" size={16} color="#00E676" />
+                <Text style={styles.locationText}>{weatherData.location}</Text>
+              </View>
             </View>
-            <TouchableOpacity style={styles.locationToggle} onPress={handleLocationToggle}>
-              <Text style={styles.toggleIcon}>{useGPS ? '📍' : '🏙️'}</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.locationRow}>
-            <Text style={styles.locationIcon}>📍</Text>
-            <Text style={styles.locationText}>{weatherData.location}</Text>
-          </View>
-        </View>
 
-        {/* Current Forecasts */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Current Conditions</Text>
-          <View style={styles.forecastGrid}>
-            {/* Weather Card */}
-            <TouchableOpacity>
-              <LinearGradient colors={['#1e3a8a', '#3b82f6']} style={styles.weatherCard}>
-                <View style={styles.cardHeader}>
-                  <Text style={styles.weatherEmoji}>{getWeatherEmoji(weatherData.weatherCode)}</Text>
-                  <Text style={styles.cardTemp}>{weatherData.temperature}°</Text>
-                </View>
-                <Text style={styles.cardTitle}>Weather</Text>
-                <Text style={styles.cardSubtitle}>{weatherData.weather}</Text>
-                <View style={styles.weatherDetails}>
-                  <Text style={styles.detailText}>💧 {weatherData.humidity}%</Text>
-                  <Text style={styles.detailText}>💨 {weatherData.windSpeed} km/h</Text>
-                </View>
-              </LinearGradient>
-            </TouchableOpacity>
-
-            {/* AQI Card */}
-            <TouchableOpacity>
-              <LinearGradient colors={aqiInfo.colors} style={styles.aqiCard}>
-                <View style={styles.cardHeader}>
-                  <Text style={styles.aqiEmoji}>🌬️</Text>
-                  <Text style={styles.cardAqi}>{weatherData.aqi}</Text>
-                </View>
-                <Text style={styles.cardTitle}>Air Quality</Text>
-                <Text style={styles.cardSubtitle}>{aqiInfo.status}</Text>
-                <Text style={styles.aqiStandard}>US AQI Standard</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Traffic Status */}
-        <View style={styles.section}>
-          <TouchableOpacity onPress={() => navigation.navigate('Traffic')}>
-            <LinearGradient colors={['rgba(245, 158, 11, 0.1)', 'rgba(245, 158, 11, 0.05)']} style={styles.trafficCard}>
-              <View style={styles.trafficContent}>
-                <View style={styles.trafficLeft}>
-                  <Text style={styles.trafficIcon}>🚗</Text>
-                  <View>
-                    <Text style={styles.trafficTitle}>Traffic Status</Text>
-                    <Text style={styles.trafficStatus}>Moderate Traffic</Text>
+            {/* Current Conditions */}
+            <View style={styles.conditionsContainer}>
+              <TouchableOpacity style={styles.weatherCard}>
+                <LinearGradient colors={['rgba(0,230,118,0.1)', 'rgba(0,230,118,0.05)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.cardGradient}>
+                  <View style={styles.cardContent}>
+                    <View style={styles.cardLeft}>
+                      <View style={styles.weatherIconContainer}>
+                        <Ionicons name={getWeatherIcon(weatherData.weatherCode)} size={48} color="#00E676" />
+                      </View>
+                    </View>
+                    <View style={styles.cardCenter}>
+                      <Text style={styles.cardTitle}>Weather</Text>
+                      <Text style={styles.weatherTemp}>{weatherData.temperature}°</Text>
+                      <Text style={styles.weatherDesc}>{weatherData.weather}</Text>
+                    </View>
+                    <View style={styles.cardRight}>
+                      <View style={styles.weatherStats}>
+                        <View style={styles.statItem}>
+                          <Ionicons name="water-outline" size={16} color="#00E676" />
+                          <Text style={styles.statText}>{weatherData.humidity}%</Text>
+                        </View>
+                        <View style={styles.statItem}>
+                          <Ionicons name="leaf-outline" size={16} color="#00E676" />
+                          <Text style={styles.statText}>{weatherData.windSpeed} km/h</Text>
+                        </View>
+                      </View>
+                    </View>
                   </View>
-                </View>
-                <Text style={styles.trafficTime}>Now</Text>
-              </View>
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
-
-        {/* Health Recommendation */}
-        <View style={styles.section}>
-          <TouchableOpacity onPress={() => navigation.navigate('HealthRecommendations')}>
-            <LinearGradient colors={[...healthRec.colors.map(c => c + '20'), ...healthRec.colors.map(c => c + '10')]} style={styles.healthCard}>
-              <View style={styles.healthContent}>
-                <Text style={styles.healthIcon}>{healthRec.icon}</Text>
-                <View style={styles.healthText}>
-                  <Text style={[styles.healthTitle, { color: healthRec.colors[0] }]}>{healthRec.title}</Text>
-                  <Text style={styles.healthDesc}>{healthRec.desc}</Text>
-                </View>
-              </View>
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
-
-        {/* Quick Access */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Access</Text>
-          <View style={styles.quickGrid}>
-            {[
-              { icon: '🌡️', title: 'Weather Forecast', colors: ['#3b82f6', '#1d4ed8'] },
-              { icon: '💨', title: 'Air Quality Index', colors: ['#10b981', '#059669'] },
-              { icon: '📋', title: 'Risk Assessment', colors: ['#ec4899', '#db2777'] },
-              { icon: '📍', title: 'Locations', colors: ['#8b5cf6', '#7c3aed'] }
-            ].map((item, index) => (
-              <TouchableOpacity key={index} style={styles.quickItem} onPress={() => handleQuickAccess(item)}>
-                <LinearGradient colors={[...item.colors.map(c => c + '20'), ...item.colors.map(c => c + '10')]} style={styles.quickCard}>
-                  <Text style={styles.quickIcon}>{item.icon}</Text>
-                  <Text style={styles.quickTitle}>{item.title}</Text>
                 </LinearGradient>
               </TouchableOpacity>
-            ))}
-          </View>
-        </View>
 
-        <View style={styles.bottomSpace} />
-      </ScrollView>
-    </LinearGradient>
+              <TouchableOpacity style={styles.aqiCard}>
+                <LinearGradient colors={[aqiInfo.bgColor, 'rgba(255,255,255,0.02)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.cardGradient}>
+                  <View style={styles.cardContent}>
+                    <View style={styles.cardLeft}>
+                      <View style={[styles.aqiIconContainer, { backgroundColor: aqiInfo.bgColor }]}>
+                        <Ionicons name="analytics" size={32} color={aqiInfo.color} />
+                      </View>
+                    </View>
+                    <View style={styles.cardCenter}>
+                      <Text style={styles.cardTitle}>Air Quality Index</Text>
+                      <Text style={[styles.aqiValue, { color: aqiInfo.color }]}>{weatherData.aqi}</Text>
+                      <Text style={[styles.aqiStatus, { color: aqiInfo.color }]}>{aqiInfo.status}</Text>
+                    </View>
+                    <View style={styles.cardRight}>
+                      <View style={styles.aqiIndicator}>
+                        <View style={[styles.aqiDot, { backgroundColor: aqiInfo.color }]} />
+                      </View>
+                    </View>
+                  </View>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+
+            {/* AI Advisories */}
+            {advisories && (
+              <View style={styles.advisorySection}>
+                <Text style={styles.sectionTitle}>Smart Advisory</Text>
+                <View style={styles.advisoryCard}>
+                  <View style={styles.advisoryIcon}>
+                    <Ionicons name="bulb-outline" size={20} color="#00E676" />
+                  </View>
+                  <Text style={styles.advisoryText}>{advisories.text}</Text>
+                </View>
+              </View>
+            )}
+
+            {/* Health Recommendation */}
+            <View style={styles.healthSection}>
+              <TouchableOpacity style={styles.healthCard} onPress={() => navigation.navigate('Health')}>
+                <View style={styles.healthContent}>
+                  <View style={styles.healthIcon}>
+                    <Ionicons name="heart-outline" size={24} color="#00E676" />
+                  </View>
+                  <View style={styles.healthText}>
+                    <Text style={styles.healthTitle}>Health Assessment</Text>
+                    <Text style={styles.healthDesc}>Get personalized health recommendations based on current conditions</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color="#00E676" />
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            {/* Quick Access */}
+            <View style={styles.quickSection}>
+              <Text style={styles.sectionTitle}>Quick Access</Text>
+              <View style={styles.quickGrid}>
+                {[
+                  { icon: 'cloud-outline', title: 'Weather Forecast', screen: 'Weather' },
+                  { icon: 'speedometer-outline', title: 'Air Quality', screen: 'Aqi' }
+                ].map((item, index) => (
+                  <TouchableOpacity key={index} style={styles.quickItem} onPress={() => handleQuickAccess(item.screen)}>
+                    <View style={styles.quickCard}>
+                      <View style={styles.quickIconContainer}>
+                        <Ionicons name={item.icon} size={24} color="#00E676" />
+                      </View>
+                      <Text style={styles.quickTitle}>{item.title}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </LinearGradient>
+      <View style={styles.chatContainer}>
+        <TouchableOpacity 
+          style={styles.chatButton}
+          onPress={handleChatPress}
+          activeOpacity={0.8}
+        >
+          <View style={styles.chatButtonContent}>
+            <Ionicons name="chatbubble-ellipses" size={24} color="#FFFFFF" />
+            {showChatLabel && (
+              <View style={styles.chatLabel}>
+                <Text style={styles.chatLabelText}>Chat with AirBud</Text>
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
+      </View>
+      <View style={styles.bottomSpace} />
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: '#0A0A0A' },
+  gradient: { flex: 1 },
+  safeArea: { flex: 1 },
   center: { justifyContent: 'center', alignItems: 'center' },
-  loadingText: { color: '#cbd5e1', fontSize: 18, fontWeight: '500' },
-  errorText: { color: '#ef4444', fontSize: 16, marginBottom: 12 },
-  retryButton: { backgroundColor: '#3b82f6', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 },
-  retryText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
-  
-  header: { paddingTop: 50, paddingHorizontal: 20, paddingBottom: 20 },
+  scrollContent: { paddingBottom: 20 },
+  loadingText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
+  errorText: { color: '#E91E63', fontSize: 16, marginBottom: 16 },
+  retryButton: { backgroundColor: '#00E676', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 },
+  retryText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+
+  header: { paddingHorizontal: 20, paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 20 : 20, marginBottom: 24 },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
-  dateText: { color: '#94a3b8', fontSize: 14, marginBottom: 4 },
-  timeText: { color: '#ffffff', fontSize: 32, fontWeight: 'bold' },
-  locationToggle: { backgroundColor: 'rgba(255, 255, 255, 0.1)', borderRadius: 12, padding: 12 },
-  toggleIcon: { fontSize: 20 },
+  dateText: { color: 'rgba(255,255,255,0.7)', fontSize: 14, marginBottom: 4 },
+  timeText: { color: '#FFFFFF', fontSize: 32, fontWeight: '700' },
+  locationToggle: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,230,118,0.2)', justifyContent: 'center', alignItems: 'center', borderColor: 'rgba(0,230,118,0.3)', borderWidth: 1 },
   locationRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  locationIcon: { fontSize: 16 },
-  locationText: { color: '#cbd5e1', fontSize: 16, fontWeight: '500' },
+  locationText: { color: 'rgba(255,255,255,0.9)', fontSize: 16, fontWeight: '500' },
 
-  section: { paddingHorizontal: 20, marginBottom: 24 },
-  sectionTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold', marginBottom: 16 },
+  conditionsContainer: { paddingHorizontal: 20, marginBottom: 24, gap: 20 },
+  weatherCard: { borderRadius: 20, overflow: 'hidden', elevation: 8, shadowColor: '#00E676', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8 },
+  aqiCard: { borderRadius: 20, overflow: 'hidden', elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8 },
+  cardGradient: { padding: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  cardContent: { flexDirection: 'row', alignItems: 'center', minHeight: 80 },
+  cardLeft: { marginRight: 16 },
+  cardCenter: { flex: 1 },
+  cardRight: { alignItems: 'flex-end' },
   
-  forecastGrid: { flexDirection: 'row', gap: 12 },
-  weatherCard: { flex: 1, borderRadius: 20, padding: 20 },
-  aqiCard: { flex: 1, borderRadius: 20, padding: 20 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  weatherEmoji: { fontSize: 32 },
-  cardTemp: { color: '#ffffff', fontSize: 32, fontWeight: 'bold' },
-  aqiEmoji: { fontSize: 32 },
-  cardAqi: { color: '#ffffff', fontSize: 32, fontWeight: 'bold' },
-  cardTitle: { color: '#ffffff', fontSize: 16, fontWeight: '600', marginBottom: 4 },
-  cardSubtitle: { color: 'rgba(255, 255, 255, 0.8)', fontSize: 14 },
-  weatherDetails: { flexDirection: 'row', gap: 16, marginTop: 8 },
-  detailText: { color: 'rgba(255, 255, 255, 0.7)', fontSize: 12 },
-  aqiStandard: { color: 'rgba(255, 255, 255, 0.6)', fontSize: 12, marginTop: 8 },
+  weatherIconContainer: { width: 72, height: 72, borderRadius: 36, backgroundColor: 'rgba(0,230,118,0.15)', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'rgba(0,230,118,0.3)' },
+  weatherTemp: { color: '#FFFFFF', fontSize: 36, fontWeight: '800', marginBottom: 4, textShadowColor: 'rgba(0,230,118,0.3)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4 },
+  weatherDesc: { color: 'rgba(255,255,255,0.8)', fontSize: 14, fontWeight: '500' },
+  weatherStats: { marginBottom: 12, gap: 8 },
+  statItem: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(0,230,118,0.1)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 },
+  statText: { color: 'rgba(255,255,255,0.9)', fontSize: 12, fontWeight: '600' },
 
-  trafficCard: { borderRadius: 20, padding: 20, backgroundColor: 'rgba(30, 41, 59, 0.5)' },
-  trafficContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  trafficLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  trafficIcon: { fontSize: 24 },
-  trafficTitle: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
-  trafficStatus: { color: '#f59e0b', fontSize: 14, marginTop: 2 },
-  trafficTime: { color: '#94a3b8', fontSize: 12 },
+  aqiIconContainer: { width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.1)' },
+  aqiValue: { fontSize: 32, fontWeight: '800', marginBottom: 4, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4 },
+  aqiStatus: { fontSize: 14, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+  aqiIndicator: { marginBottom: 12 },
+  aqiDot: { width: 12, height: 12, borderRadius: 6, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 },
 
-  healthCard: { borderRadius: 20, padding: 20, backgroundColor: 'rgba(30, 41, 59, 0.5)' },
-  healthContent: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  healthIcon: { fontSize: 32 },
+  cardTitle: { color: 'rgba(255,255,255,0.7)', fontSize: 14, marginBottom: 8, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 0.5 },
+
+  advisorySection: { paddingHorizontal: 20, marginBottom: 24 },
+  advisoryCard: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: 'rgba(255,255,255,0.05)', padding: 16, borderRadius: 12, borderColor: 'rgba(0,230,118,0.1)', borderWidth: 1 },
+  advisoryIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(0,230,118,0.2)', justifyContent: 'center', alignItems: 'center', marginRight: 12, marginTop: 2 },
+  advisoryText: { color: 'rgba(255,255,255,0.9)', fontSize: 14, fontWeight: '500', flex: 1, lineHeight: 20 },
+
+  healthSection: { paddingHorizontal: 20, marginBottom: 24 },
+  healthCard: { backgroundColor: 'rgba(0,230,118,0.1)', borderRadius: 16, padding: 20, borderColor: 'rgba(0,230,118,0.3)', borderWidth: 1 },
+  healthContent: { flexDirection: 'row', alignItems: 'center' },
+  healthIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(0,230,118,0.2)', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
   healthText: { flex: 1 },
-  healthTitle: { fontSize: 16, fontWeight: '600', marginBottom: 4 },
-  healthDesc: { color: '#cbd5e1', fontSize: 14, lineHeight: 20 },
+  healthTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '600', marginBottom: 4 },
+  healthDesc: { color: 'rgba(255,255,255,0.7)', fontSize: 13, lineHeight: 18 },
 
+  quickSection: { paddingHorizontal: 20, paddingBottom:100},
+  sectionTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700', marginBottom: 16 },
   quickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   quickItem: { width: (width - 52) / 2 },
-  quickCard: { borderRadius: 16, padding: 20, alignItems: 'center', backgroundColor: 'rgba(30, 41, 59, 0.5)' },
-  quickIcon: { fontSize: 28, marginBottom: 8 },
-  quickTitle: { color: '#ffffff', fontSize: 14, fontWeight: '500', textAlign: 'center' },
+  quickCard: { backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 12, padding: 16, alignItems: 'center', borderColor: 'rgba(0,230,118,0.1)', borderWidth: 1 },
+  quickIconContainer: { width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(0,230,118,0.2)', justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+  quickTitle: { color: 'rgba(255,255,255,0.9)', fontSize: 12, fontWeight: '500', textAlign: 'center' },
 
-  bottomSpace: { height: 100 }
+  chatContainer: {
+  position: 'absolute',
+  bottom: 120,
+  right: 20,
+  alignItems: 'flex-end',
+},
+chatButton: {
+  width: 56,
+  height: 56,
+  borderRadius: 28,
+  backgroundColor: 'transparent',
+  justifyContent: 'center',
+  alignItems: 'center',
+  borderWidth: 2,
+  borderColor: 'rgba(0,230,118,0.8)',
+  shadowColor: '#00E676',
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.3,
+  shadowRadius: 8,
+  elevation: 8,
+},
+chatLabel: {
+  position: 'absolute',
+  right: 66,
+  top: 16,
+  backgroundColor: 'rgba(0,0,0,0.9)',
+  paddingHorizontal: 12,
+  paddingVertical: 8,
+  borderRadius: 12,
+  borderColor: 'rgba(0,230,118,0.3)',
+  borderWidth: 1,
+},
+chatLabelText: {
+  color: 'rgba(255,255,255,0.9)',
+  fontSize: 12,
+  fontWeight: '500',
+},
+  bottomSpace: { height: 0 }
 });
-
 export default HomeScreen;
