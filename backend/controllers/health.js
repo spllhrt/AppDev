@@ -151,10 +151,8 @@ exports.createHealthRiskAssessment = async (req, res, next) => {
 // AI-powered risk assessment function
 async function generateAIHealthRiskAssessment(user, environmentalData) {
     try {
-        // UPDATE: Use current model name
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-        // Rest of the function remains the same...
         const prompt = `
 You are a health risk assessment expert. Analyze the following data and provide a comprehensive health risk assessment for air quality exposure.
 
@@ -218,7 +216,6 @@ Respond ONLY with the JSON object, no additional text.
         // Parse the AI response
         let aiResponse;
         try {
-            // Clean the response text (remove any markdown formatting)
             const cleanText = text.replace(/```json\n?|\n?```/g, '').trim();
             aiResponse = JSON.parse(cleanText);
         } catch (parseError) {
@@ -279,7 +276,7 @@ Respond ONLY with the JSON object, no additional text.
     }
 }
 
-// Update health profile (unchanged)
+// Update health profile
 exports.updateHealthProfile = async (req, res, next) => {
     try {
         const userId = req.user.id;
@@ -368,7 +365,7 @@ exports.updateHealthProfile = async (req, res, next) => {
     }
 };
 
-// Get health profile (unchanged)
+// Get health profile
 exports.getHealthProfile = async (req, res, next) => {
     try {
         const userId = req.user.id;
@@ -414,7 +411,7 @@ exports.getHealthProfile = async (req, res, next) => {
     }
 };
 
-// Get latest assessment (unchanged)
+// Get latest assessment
 exports.getLatestAssessment = async (req, res, next) => {
     try {
         const userId = req.user.id;
@@ -449,7 +446,87 @@ exports.getLatestAssessment = async (req, res, next) => {
     }
 };
 
-// Fallback rule-based functions (kept for reliability)
+// Get assessment history
+exports.getAssessmentHistory = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        const limit = parseInt(req.query.limit) || 10;
+
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
+            });
+        }
+
+        const assessments = await Assessment.find({ user: userId })
+            .sort({ assessedAt: -1 })
+            .limit(limit);
+
+        return res.status(200).json({
+            success: true,
+            assessments,
+            count: assessments.length
+        });
+
+    } catch (error) {
+        console.error("Error fetching assessment history:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+};
+
+// Admin: Delete assessment by ID
+exports.deleteAssessment = async (req, res, next) => {
+    try {
+        const assessmentId = req.params.id;
+
+        // Verify the assessment exists
+        const assessment = await Assessment.findById(assessmentId);
+        if (!assessment) {
+            return res.status(404).json({
+                success: false,
+                message: "Assessment not found"
+            });
+        }
+
+        // Delete the assessment
+        await Assessment.findByIdAndDelete(assessmentId);
+
+        // Remove reference from user's lastAssessment if this was their most recent one
+        const user = await User.findById(assessment.user);
+        if (user && user.lastAssessment && user.lastAssessment._id.equals(assessment._id)) {
+            user.lastAssessment = null;
+            await user.save();
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Assessment deleted successfully",
+            deletedAssessment: {
+                id: assessment._id,
+                assessedAt: assessment.assessedAt,
+                riskLevel: assessment.riskLevel
+            }
+        });
+
+    } catch (error) {
+        console.error("Error deleting assessment:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Failed to delete assessment",
+            error: error.message
+        });
+    }
+};
+
+// [All remaining helper functions stay exactly the same...]
+
+// Fallback rule-based functions
 function calculateHealthRiskScore(user, environmentalData) {
     let totalScore = 0;
     const breakdown = {};
@@ -580,43 +657,6 @@ function generateRecommendations(riskData, user) {
     return recommendations;
 }
 
-// Get assessment history
-exports.getAssessmentHistory = async (req, res, next) => {
-    try {
-        const userId = req.user.id;
-        const limit = parseInt(req.query.limit) || 10;
-
-        const user = await User.findById(userId);
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                message: "User not found"
-            });
-        }
-
-        // For now, we only have lastAssessment. In a full implementation,
-        // you might store assessment history in a separate collection
-        const assessments = [];
-        if (user.lastAssessment && user.lastAssessment.riskScore) {
-            assessments.push(user.lastAssessment);
-        }
-
-        return res.status(200).json({
-            success: true,
-            assessments: assessments.slice(0, limit),
-            count: assessments.length
-        });
-
-    } catch (error) {
-        console.error("Error fetching assessment history:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Internal server error",
-            error: error.message
-        });
-    }
-};
-
 // Get AI insights
 exports.getAIInsights = async (req, res, next) => {
     try {
@@ -659,136 +699,9 @@ exports.getAIInsights = async (req, res, next) => {
     }
 };
 
-// Check profile completeness
-exports.checkProfileCompleteness = async (req, res, next) => {
-    try {
-        const userId = req.user.id;
-        const user = await User.findById(userId);
-
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                message: "User not found"
-            });
-        }
-
-        const requiredFields = ['age', 'gender', 'outdoorExposure'];
-        const missingFields = requiredFields.filter(field => !user[field]);
-        const isComplete = missingFields.length === 0;
-
-        return res.status(200).json({
-            success: true,
-            isComplete,
-            missingFields,
-            requiredFields: {
-                age: "Your age (required for risk calculation)",
-                gender: "Gender (male/female/other/prefer_not_to_say)",
-                outdoorExposure: "Outdoor exposure level (low/moderate/high)"
-            },
-            completionPercentage: Math.round(((requiredFields.length - missingFields.length) / requiredFields.length) * 100)
-        });
-
-    } catch (error) {
-        console.error("Error checking profile completeness:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Internal server error",
-            error: error.message
-        });
-    }
-};
-
-// Validate assessment data
-exports.validateAssessmentData = async (req, res, next) => {
-    try {
-        const { aqi, pm25, pm10, location } = req.body;
-
-        const validation = validateEnvironmentalData({ aqi, pm25, pm10, location });
-
-        return res.status(200).json({
-            success: true,
-            validation
-        });
-
-    } catch (error) {
-        console.error("Error validating assessment data:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Internal server error",
-            error: error.message
-        });
-    }
-};
-
-// Get AQI information
-exports.getAQIInfo = async (req, res, next) => {
-    try {
-        const aqi = parseInt(req.params.aqi);
-
-        if (isNaN(aqi) || aqi < 0 || aqi > 500) {
-            return res.status(400).json({
-                success: false,
-                message: "AQI must be a number between 0 and 500"
-            });
-        }
-
-        const aqiInfo = getAQIInformation(aqi);
-
-        return res.status(200).json({
-            success: true,
-            aqi,
-            ...aqiInfo
-        });
-
-    } catch (error) {
-        console.error("Error getting AQI info:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Internal server error",
-            error: error.message
-        });
-    }
-};
-
-// Check if reassessment is needed
-exports.checkReassessmentNeeded = async (req, res, next) => {
-    try {
-        const userId = req.user.id;
-        const { currentAqi, currentPm25, currentPm10 } = req.body;
-
-        const user = await User.findById(userId);
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                message: "User not found"
-            });
-        }
-
-        const reassessmentCheck = checkIfReassessmentNeeded(
-            user.lastAssessment,
-            { aqi: currentAqi, pm25: currentPm25, pm10: currentPm10 }
-        );
-
-        return res.status(200).json({
-            success: true,
-            ...reassessmentCheck,
-            lastAssessmentDate: user.lastAssessment?.assessedAt || null
-        });
-
-    } catch (error) {
-        console.error("Error checking reassessment need:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Internal server error",
-            error: error.message
-        });
-    }
-};
-
 // Helper function to generate focused AI insights
 async function generateFocusedAIInsights(user, environmentalData, focusArea) {
     try {
-        // UPDATE: Use current model name
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
         let focusPrompt = "";
@@ -854,6 +767,67 @@ Respond ONLY with the JSON object.
     }
 }
 
+// Check profile completeness
+exports.checkProfileCompleteness = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        const user = await User.findById(userId);
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
+            });
+        }
+
+        const requiredFields = ['age', 'gender', 'outdoorExposure'];
+        const missingFields = requiredFields.filter(field => !user[field]);
+        const isComplete = missingFields.length === 0;
+
+        return res.status(200).json({
+            success: true,
+            isComplete,
+            missingFields,
+            requiredFields: {
+                age: "Your age (required for risk calculation)",
+                gender: "Gender (male/female/other/prefer_not_to_say)",
+                outdoorExposure: "Outdoor exposure level (low/moderate/high)"
+            },
+            completionPercentage: Math.round(((requiredFields.length - missingFields.length) / requiredFields.length) * 100)
+        });
+
+    } catch (error) {
+        console.error("Error checking profile completeness:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+};
+
+// Validate assessment data
+exports.validateAssessmentData = async (req, res, next) => {
+    try {
+        const { aqi, pm25, pm10, location } = req.body;
+
+        const validation = validateEnvironmentalData({ aqi, pm25, pm10, location });
+
+        return res.status(200).json({
+            success: true,
+            validation
+        });
+
+    } catch (error) {
+        console.error("Error validating assessment data:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+};
+
 // Helper function to validate environmental data
 function validateEnvironmentalData(data) {
     const errors = [];
@@ -890,6 +864,36 @@ function validateEnvironmentalData(data) {
         severity: data.aqi ? getAQISeverity(data.aqi) : 'unknown'
     };
 }
+
+// Get AQI information
+exports.getAQIInfo = async (req, res, next) => {
+    try {
+        const aqi = parseInt(req.params.aqi);
+
+        if (isNaN(aqi) || aqi < 0 || aqi > 500) {
+            return res.status(400).json({
+                success: false,
+                message: "AQI must be a number between 0 and 500"
+            });
+        }
+
+        const aqiInfo = getAQIInformation(aqi);
+
+        return res.status(200).json({
+            success: true,
+            aqi,
+            ...aqiInfo
+        });
+
+    } catch (error) {
+        console.error("Error getting AQI info:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+};
 
 // Helper function to get AQI information
 function getAQIInformation(aqi) {
@@ -955,6 +959,41 @@ function getAQIColor(aqi) {
     if (aqi <= 300) return '#8f3f97';     // Purple
     return '#7e0023';                     // Maroon
 }
+
+// Check if reassessment is needed
+exports.checkReassessmentNeeded = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        const { currentAqi, currentPm25, currentPm10 } = req.body;
+
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
+            });
+        }
+
+        const reassessmentCheck = checkIfReassessmentNeeded(
+            user.lastAssessment,
+            { aqi: currentAqi, pm25: currentPm25, pm10: currentPm10 }
+        );
+
+        return res.status(200).json({
+            success: true,
+            ...reassessmentCheck,
+            lastAssessmentDate: user.lastAssessment?.assessedAt || null
+        });
+
+    } catch (error) {
+        console.error("Error checking reassessment need:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+};
 
 // Helper function to check if reassessment is needed
 function checkIfReassessmentNeeded(lastAssessment, currentEnvironmentalData) {

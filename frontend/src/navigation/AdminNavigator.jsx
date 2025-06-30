@@ -1,4 +1,4 @@
-// AdminNavigator.js - Enhanced with Drawer Navigation, Analytics, and Cross-Platform Alerts
+// AdminNavigator.js - Enhanced with Drawer Navigation, Analytics, Cross-Platform Alerts, and History Screen
 import React, { useState } from 'react';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -18,6 +18,7 @@ import AdminDashboardScreen from '../screens/admin/DashboardScreen';
 import AdminProfileScreen from '../screens/admin/ProfileScreen';
 import AdminAnalyticsScreen from '../screens/admin/AnalyticsScreen';
 import AdminUsersScreen from '../screens/admin/UsersScreen';
+import AdminHistoryScreen from '../screens/admin/HistoryScreen';
 
 const Tab = createBottomTabNavigator();
 const Drawer = createDrawerNavigator();
@@ -121,11 +122,6 @@ const CustomDrawerContent = ({ navigation }) => {
           onPress: () => {
             console.log('Admin logging out');
             dispatch(logout());
-            // Optional: Navigate to login screen or let auth guard handle it
-            // navigation.reset({
-            //   index: 0,
-            //   routes: [{ name: 'Login' }],
-            // });
           },
         },
       ]
@@ -150,6 +146,12 @@ const CustomDrawerContent = ({ navigation }) => {
       title: 'User Management',
       icon: 'people',
       iconOutline: 'people-outline'
+    },
+    {
+      name: 'History',
+      title: 'Activity History',
+      icon: 'time',
+      iconOutline: 'time-outline'
     }
   ];
 
@@ -211,7 +213,7 @@ const CustomDrawerContent = ({ navigation }) => {
   );
 };
 
-// Tab Navigator Component (your existing tabs)
+// Tab Navigator Component
 const AdminTabNavigator = () => {
   return (
     <Tab.Navigator
@@ -228,7 +230,7 @@ const AdminTabNavigator = () => {
         },
         tabBarActiveTintColor: '#3b82f6',
         tabBarInactiveTintColor: 'gray',
-        headerShown: false, // Hide tab headers since drawer will handle them
+        headerShown: false,
         tabBarStyle: {
           backgroundColor: '#fff',
           borderTopColor: '#e5e7eb',
@@ -307,6 +309,17 @@ const AdminNavigator = () => {
           title: 'User Management',
           drawerIcon: ({ color, size }) => (
             <Ionicons name="people-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      
+      <Drawer.Screen
+        name="History"
+        component={AdminHistoryScreen}
+        options={{
+          title: 'Activity History',
+          drawerIcon: ({ color, size }) => (
+            <Ionicons name="time-outline" size={size} color={color} />
           ),
         }}
       />
