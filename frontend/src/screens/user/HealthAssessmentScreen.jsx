@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator, SafeAreaView, StatusBar, Platform, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator, SafeAreaView, StatusBar, Platform } from 'react-native';
 import { useSelector } from 'react-redux';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
+import * as Print from 'expo-print';
+import * as FileSystem from 'expo-file-system';
+import * as MediaLibrary from 'expo-media-library';
 import { createHealthRiskAssessment, getLatestAssessment } from '../../api/health';
 
 const HealthRiskAssessmentScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
   const [assessment, setAssessment] = useState(null);
-  const [showLocationModal, setShowLocationModal] = useState(false);
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [currentAQI, setCurrentAQI] = useState(null);
+  const [exportingPDF, setExportingPDF] = useState(false);
   const user = useSelector(state => state.auth.user);
 
   const getCityCoordinates = async (cityName) => {
@@ -54,7 +56,6 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
   const performAssessment = async (useGPS = false) => {
     try {
       setLoading(true);
-      setShowLocationModal(false);
       let coordinates, locationName;
       
       if (useGPS) {
@@ -68,60 +69,255 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
 
       const aqiData = await fetchAQIData(coordinates);
       setCurrentAQI(aqiData);
-      const result = await createHealthRiskAssessment({ aqi: aqiData.aqi, pm25: aqiData.pm25, pm10: aqiData.pm10, location: locationName });
-      setAssessment(result.assessment);
+      
+      const result = await createHealthRiskAssessment({ 
+        aqi: aqiData.aqi, 
+        pm25: aqiData.pm25, 
+        pm10: aqiData.pm10, 
+        location: locationName 
+      });
+      
+      if (result && result.assessment) {
+        setAssessment(result.assessment);
+        Alert.alert(
+          'Assessment Complete',
+          'Your health risk assessment has been successfully saved.',
+          [{ text: 'OK', style: 'default' }]
+        );
+      } else if (result && result.success) {
+        setAssessment(result);
+        Alert.alert(
+          'Assessment Complete',
+          'Your health risk assessment has been successfully saved.',
+          [{ text: 'OK', style: 'default' }]
+        );
+      } else {
+        throw new Error('Invalid response from assessment API');
+      }
+      
     } catch (error) {
-      Alert.alert('Assessment Failed', error.message || 'Unable to complete assessment');
+      console.error('Assessment error:', error);
+      let errorMessage = 'Unable to complete assessment';
+      
+      if (error.message) {
+        errorMessage = error.message;
+      } else if (error.status === 401) {
+        errorMessage = 'Authentication failed. Please log in again.';
+      } else if (error.status === 400) {
+        errorMessage = 'Invalid assessment data. Please check your profile.';
+      } else if (error.status >= 500) {
+        errorMessage = 'Server error. Please try again later.';
+      } else if (!navigator.onLine) {
+        errorMessage = 'No internet connection. Please check your network.';
+      }
+      
+      Alert.alert('Assessment Failed', errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
   const loadLatestAssessment = async () => {
-  try {
-    const result = await getLatestAssessment();
-    if (result.success) {
-      setAssessment(result.assessment);
+    try {
+      const result = await getLatestAssessment();
+      
+      if (result && result.success && result.assessment) {
+        setAssessment(result.assessment);
+      } else if (result && result.assessment) {
+        setAssessment(result.assessment);
+      }
+    } catch (error) {
+      if (error.status !== 404) {
+        console.warn('Failed to load latest assessment:', error.message);
+        if (error.status >= 500) {
+          Alert.alert(
+            'Connection Issue',
+            'Unable to load previous assessments. You can still create a new assessment.',
+            [{ text: 'OK', style: 'default' }]
+          );
+        }
+      }
     }
-  } catch (error) {
-    // Only log actual errors, not "no assessment found" cases
-    if (error.status !== 404) {
-      console.warn('Failed to load latest assessment:', error.message);
-    }
-    // For 404 (no previous assessment), silently continue with no assessment
-    // This is expected behavior for new users
-  }
-};
+  };
 
-  useEffect(() => { loadLatestAssessment(); }, []);
+  const generatePDFHTML = () => {
+    const riskColor = getRiskColor(assessment.riskLevel);
+    const assessmentDate = new Date(assessment.assessedAt).toLocaleDateString('en-US', { 
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
+    });
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Health Risk Assessment Report</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 40px; color: #333; line-height: 1.6; }
+          .header { text-align: center; margin-bottom: 40px; border-bottom: 3px solid ${riskColor}; padding-bottom: 20px; }
+          .title { font-size: 28px; font-weight: bold; color: #2c3e50; margin-bottom: 10px; }
+          .subtitle { font-size: 16px; color: #7f8c8d; }
+          .risk-section { background: linear-gradient(135deg, ${riskColor}15, ${riskColor}05); padding: 30px; border-radius: 12px; margin: 30px 0; border-left: 5px solid ${riskColor}; }
+          .risk-score { font-size: 48px; font-weight: bold; color: ${riskColor}; text-align: center; margin-bottom: 10px; }
+          .risk-level { font-size: 18px; font-weight: bold; color: ${riskColor}; text-align: center; text-transform: uppercase; letter-spacing: 1px; }
+          .section { margin: 30px 0; page-break-inside: avoid; }
+          .section-title { font-size: 20px; font-weight: bold; color: #2c3e50; margin-bottom: 15px; border-bottom: 2px solid #ecf0f1; padding-bottom: 8px; }
+          .breakdown-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #ecf0f1; }
+          .breakdown-label { font-weight: 600; color: #34495e; }
+          .breakdown-score { font-weight: bold; color: ${riskColor}; }
+          .recommendation { margin: 12px 0; padding: 15px; background: #f8f9fa; border-left: 4px solid #00d4aa; border-radius: 6px; }
+          .recommendation-text { margin: 0; color: #2c3e50; }
+          .clinical-info { background: #f1f2f6; padding: 20px; border-radius: 8px; margin: 20px 0; }
+          .info-row { display: flex; justify-content: space-between; margin: 10px 0; }
+          .info-label { font-weight: 600; color: #2c3e50; }
+          .info-value { color: #34495e; }
+          .footer { margin-top: 50px; padding-top: 20px; border-top: 2px solid #ecf0f1; text-align: center; color: #7f8c8d; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="title">Health Risk Assessment Report</div>
+          <div class="subtitle">Environmental Health Analysis</div>
+          <div style="margin-top: 15px; color: #7f8c8d; font-size: 14px;">Generated on ${assessmentDate}</div>
+        </div>
+
+        <div class="risk-section">
+          <div class="risk-score">${assessment.riskScore}/100</div>
+          <div class="risk-level">${assessment.riskLevel.replace('_', ' ')} Risk</div>
+        </div>
+
+        ${assessment.breakdown ? `
+        <div class="section">
+          <div class="section-title">Risk Factors Breakdown</div>
+          <div class="breakdown-item">
+            <span class="breakdown-label">Environmental Factors</span>
+            <span class="breakdown-score">${assessment.breakdown.environmental || 0}/40</span>
+          </div>
+          <div class="breakdown-item">
+            <span class="breakdown-label">Age Factor</span>
+            <span class="breakdown-score">${assessment.breakdown.age || 0}/20</span>
+          </div>
+          <div class="breakdown-item">
+            <span class="breakdown-label">Health Conditions</span>
+            <span class="breakdown-score">${assessment.breakdown.healthConditions || 0}/25</span>
+          </div>
+          <div class="breakdown-item">
+            <span class="breakdown-label">Lifestyle Factors</span>
+            <span class="breakdown-score">${assessment.breakdown.lifestyle || 0}/15</span>
+          </div>
+        </div>
+        ` : ''}
+
+        ${assessment.recommendations ? `
+        <div class="section">
+          <div class="section-title">Health Recommendations</div>
+          ${assessment.recommendations.map(rec => `
+            <div class="recommendation">
+              <p class="recommendation-text">${rec}</p>
+            </div>
+          `).join('')}
+        </div>
+        ` : ''}
+
+        <div class="clinical-info">
+          <div class="section-title">Clinical Summary</div>
+          <div class="info-row">
+            <span class="info-label">Assessment Date:</span>
+            <span class="info-value">${assessmentDate}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Location:</span>
+            <span class="info-value">${assessment.location || 'Not specified'}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Risk Category:</span>
+            <span class="info-value" style="color: ${riskColor}; font-weight: bold;">${assessment.riskLevel.replace('_', ' ').toUpperCase()}</span>
+          </div>
+        </div>
+
+        <div class="footer">
+          <p>This report is generated for informational purposes only and should not replace professional medical advice.</p>
+        </div>
+      </body>
+      </html>
+    `;
+  };
+
+  const exportToPDF = async () => {
+    if (!assessment) {
+      Alert.alert('No Assessment', 'Please complete an assessment first before exporting.');
+      return;
+    }
+
+    try {
+      setExportingPDF(true);
+      
+      // Request media library permissions
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Permission to access media library is required to save the PDF.');
+        return;
+      }
+
+      // Generate PDF
+      const htmlContent = generatePDFHTML();
+      const { uri } = await Print.printToFileAsync({ html: htmlContent });
+
+      // Create filename with timestamp
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
+      const filename = `health_assessment_${timestamp}.pdf`;
+      
+      // Copy to downloads directory
+      const downloadDir = `${FileSystem.documentDirectory}Download/`;
+      
+      // Ensure Download directory exists
+      const dirInfo = await FileSystem.getInfoAsync(downloadDir);
+      if (!dirInfo.exists) {
+        await FileSystem.makeDirectoryAsync(downloadDir, { intermediates: true });
+      }
+      
+      const finalUri = `${downloadDir}${filename}`;
+      await FileSystem.copyAsync({ from: uri, to: finalUri });
+
+      // Save to media library (Downloads folder on Android, Photos on iOS)
+      const asset = await MediaLibrary.createAssetAsync(finalUri);
+      
+      // On Android, move to Downloads album
+      if (Platform.OS === 'android') {
+        const album = await MediaLibrary.getAlbumAsync('Download');
+        if (album == null) {
+          await MediaLibrary.createAlbumAsync('Download', asset, false);
+        } else {
+          await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
+        }
+      }
+
+      Alert.alert(
+        'Export Successful', 
+        `PDF report has been saved to your device's Downloads folder as "${filename}"`,
+        [{ text: 'OK', style: 'default' }]
+      );
+
+    } catch (error) {
+      console.error('Export error:', error);
+      Alert.alert('Export Failed', 'There was an error generating the PDF report. Please try again.');
+    } finally {
+      setExportingPDF(false);
+    }
+  };
+
+  // Load latest assessment on component mount and when user changes
+  useEffect(() => { 
+    loadLatestAssessment(); 
+  }, [user?.id]);
 
   const getRiskColor = (level) => ({ low: '#00E676', moderate: '#FF9800', high: '#E91E63', very_high: '#9C27B0' }[level] || '#757575');
   
-  const getAQILevel = (aqi) => {
-    if (aqi <= 50) return { level: 'Good', color: '#00E676' };
-    if (aqi <= 100) return { level: 'Moderate', color: '#FF9800' };
-    if (aqi <= 150) return { level: 'Unhealthy for Sensitive', color: '#FF6B35' };
-    if (aqi <= 200) return { level: 'Unhealthy', color: '#E91E63' };
-    if (aqi <= 300) return { level: 'Very Unhealthy', color: '#9C27B0' };
-    return { level: 'Hazardous', color: '#8B0000' };
-  };
-
   const checkProfileCompleteness = () => {
     const required = ['age', 'gender', 'outdoorExposure', 'isPregnant', 'isSmoker', 'hasAsthma', 'hasHeartDisease', 'hasRespiratoryIssues'];
     const missing = required.filter(field => user?.[field] === undefined || user?.[field] === null);
     return { complete: missing.length === 0, missing };
   };
-
-  const HealthMetric = ({ icon, label, value, unit, color = '#00E676' }) => (
-    <View style={[styles.metricCard, { borderColor: color + '30' }]}>
-      <View style={styles.metricHeader}>
-        <Ionicons name={icon} size={16} color={color} />
-        <Text style={styles.metricLabel}>{label}</Text>
-      </View>
-      <Text style={[styles.metricValue, { color }]}>{value}</Text>
-      {unit && <Text style={styles.metricUnit}>{unit}</Text>}
-    </View>
-  );
 
   const RiskFactorBar = ({ label, score, maxScore, color }) => (
     <View style={styles.riskFactorItem}>
@@ -152,6 +348,34 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
     );
   };
 
+  const startAssessment = () => {
+    const profileCheck = checkProfileCompleteness();
+    if (!profileCheck.complete) {
+      Alert.alert(
+        'Profile Incomplete',
+        `Please complete your health profile first. Missing: ${profileCheck.missing.join(', ')}`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Complete Profile', onPress: () => navigation.navigate('Profile') }
+        ]
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Choose Location',
+      'Select location source for your assessment:',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Current GPS', onPress: () => performAssessment(true) },
+        { text: user?.city ? `Saved City (${user.city})` : 'Saved City (Not Set)', 
+          onPress: () => performAssessment(false), 
+          style: user?.city ? 'default' : 'destructive' 
+        }
+      ]
+    );
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
@@ -167,18 +391,18 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
               <Text style={styles.headerSubtitle}>Environmental Health Analysis</Text>
             </View>
             <View style={styles.headerRightButtons}>
-              <TouchableOpacity 
-                style={styles.historyButton} 
-                onPress={() => navigation.navigate('History')}
-              >
+              <TouchableOpacity style={styles.historyButton} onPress={() => navigation.navigate('History')}>
                 <Ionicons name="time-outline" size={20} color="#00E676" />
               </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.refreshButton} 
-                onPress={() => setShowLocationModal(true)}
-              >
-                <Ionicons name="refresh" size={20} color="#00E676" />
-              </TouchableOpacity>
+              {assessment && (
+                <TouchableOpacity style={styles.pdfButton} onPress={exportToPDF} disabled={exportingPDF}>
+                  {exportingPDF ? (
+                    <ActivityIndicator size="small" color="#00E676" />
+                  ) : (
+                    <Ionicons name="document-text-outline" size={20} color="#00E676" />
+                  )}
+                </TouchableOpacity>
+              )}
             </View>
           </View>
 
@@ -203,9 +427,6 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
                         <Text style={styles.cardSubtitle}>Based on current conditions</Text>
                       </View>
                     </View>
-                    <TouchableOpacity onPress={() => setShowDetailsModal(true)} style={styles.infoButton}>
-                      <Ionicons name="information-circle-outline" size={18} color="#00E676" />
-                    </TouchableOpacity>
                   </View>
                   
                   <View style={[styles.riskCard, { backgroundColor: getRiskColor(assessment.riskLevel) + '15', borderColor: getRiskColor(assessment.riskLevel) + '30' }]}>
@@ -217,17 +438,9 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
                       {assessment.riskLevel.replace('_', ' ').toUpperCase()} RISK
                     </Text>
                     <RiskIndicator level={assessment.riskLevel} />
-                    <TouchableOpacity 
-                      style={styles.viewHistoryButton}
-                      onPress={() => navigation.navigate('History')}
-                    >
-                      <Text style={styles.viewHistoryText}>View Assessment History</Text>
-                      <Ionicons name="chevron-forward" size={16} color="#00E676" />
-                    </TouchableOpacity>
                   </View>
                 </View>
 
-                {/* Risk Factors Breakdown */}
                 {assessment.breakdown && (
                   <View style={styles.card}>
                     <View style={styles.cardHeader}>
@@ -246,18 +459,6 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
                   </View>
                 )}
 
-                {currentAQI && (
-                  <View style={styles.card}>
-                    <Text style={styles.cardTitle}>Environmental Metrics</Text>
-                    <View style={styles.metricsGrid}>
-                      <HealthMetric icon="speedometer-outline" label="Air Quality Index" value={currentAQI.aqi} color={getAQILevel(currentAQI.aqi).color} />
-                      <HealthMetric icon="analytics-outline" label="PM2.5" value={currentAQI.pm25?.toFixed(1)} unit="μg/m³" color="#FF6B35" />
-                      <HealthMetric icon="bar-chart-outline" label="PM10" value={currentAQI.pm10?.toFixed(1)} unit="μg/m³" color="#9C27B0" />
-                      <HealthMetric icon="location-outline" label="Location" value={assessment.location || 'Unknown'} color="#00E676" />
-                    </View>
-                  </View>
-                )}
-
                 {assessment.recommendations && (
                   <View style={styles.card}>
                     <View style={styles.cardHeader}>
@@ -268,21 +469,15 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
                       </View>
                     </View>
                     <View style={styles.recommendationsContainer}>
-                      {assessment.recommendations.slice(0, 3).map((rec, index) => (
+                      {assessment.recommendations.map((rec, index) => (
                         <View key={index} style={styles.recommendationCard}>
                           <View style={styles.recommendationIcon}>
-                            <Ionicons name={["shield-outline", "heart-outline", "fitness-outline"][index]} size={16} color="#00E676" />
+                            <Ionicons name={["shield-outline", "heart-outline", "fitness-outline"][index] || "checkmark-outline"} size={16} color="#00E676" />
                           </View>
                           <Text style={styles.recommendationText}>{rec}</Text>
                         </View>
                       ))}
                     </View>
-                    {assessment.recommendations.length > 3 && (
-                      <TouchableOpacity style={styles.viewAllButton} onPress={() => setShowDetailsModal(true)}>
-                        <Text style={styles.viewAllText}>View All Recommendations</Text>
-                        <Ionicons name="chevron-forward" size={16} color="#00E676" />
-                      </TouchableOpacity>
-                    )}
                   </View>
                 )}
 
@@ -300,6 +495,10 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
                       <Text style={styles.summaryLabel}>Risk Category:</Text>
                       <Text style={[styles.summaryValue, { color: getRiskColor(assessment.riskLevel) }]}>{assessment.riskLevel.replace('_', ' ').toUpperCase()}</Text>
                     </View>
+                    <View style={styles.summaryRow}>
+                      <Text style={styles.summaryLabel}>Location:</Text>
+                      <Text style={styles.summaryValue}>{assessment.location || 'Not specified'}</Text>
+                    </View>
                   </View>
                 </View>
               </>
@@ -313,7 +512,7 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
               </View>
             )}
 
-            <TouchableOpacity style={styles.assessButton} onPress={() => setShowLocationModal(true)} disabled={loading}>
+            <TouchableOpacity style={styles.assessButton} onPress={startAssessment} disabled={loading}>
               <LinearGradient colors={['#00E676', '#00C765']} style={styles.assessButtonGradient}>
                 {loading ? <ActivityIndicator color="#FFFFFF" size="small" /> : (
                   <>
@@ -324,100 +523,6 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
               </LinearGradient>
             </TouchableOpacity>
           </ScrollView>
-
-          <Modal visible={showLocationModal} transparent animationType="slide">
-            <View style={styles.modalOverlay}>
-              <View style={styles.modalContent}>
-                <Text style={styles.modalTitle}>Assessment Requirements</Text>
-                {(() => {
-                  const profileCheck = checkProfileCompleteness();
-                  if (!profileCheck.complete) {
-                    return (
-                      <View style={styles.profileIncomplete}>
-                        <Ionicons name="warning-outline" size={24} color="#FF9800" />
-                        <Text style={styles.incompleteTitle}>Profile Incomplete</Text>
-                        <Text style={styles.incompleteText}>Please complete your health profile first:</Text>
-                        <View style={styles.missingFields}>
-                          {profileCheck.missing.map(field => (
-                            <Text key={field} style={styles.missingField}>• {field.replace(/([A-Z])/g, ' $1').toLowerCase()}</Text>
-                          ))}
-                        </View>
-                        <TouchableOpacity style={styles.profileButton} onPress={() => { setShowLocationModal(false); navigation.navigate('Profile'); }}>
-                          <Text style={styles.profileButtonText}>Complete Profile</Text>
-                        </TouchableOpacity>
-                      </View>
-                    );
-                  }
-                  return (
-                    <>
-                      <Text style={styles.modalSubtitle}>Select location source for assessment</Text>
-                      <TouchableOpacity style={styles.modalButton} onPress={() => performAssessment(false)} disabled={!user?.city}>
-                        <Ionicons name="home-outline" size={20} color="#FFFFFF" />
-                        <Text style={styles.modalButtonText}>Use Saved City {user?.city ? `(${user.city})` : '(Not Set)'}</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.modalButton} onPress={() => performAssessment(true)}>
-                        <Ionicons name="location-outline" size={20} color="#FFFFFF" />
-                        <Text style={styles.modalButtonText}>Use Current GPS Location</Text>
-                      </TouchableOpacity>
-                    </>
-                  );
-                })()}
-                <TouchableOpacity style={styles.modalCancelButton} onPress={() => setShowLocationModal(false)}>
-                  <Text style={styles.modalCancelText}>Cancel</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </Modal>
-
-          <Modal visible={showDetailsModal} transparent animationType="slide">
-            <View style={styles.modalOverlay}>
-              <View style={styles.detailsModal}>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Detailed Assessment Report</Text>
-                  <TouchableOpacity onPress={() => setShowDetailsModal(false)}>
-                    <Ionicons name="close" size={24} color="#FFFFFF" />
-                  </TouchableOpacity>
-                </View>
-                <ScrollView style={styles.detailsContent}>
-                  {currentAQI && (
-                    <View style={styles.aqiSection}>
-                      <Text style={styles.detailsSectionTitle}>Environmental Data</Text>
-                      <View style={[styles.aqiDetailCard, { backgroundColor: getAQILevel(currentAQI.aqi).color + '20', borderColor: getAQILevel(currentAQI.aqi).color + '40' }]}>
-                        <Text style={[styles.aqiValue, { color: getAQILevel(currentAQI.aqi).color }]}>{currentAQI.aqi}</Text>
-                        <Text style={[styles.aqiLabel, { color: getAQILevel(currentAQI.aqi).color }]}>{getAQILevel(currentAQI.aqi).level}</Text>
-                      </View>
-                      <View style={styles.pollutantRow}>
-                        <Text style={styles.pollutantText}>PM2.5: {currentAQI.pm25} μg/m³</Text>
-                        <Text style={styles.pollutantText}>PM10: {currentAQI.pm10} μg/m³</Text>
-                      </View>
-                    </View>
-                  )}
-                  {assessment?.recommendations && (
-                    <View style={styles.detailsSection}>
-                      <Text style={styles.detailsSectionTitle}>Complete Recommendations</Text>
-                      {assessment.recommendations.map((rec, index) => (
-                        <View key={index} style={styles.recommendationItem}>
-                          <View style={styles.bulletPoint} />
-                          <Text style={styles.recommendationText}>{rec}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-                  {assessment?.insights && (
-                    <View style={styles.detailsSection}>
-                      <Text style={styles.detailsSectionTitle}>Clinical Insights</Text>
-                      {assessment.insights.map((insight, index) => (
-                        <View key={index} style={styles.insightItem}>
-                          <Ionicons name="bulb-outline" size={14} color="#00E676" />
-                          <Text style={styles.insightText}>{insight}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-                </ScrollView>
-              </View>
-            </View>
-          </Modal>
         </SafeAreaView>
       </LinearGradient>
     </View>
@@ -428,85 +533,26 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0A0A0A' },
   gradient: { flex: 1 },
   safeArea: { flex: 1 },
-  header: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between', 
-    paddingHorizontal: 20, 
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 20, 
-    paddingBottom: 20 
-  },
-  backButton: { 
-    width: 36, 
-    height: 36, 
-    borderRadius: 18, 
-    backgroundColor: 'rgba(255, 255, 255, 0.1)', 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    borderColor: 'rgba(0,230,118,0.3)', 
-    borderWidth: 1 
-  },
-  headerRightButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  historyButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0,230,118,0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderColor: 'rgba(0,230,118,0.3)',
-    borderWidth: 1,
-  },
-  refreshButton: { 
-    width: 36, 
-    height: 36, 
-    borderRadius: 18, 
-    backgroundColor: 'rgba(0,230,118,0.2)', 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    borderColor: 'rgba(0,230,118,0.3)', 
-    borderWidth: 1 
-  },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 20, paddingBottom: 20 },
+  backButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255, 255, 255, 0.1)', justifyContent: 'center', alignItems: 'center', borderColor: 'rgba(0,230,118,0.3)', borderWidth: 1 },
+  headerRightButtons: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  historyButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,230,118,0.2)', justifyContent: 'center', alignItems: 'center', borderColor: 'rgba(0,230,118,0.3)', borderWidth: 1 },
+  pdfButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,230,118,0.2)', justifyContent: 'center', alignItems: 'center', borderColor: 'rgba(0,230,118,0.3)', borderWidth: 1 },
   headerCenter: { flex: 1, alignItems: 'center' },
   headerTitle: { fontSize: 17, fontWeight: '700', color: '#FFFFFF' },
   headerSubtitle: { fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 2 },
   content: { flex: 1, paddingHorizontal: 20 },
   scrollContent: { paddingBottom: 100 },
-  statusBanner: { 
-    backgroundColor: 'rgba(0,230,118,0.1)', 
-    borderRadius: 12, 
-    padding: 16, 
-    marginBottom: 20, 
-    borderColor: 'rgba(0,230,118,0.3)', 
-    borderWidth: 1 
-  },
+  statusBanner: { backgroundColor: 'rgba(0,230,118,0.1)', borderRadius: 12, padding: 16, marginBottom: 20, borderColor: 'rgba(0,230,118,0.3)', borderWidth: 1 },
   statusIndicator: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
   statusText: { fontSize: 14, fontWeight: '600', color: '#00E676', marginLeft: 8 },
   lastUpdate: { fontSize: 12, color: 'rgba(255,255,255,0.7)' },
-  card: { 
-    backgroundColor: 'rgba(255,255,255,0.08)', 
-    borderRadius: 16, 
-    padding: 18, 
-    marginBottom: 20, 
-    borderColor: 'rgba(0,230,118,0.2)', 
-    borderWidth: 1 
-  },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  card: { backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 16, padding: 18, marginBottom: 20, borderColor: 'rgba(0,230,118,0.2)', borderWidth: 1 },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   cardHeaderLeft: { flexDirection: 'row', alignItems: 'center' },
   cardTitle: { fontSize: 16, fontWeight: '700', color: '#FFFFFF', marginLeft: 8 },
   cardSubtitle: { fontSize: 12, color: 'rgba(255,255,255,0.6)', marginLeft: 8, marginTop: 2 },
-  infoButton: { padding: 4 },
-  riskCard: { 
-    alignItems: 'center', 
-    padding: 24, 
-    borderRadius: 12, 
-    marginBottom: 16, 
-    borderWidth: 1 
-  },
+  riskCard: { alignItems: 'center', padding: 24, borderRadius: 12, marginBottom: 16, borderWidth: 1 },
   riskScoreContainer: { flexDirection: 'row', alignItems: 'baseline' },
   riskScore: { fontSize: 48, fontWeight: '900' },
   riskScoreMax: { fontSize: 24, color: 'rgba(255,255,255,0.5)', marginLeft: 4 },
@@ -523,165 +569,21 @@ const styles = StyleSheet.create({
   riskFactorScore: { fontSize: 12, color: '#00E676', fontWeight: '700' },
   riskFactorBar: { height: 6, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 3 },
   riskFactorFill: { height: '100%', borderRadius: 3 },
-  metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  metricCard: { 
-    flex: 1, 
-    minWidth: '45%', 
-    backgroundColor: 'rgba(255,255,255,0.05)', 
-    borderRadius: 12, 
-    padding: 12, 
-    borderWidth: 1 
-  },
-  metricHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  metricLabel: { fontSize: 12, color: 'rgba(255,255,255,0.7)', marginLeft: 6 },
-  metricValue: { fontSize: 20, fontWeight: '700' },
-  metricUnit: { fontSize: 10, color: 'rgba(255,255,255,0.5)', marginTop: 2 },
   recommendationsContainer: { gap: 12 },
-  recommendationCard: { 
-    backgroundColor: 'rgba(0,230,118,0.05)', 
-    borderRadius: 12, 
-    padding: 12, 
-    flexDirection: 'row', 
-    alignItems: 'flex-start', 
-    borderColor: 'rgba(0,230,118,0.1)', 
-    borderWidth: 1 
-  },
-  recommendationIcon: { 
-    width: 28, 
-    height: 28, 
-    borderRadius: 14, 
-    backgroundColor: 'rgba(0,230,118,0.2)', 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    marginRight: 12 
-  },
+  recommendationCard: { backgroundColor: 'rgba(0,230,118,0.05)', borderRadius: 12, padding: 12, flexDirection: 'row', alignItems: 'flex-start', borderColor: 'rgba(0,230,118,0.1)', borderWidth: 1 },
+  recommendationIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(0,230,118,0.2)', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   recommendationText: { fontSize: 13, color: 'rgba(255,255,255,0.9)', lineHeight: 18, flex: 1 },
-  viewAllButton: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    marginTop: 12, 
-    padding: 8 
-  },
-  viewAllText: { fontSize: 14, color: '#00E676', fontWeight: '600', marginRight: 4 },
-  viewHistoryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 16,
-    padding: 8,
-  },
-  viewHistoryText: {
-    fontSize: 12,
-    color: '#00E676',
-    fontWeight: '600',
-    marginRight: 4,
-  },
   clinicalSummary: { gap: 12 },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   summaryLabel: { fontSize: 14, color: 'rgba(255,255,255,0.7)' },
   summaryValue: { fontSize: 14, fontWeight: '600', color: '#FFFFFF' },
-  emptyCard: { 
-    borderRadius: 16, 
-    marginBottom: 20, 
-    overflow: 'hidden', 
-    borderColor: 'rgba(0,230,118,0.2)', 
-    borderWidth: 1 
-  },
+  emptyCard: { borderRadius: 16, marginBottom: 20, overflow: 'hidden', borderColor: 'rgba(0,230,118,0.2)', borderWidth: 1 },
   emptyGradient: { padding: 40, alignItems: 'center' },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: '#FFFFFF', marginTop: 16, marginBottom: 8 },
   emptyText: { fontSize: 14, color: 'rgba(255,255,255,0.7)', textAlign: 'center', lineHeight: 20 },
   assessButton: { borderRadius: 12, marginBottom: 20, overflow: 'hidden' },
   assessButtonGradient: { padding: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' },
   assessButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700', marginLeft: 8 },
-  modalOverlay: { 
-    flex: 1, 
-    backgroundColor: 'rgba(0,0,0,0.8)', 
-    justifyContent: 'center', 
-    alignItems: 'center' 
-  },
-  modalContent: { 
-    backgroundColor: '#1A1A2E', 
-    borderRadius: 16, 
-    padding: 24, 
-    margin: 20, 
-    width: '92%', 
-    maxWidth: 400 
-  },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: '#FFFFFF', marginBottom: 8 },
-  modalSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.7)', marginBottom: 20 },
-  profileIncomplete: { alignItems: 'center', paddingVertical: 10 },
-  incompleteTitle: { fontSize: 16, fontWeight: '700', color: '#FF9800', marginTop: 8, marginBottom: 8 },
-  incompleteText: { fontSize: 14, color: 'rgba(255,255,255,0.8)', textAlign: 'center', marginBottom: 12 },
-  missingFields: { alignSelf: 'flex-start', marginBottom: 16 },
-  missingField: { fontSize: 12, color: '#FF9800', marginBottom: 2 },
-  profileButton: {
-    backgroundColor: '#FF9800', 
-    paddingHorizontal: 24, 
-    paddingVertical: 12, 
-    borderRadius: 8, 
-    marginBottom: 12
-  },
-  profileButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
-  modalButton: {
-    backgroundColor: 'rgba(0,230,118,0.2)', 
-    padding: 16, 
-    borderRadius: 12,
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    marginBottom: 12,
-    borderColor: '#00E676', 
-    borderWidth: 1
-  },
-  modalButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600', marginLeft: 12, flex: 1 },
-  modalCancelButton: { padding: 12, alignItems: 'center' },
-  modalCancelText: { color: 'rgba(255,255,255,0.7)', fontSize: 14 },
-  detailsModal: { 
-    backgroundColor: '#1A1A2E', 
-    borderRadius: 16, 
-    margin: 20, 
-    maxHeight: '85%', 
-    width: '92%' 
-  },
-  modalHeader: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between', 
-    padding: 20 
-  },
-  detailsContent: { paddingHorizontal: 20, paddingBottom: 20 },
-  detailsSectionTitle: { fontSize: 16, fontWeight: '700', color: '#FFFFFF', marginBottom: 12 },
-  aqiSection: { marginBottom: 20 },
-  aqiDetailCard: { 
-    alignItems: 'center', 
-    padding: 16, 
-    borderRadius: 12, 
-    marginBottom: 12, 
-    borderWidth: 1 
-  },
-  aqiValue: { fontSize: 32, fontWeight: '900' },
-  aqiLabel: { fontSize: 12, fontWeight: '600', marginTop: 4 },
-  pollutantRow: { flexDirection: 'row', justifyContent: 'space-around' },
-  pollutantText: { fontSize: 13, color: '#FFFFFF', fontWeight: '600' },
-  detailsSection: { marginBottom: 20 },
-  recommendationItem: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 6 },
-  bulletPoint: { 
-    width: 4, 
-    height: 4, 
-    borderRadius: 2, 
-    backgroundColor: '#00E676', 
-    marginTop: 6, 
-    marginRight: 10 
-  },
-  insightItem: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 },
-  insightText: { 
-    fontSize: 13, 
-    color: 'rgba(255,255,255,0.9)', 
-    lineHeight: 18, 
-    flex: 1, 
-    marginLeft: 8, 
-    fontStyle: 'italic' 
-  },
 });
 
 export default HealthRiskAssessmentScreen;

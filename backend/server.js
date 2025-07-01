@@ -26,6 +26,7 @@ const sourceRoutes = require('./routes/sourceRoutes');
 // const aqiwea = require('./routes/aqiwea');
 const health = require('./routes/health');
 const assessment = require('./routes/assessment');
+const clusters = require('./routes/clusters');
 
 connectDatabase();
 
@@ -40,6 +41,7 @@ app.use('/api/', sourceRoutes);
 // app.use('/api/', aqiwea);
 app.use('/api/', health);
 app.use('/api/', assessment);
+app.use('/api/', clusters);
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

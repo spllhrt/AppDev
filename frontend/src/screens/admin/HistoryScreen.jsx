@@ -28,6 +28,14 @@ const HistoryScreen = () => {
   const [selectedAssessment, setSelectedAssessment] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({
+    city: '',
+    riskLevel: '',
+    dateFrom: '',
+    dateTo: '',
+    ageGroup: ''
+  });
   const { user } = useSelector((state) => state.auth);
   const navigation = useNavigation();
 
@@ -52,15 +60,76 @@ const HistoryScreen = () => {
   }, []);
 
   useEffect(() => {
-    if (searchQuery.trim() === '') {
-      setFilteredAssessments(assessments);
-    } else {
-      const filtered = assessments.filter(assessment => 
+    applyFilters();
+  }, [searchQuery, filters, assessments]);
+
+  const applyFilters = () => {
+    let filtered = assessments;
+
+    if (searchQuery.trim() !== '') {
+      filtered = filtered.filter(assessment => 
         assessment.user?.name?.toLowerCase().includes(searchQuery.toLowerCase())
       );
-      setFilteredAssessments(filtered);
     }
-  }, [searchQuery, assessments]);
+
+    if (filters.city.trim() !== '') {
+      filtered = filtered.filter(assessment => 
+        assessment.user?.city?.toLowerCase().includes(filters.city.toLowerCase())
+      );
+    }
+
+    if (filters.riskLevel !== '') {
+      filtered = filtered.filter(assessment => 
+        assessment.riskLevel === filters.riskLevel
+      );
+    }
+
+    if (filters.dateFrom !== '') {
+      filtered = filtered.filter(assessment => 
+        moment(assessment.assessedAt).isSameOrAfter(moment(filters.dateFrom))
+      );
+    }
+
+    if (filters.dateTo !== '') {
+      filtered = filtered.filter(assessment => 
+        moment(assessment.assessedAt).isSameOrBefore(moment(filters.dateTo))
+      );
+    }
+
+    if (filters.ageGroup !== '') {
+      filtered = filtered.filter(assessment => {
+        const age = assessment.user?.age;
+        if (!age) return false;
+        
+        switch (filters.ageGroup) {
+          case '18-25':
+            return age >= 18 && age <= 25;
+          case '26-35':
+            return age >= 26 && age <= 35;
+          case '36-45':
+            return age >= 36 && age <= 45;
+          case '46-55':
+            return age >= 46 && age <= 55;
+          case '56+':
+            return age >= 56;
+          default:
+            return true;
+        }
+      });
+    }
+
+    setFilteredAssessments(filtered);
+  };
+
+  const clearFilters = () => {
+    setFilters({
+      city: '',
+      riskLevel: '',
+      dateFrom: '',
+      dateTo: '',
+      ageGroup: ''
+    });
+  };
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -182,10 +251,11 @@ const HistoryScreen = () => {
         <Text style={styles.riskLabel}>Risk Level:</Text>
         <View style={[
           styles.riskBadge,
-          item.riskLevel === 'High' && styles.highRisk,
-          item.riskLevel === 'Medium' && styles.mediumRisk,
-          item.riskLevel === 'Low' && styles.lowRisk,
-        ]}>
+            item.riskLevel === 'high' && styles.highRisk,
+            item.riskLevel === 'very_high' && styles.veryHighRisk,
+            item.riskLevel === 'moderate' && styles.moderateRisk,
+            item.riskLevel === 'low' && styles.lowRisk,
+          ]}>
           <Text style={styles.riskText}>{item.riskLevel}</Text>
         </View>
       </View>
@@ -219,6 +289,31 @@ const HistoryScreen = () => {
     </View>
   );
 
+  const renderFilterOption = (label, value, options, onSelect) => (
+    <View style={styles.filterGroup}>
+      <Text style={styles.filterLabel}>{label}</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterOptions}>
+        <TouchableOpacity
+          style={[styles.filterOption, value === '' && styles.filterOptionActive]}
+          onPress={() => onSelect('')}
+        >
+          <Text style={[styles.filterOptionText, value === '' && styles.filterOptionTextActive]}>All</Text>
+        </TouchableOpacity>
+        {options.map((option) => (
+          <TouchableOpacity
+            key={option.value}
+            style={[styles.filterOption, value === option.value && styles.filterOptionActive]}
+            onPress={() => onSelect(option.value)}
+          >
+            <Text style={[styles.filterOptionText, value === option.value && styles.filterOptionTextActive]}>
+              {option.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
+  );
+
   if (loading && !refreshing) {
     return (
       <View style={styles.loadingContainer}>
@@ -242,6 +337,21 @@ const HistoryScreen = () => {
     );
   }
 
+  const riskLevelOptions = [
+    { value: 'low', label: 'Low' },
+    { value: 'moderate', label: 'Moderate' },
+    { value: 'high', label: 'High' },
+    { value: 'very_high', label: 'Very High' }
+  ];
+
+  const ageGroupOptions = [
+    { value: '18-25', label: '18-25' },
+    { value: '26-35', label: '26-35' },
+    { value: '36-45', label: '36-45' },
+    { value: '46-55', label: '46-55' },
+    { value: '56+', label: '56+' }
+  ];
+
   return (
     <View style={styles.container}>
       <View style={styles.searchContainer}>
@@ -254,7 +364,76 @@ const HistoryScreen = () => {
           onChangeText={setSearchQuery}
           clearButtonMode="while-editing"
         />
+        <TouchableOpacity
+          style={styles.filterToggle}
+          onPress={() => setShowFilters(!showFilters)}
+        >
+          <Ionicons name="filter-outline" size={20} color="#3b82f6" />
+        </TouchableOpacity>
       </View>
+
+      {showFilters && (
+        <View style={styles.filtersContainer}>
+          <ScrollView style={styles.filtersScroll}>
+            <View style={styles.filterGroup}>
+              <Text style={styles.filterLabel}>City</Text>
+              <TextInput
+                style={styles.filterInput}
+                placeholder="Enter city name..."
+                placeholderTextColor="#9ca3af"
+                value={filters.city}
+                onChangeText={(value) => setFilters(prev => ({ ...prev, city: value }))}
+              />
+            </View>
+
+            {renderFilterOption(
+              'Risk Level',
+              filters.riskLevel,
+              riskLevelOptions,
+              (value) => setFilters(prev => ({ ...prev, riskLevel: value }))
+            )}
+
+            <View style={styles.filterGroup}>
+              <Text style={styles.filterLabel}>Date Range</Text>
+              <View style={styles.dateInputs}>
+                <View style={styles.dateInputContainer}>
+                  <Text style={styles.dateInputLabel}>From</Text>
+                  <TextInput
+                    style={styles.dateInput}
+                    placeholder="YYYY-MM-DD"
+                    placeholderTextColor="#9ca3af"
+                    value={filters.dateFrom}
+                    onChangeText={(value) => setFilters(prev => ({ ...prev, dateFrom: value }))}
+                  />
+                </View>
+                <View style={styles.dateInputContainer}>
+                  <Text style={styles.dateInputLabel}>To</Text>
+                  <TextInput
+                    style={styles.dateInput}
+                    placeholder="YYYY-MM-DD"
+                    placeholderTextColor="#9ca3af"
+                    value={filters.dateTo}
+                    onChangeText={(value) => setFilters(prev => ({ ...prev, dateTo: value }))}
+                  />
+                </View>
+              </View>
+            </View>
+
+            {renderFilterOption(
+              'Age Group',
+              filters.ageGroup,
+              ageGroupOptions,
+              (value) => setFilters(prev => ({ ...prev, ageGroup: value }))
+            )}
+
+            <TouchableOpacity style={styles.clearFiltersButton} onPress={clearFilters}>
+              <Text style={styles.clearFiltersText}>Clear All Filters</Text>
+            </TouchableOpacity>
+            
+            <View style={styles.bottomSpace} />
+          </ScrollView>
+        </View>
+      )}
 
       <FlatList
         data={filteredAssessments}
@@ -273,21 +452,25 @@ const HistoryScreen = () => {
           <View style={styles.emptyContainer}>
             <Ionicons name="document-text-outline" size={60} color="#9ca3af" />
             <Text style={styles.emptyText}>
-              {searchQuery.trim() ? 'No matching assessments found' : 'No assessment history found'}
+              {searchQuery.trim() || Object.values(filters).some(f => f.trim() !== '') 
+                ? 'No matching assessments found' 
+                : 'No assessment history found'}
             </Text>
-            {searchQuery.trim() && (
+            {(searchQuery.trim() || Object.values(filters).some(f => f.trim() !== '')) && (
               <TouchableOpacity
                 style={styles.clearSearchButton}
-                onPress={() => setSearchQuery('')}
+                onPress={() => {
+                  setSearchQuery('');
+                  clearFilters();
+                }}
               >
-                <Text style={styles.clearSearchButtonText}>Clear search</Text>
+                <Text style={styles.clearSearchButtonText}>Clear search and filters</Text>
               </TouchableOpacity>
             )}
           </View>
         }
       />
 
-      {/* Assessment Details Modal */}
       <Modal
         animationType="slide"
         transparent={false}
@@ -313,7 +496,6 @@ const HistoryScreen = () => {
                   <Text style={styles.sectionTitle}>User Information</Text>
                   {renderDetailItem('Name', selectedAssessment.user?.name, 'person-outline')}
                   {renderDetailItem('Email', selectedAssessment.user?.email, 'mail-outline')}
-                  {renderDetailItem('Phone', selectedAssessment.user?.phone, 'call-outline')}
                   {renderDetailItem('Location', selectedAssessment.user?.city, 'location-outline')}
                   {renderDetailItem('Age', selectedAssessment.user?.age, 'calendar-outline')}
                 </View>
@@ -326,27 +508,8 @@ const HistoryScreen = () => {
                     'time-outline'
                   )}
                   {renderDetailItem('Risk Level', selectedAssessment.riskLevel, 'alert-circle-outline')}
-                  {renderDetailItem('Score', selectedAssessment.score, 'speedometer-outline')}
+                  {renderDetailItem('Score', selectedAssessment.riskScore, 'speedometer-outline')}
                 </View>
-
-                <View style={styles.questionsSection}>
-                  <Text style={styles.sectionTitle}>Questions & Answers</Text>
-                  {selectedAssessment.answers?.map((answer, index) => (
-                    <View key={index} style={styles.qaItem}>
-                      {renderQuestionAnswer(
-                        answer.question || `Question ${index + 1}`,
-                        answer.answer || 'No answer provided'
-                      )}
-                    </View>
-                  ))}
-                </View>
-
-                {selectedAssessment.notes && (
-                  <View style={styles.notesSection}>
-                    <Text style={styles.sectionTitle}>Additional Notes</Text>
-                    <Text style={styles.notesText}>{selectedAssessment.notes}</Text>
-                  </View>
-                )}
               </ScrollView>
             </>
           )}
@@ -384,6 +547,102 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: '#1f2937',
+  },
+  filterToggle: {
+    padding: 5,
+    marginLeft: 10,
+  },
+  filtersContainer: {
+    backgroundColor: '#ffffff',
+    marginHorizontal: 15,
+    marginBottom: 10,
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  filtersScroll: {
+    maxHeight: 180,
+    padding: 10,
+  },
+  filterGroup: {
+    marginBottom: 12,
+  },
+  filterLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 6,
+  },
+  filterInput: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 14,
+    color: '#1f2937',
+    backgroundColor: '#f9fafb',
+  },
+  filterOptions: {
+    flexDirection: 'row',
+  },
+  filterOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginRight: 8,
+    borderRadius: 15,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  filterOptionActive: {
+    backgroundColor: '#3b82f6',
+    borderColor: '#3b82f6',
+  },
+  filterOptionText: {
+    color: '#6b7280',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  filterOptionTextActive: {
+    color: '#ffffff',
+  },
+  dateInputs: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  dateInputContainer: {
+    flex: 0.48,
+  },
+  dateInputLabel: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginBottom: 4,
+  },
+  dateInput: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 12,
+    color: '#1f2937',
+    backgroundColor: '#f9fafb',
+  },
+  clearFiltersButton: {
+    backgroundColor: '#ef4444',
+    paddingVertical: 8,
+    borderRadius: 6,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  clearFiltersText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   loadingContainer: {
     flex: 1,
@@ -506,7 +765,10 @@ const styles = StyleSheet.create({
   highRisk: {
     backgroundColor: '#ef4444',
   },
-  mediumRisk: {
+  veryHighRisk: {
+    backgroundColor: '#dc2626',
+  },
+  moderateRisk: {
     backgroundColor: '#f59e0b',
   },
   lowRisk: {
@@ -525,7 +787,6 @@ const styles = StyleSheet.create({
     color: '#3b82f6',
     fontWeight: '600',
   },
-  // Modal styles
   modalContainer: {
     flex: 1,
     backgroundColor: '#ffffff',
@@ -579,27 +840,6 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     marginTop: 2,
   },
-  qaContainer: {
-    backgroundColor: '#f9fafb',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 10,
-  },
-  questionText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginBottom: 5,
-  },
-  answerText: {
-    fontSize: 14,
-    color: '#4b5563',
-  },
-  notesText: {
-    fontSize: 14,
-    color: '#4b5563',
-    lineHeight: 20,
-  },
   userSection: {
     marginBottom: 20,
   },
@@ -615,6 +855,8 @@ const styles = StyleSheet.create({
   qaItem: {
     marginBottom: 10,
   },
+
+  bottomSpace: { height: 20 }
 });
 
 export default HistoryScreen;

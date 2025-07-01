@@ -34,11 +34,21 @@ const getWeatherColor = (condition, temp) => {
 };
 
 const getAQIColor = (aqi) => {
-  if (aqi <= 20) return '#4CAF50';
-  if (aqi <= 40) return '#8BC34A';
-  if (aqi <= 60) return '#FFC107';
-  if (aqi <= 80) return '#FF9800';
-  return '#F44336';
+  if (aqi <= 50) return '#00E676';
+  if (aqi <= 100) return '#FFC107';
+  if (aqi <= 150) return '#FF9800';
+  if (aqi <= 200) return '#F44336';
+  if (aqi <= 300) return '#9C27B0';
+  return '#B71C1C';
+};
+
+const getAQIStatus = (aqi) => {
+  if (aqi <= 50) return 'Good';
+  if (aqi <= 100) return 'Moderate';
+  if (aqi <= 150) return 'Unhealthy for Sensitive';
+  if (aqi <= 200) return 'Unhealthy';
+  if (aqi <= 300) return 'Very Unhealthy';
+  return 'Hazardous';
 };
 
 const MapScreen = ({ navigation }) => {
@@ -65,7 +75,6 @@ const MapScreen = ({ navigation }) => {
   
   const updateState = (updates) => setState(prev => ({ ...prev, ...updates }));
 
-  // Caching functions
   const cacheCities = useCallback((cities) => {
     console.log('Cities loaded:', cities.length);
   }, []);
@@ -74,7 +83,6 @@ const MapScreen = ({ navigation }) => {
     return null;
   }, []);
 
-  // Fetch cities with caching
   const fetchCities = useCallback(async () => {
     try {
       const cachedCities = await getCachedCities();
@@ -117,7 +125,6 @@ const MapScreen = ({ navigation }) => {
     }
   }, [cacheCities, getCachedCities]);
 
-  // Fetch weather data
   const fetchWeatherData = useCallback(async () => {
     if (!state.cities.length) return;
     
@@ -143,24 +150,27 @@ const MapScreen = ({ navigation }) => {
     updateState({ weatherData });
   }, [state.cities]);
 
-  // Fetch AQI data
   const fetchAQIData = useCallback(async () => {
     if (!state.cities.length) return;
     
     const aqiPromises = state.cities.map(async (city) => {
       try {
         const response = await fetch(
-          `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${city.lat}&longitude=${city.lon}&current=pm10,pm2_5,european_aqi`
+          `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${city.lat}&longitude=${city.lon}&current=us_aqi,pm10,pm2_5&timezone=auto`
         );
         const aqi = await response.json();
-        const aqiValue = aqi.current.european_aqi || 0;
         
-        return [city.name, {
-          pm25: Math.round(aqi.current.pm2_5 || 0),
-          pm10: Math.round(aqi.current.pm10 || 0),
-          aqi: Math.round(aqiValue),
-          status: getAQIStatus(aqiValue),
-        }];
+        if (aqi.current) {
+          const aqiValue = aqi.current.us_aqi || 0;
+          return [city.name, {
+            pm25: aqi.current.pm2_5 || 0,
+            pm10: aqi.current.pm10 || 0,
+            aqi: Math.round(aqiValue),
+            status: getAQIStatus(aqiValue),
+            timestamp: aqi.current.time
+          }];
+        }
+        return [city.name, null];
       } catch (error) {
         console.error(`AQI error for ${city.name}:`, error);
         return [city.name, null];
@@ -172,15 +182,18 @@ const MapScreen = ({ navigation }) => {
     updateState({ aqiData });
   }, [state.cities]);
 
-  const getAQIStatus = (aqi) => {
-    if (aqi <= 20) return 'Good';
-    if (aqi <= 40) return 'Fair';
-    if (aqi <= 60) return 'Moderate';
-    if (aqi <= 80) return 'Poor';
-    return 'Very Poor';
+  const getDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
   };
 
-  // Fixed search function with proper rate limiting and state management
   const searchLocations = async (query) => {
     const now = Date.now();
     const timeSinceLastRequest = now - lastNominatimRequest.current;
@@ -205,7 +218,6 @@ const MapScreen = ({ navigation }) => {
     console.log('🔍 Searching for:', query);
     
     try {
-      // First try bounded search
       const boundedUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=10&bounded=1&viewbox=120.85,14.3,121.15,14.8&countrycodes=ph`;
       
       const response = await fetch(boundedUrl, { 
@@ -250,7 +262,6 @@ const MapScreen = ({ navigation }) => {
           }));
       }
 
-      // Sort and limit results
       filteredResults.sort((a, b) => {
         if (b.importance !== a.importance) {
           return b.importance - a.importance;
@@ -282,27 +293,22 @@ const MapScreen = ({ navigation }) => {
     }
   };
 
-  // Debounced search handler
   const debouncedSearch = useRef(
     _.debounce((query) => {
       searchLocations(query);
     }, 300)
   ).current;
 
-  // Fixed search change handler
   const handleSearchChange = (text) => {
     console.log('🔍 Search text changed:', text);
     
-    // Update search query immediately
     updateState({
       searchQuery: text
     });
     
-    // Handle search logic
     if (text.length > 2) {
       const cacheKey = text.toLowerCase();
       
-      // Check cache first
       if (state.searchCache[cacheKey]) {
         console.log('🎯 Found cached results');
         updateState({
@@ -311,7 +317,6 @@ const MapScreen = ({ navigation }) => {
           isSearching: false
         });
       } else {
-        // Show loading state and trigger search
         console.log('🔄 Starting search');
         updateState({
           showSearchResults: true,
@@ -322,7 +327,6 @@ const MapScreen = ({ navigation }) => {
         debouncedSearch(text);
       }
     } else {
-      // Clear results for short queries
       updateState({
         searchResults: [],
         showSearchResults: false,
@@ -345,7 +349,6 @@ const MapScreen = ({ navigation }) => {
     }
   };
 
-  // Fetch weather data for searched location
   const fetchWeatherForLocation = async (location) => {
     try {
       const response = await fetch(
@@ -363,207 +366,195 @@ const MapScreen = ({ navigation }) => {
     }
   };
 
-  // Fetch AQI data for searched location
   const fetchAQIForLocation = async (location) => {
     try {
       const response = await fetch(
-        `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${location.lat}&longitude=${location.lon}&current=pm10,pm2_5,european_aqi`
+        `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${location.lat}&longitude=${location.lon}&current=us_aqi,pm10,pm2_5&timezone=auto`
       );
       const aqi = await response.json();
-      const aqiValue = aqi.current.european_aqi || 0;
-      return {
-        pm25: Math.round(aqi.current.pm2_5 || 0),
-        pm10: Math.round(aqi.current.pm10 || 0),
-        aqi: Math.round(aqiValue),
-        status: getAQIStatus(aqiValue),
-      };
+      
+      if (aqi.current) {
+        const aqiValue = aqi.current.us_aqi || 0;
+        return {
+          pm25: aqi.current.pm2_5 || 0,
+          pm10: aqi.current.pm10 || 0,
+          aqi: Math.round(aqiValue),
+          status: getAQIStatus(aqiValue),
+          timestamp: aqi.current.time
+        };
+      }
+      return null;
     } catch (error) {
       console.error('AQI error for searched location:', error);
       return null;
     }
   };
 
-  // FIXED: Add marker for searched location with proper color calculation
-const addSearchMarker = (location, weatherData = null, aqiData = null) => {
-  if (webViewRef.current) {
-    // Calculate colors on React Native side
-    let markerColor = '#00E676';
-    let pulseColorRgba = 'rgba(0,230,118,0.4)';
-    
-    if (state.dataLayer === 'weather' && weatherData) {
-      markerColor = getWeatherColor(weatherData.condition, weatherData.temp);
-    } else if (state.dataLayer === 'aqi' && aqiData) {
-      markerColor = getAQIColor(aqiData.aqi);
-    }
-    
-    // Convert hex to rgba for pulse effect
-    if (markerColor !== '#00E676') {
-      const hex = markerColor.replace('#', '');
-      const r = parseInt(hex.substr(0, 2), 16);
-      const g = parseInt(hex.substr(2, 2), 16);
-      const b = parseInt(hex.substr(4, 2), 16);
-      pulseColorRgba = `rgba(${r}, ${g}, ${b}, 0.4)`;
-    }
-
-    // Build popup content on React Native side
-    let popupContent = `<div class="popup-content"><div class="popup-title">${location.name.replace(/'/g, "\\'")}</div>`;
-    
-    if (state.dataLayer === 'weather' && weatherData) {
-      popupContent += `<div class="popup-data"><strong style="color: #00E676;">Weather Conditions</strong><br/>🌡️ Temperature: <strong>${weatherData.temp}°C</strong><br/>💧 Humidity: <strong>${weatherData.humidity}%</strong><br/>☁️ Condition: <strong>${weatherData.condition}</strong></div>`;
-      popupContent += `<button class="nav-button" onclick="navigateToScreen('Weather', '${location.name.replace(/'/g, "\\'")}', ${location.lat}, ${location.lon})">📊 View Weather Details</button>`;
-    } else if (state.dataLayer === 'aqi' && aqiData) {
-      popupContent += `<div class="popup-data"><strong style="color: #00E676;">Air Quality Index</strong><br/>🌫️ PM2.5: <strong>${aqiData.pm25} μg/m³</strong><br/>🌪️ PM10: <strong>${aqiData.pm10} μg/m³</strong><br/>📊 AQI: <strong>${aqiData.aqi}</strong> (${aqiData.status})</div>`;
-      popupContent += `<button class="nav-button" onclick="navigateToScreen('Aqi', '${location.name.replace(/'/g, "\\'")}', ${location.lat}, ${location.lon})">🌿 View AQI Details</button>`;
-    } else {
-      popupContent += '<div class="popup-data">📍 <strong>Searched Location</strong><br/>Select a data layer to view more information</div>';
-    }
-    
-    popupContent += '</div>';
-
-    const jsCode = `
-      try {
-        console.log('🔧 Adding search marker for: ${location.name}');
-        
-        // Remove existing search marker
-        if (window.searchMarker) {
-          console.log('🗑️ Removing existing search marker');
-          map.removeLayer(window.searchMarker);
-          window.searchMarker = null;
-        }
-        
-        // Create custom icon for search marker
-        const customIcon = L.divIcon({
-          className: 'search-marker',
-          html: \`
-            <div style="
-              position: relative;
-              width: 28px;
-              height: 28px;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-            ">
-              <div style="
-                position: absolute;
-                width: 28px;
-                height: 28px;
-                background: ${pulseColorRgba};
-                border-radius: 50%;
-                animation: markerPulse 2s infinite;
-              "></div>
-              <div style="
-                width: 20px;
-                height: 20px;
-                background: linear-gradient(135deg, ${markerColor} 0%, ${markerColor}dd 100%);
-                border-radius: 50%;
-                border: 3px solid rgba(255,255,255,0.9);
-                box-shadow: 0 0 0 2px ${pulseColorRgba}, 0 3px 12px rgba(0,0,0,0.4);
-                position: relative;
-                z-index: 1;
-              "></div>
-            </div>
-          \`,
-          iconSize: [28, 28],
-          iconAnchor: [14, 14]
-        });
-        
-        // Add the marker to the map
-        window.searchMarker = L.marker([${location.lat}, ${location.lon}], { 
-          icon: customIcon,
-          zIndexOffset: 1000 
-        }).addTo(map);
-        
-        console.log('✅ Search marker added successfully');
-        
-        // Bind popup and open it
-        window.searchMarker.bindPopup(\`${popupContent.replace(/`/g, '\\`')}\`, { 
-          maxWidth: 280, 
-          className: 'custom-popup' 
-        }).openPopup();
-        
-        // Pan to the location with animation
-        map.setView([${location.lat}, ${location.lon}], Math.max(map.getZoom(), 14), {
-          animate: true,
-          duration: 0.8,
-          easeLinearity: 0.25
-        });
-        
-        console.log('🎯 Map centered on search location');
-        
-      } catch (error) {
-        console.error('❌ Error in addSearchMarker:', error);
+  const addSearchMarker = (location, weatherData = null, aqiData = null) => {
+    if (webViewRef.current) {
+      let markerColor = '#00E676';
+      let pulseColorRgba = 'rgba(0,230,118,0.4)';
+      
+      if (state.dataLayer === 'weather' && weatherData) {
+        markerColor = getWeatherColor(weatherData.condition, weatherData.temp);
+      } else if (state.dataLayer === 'aqi' && aqiData) {
+        markerColor = getAQIColor(aqiData.aqi);
       }
       
-      true;
-    `;
+      if (markerColor !== '#00E676') {
+        const hex = markerColor.replace('#', '');
+        const r = parseInt(hex.substr(0, 2), 16);
+        const g = parseInt(hex.substr(2, 2), 16);
+        const b = parseInt(hex.substr(4, 2), 16);
+        pulseColorRgba = `rgba(${r}, ${g}, ${b}, 0.4)`;
+      }
 
-    console.log('🚀 Injecting search marker JavaScript');
-    webViewRef.current.injectJavaScript(jsCode);
-  }
-};
-
- const handleLocationSelect = async (location) => {
-  console.log('🖱️ Location selected:', location.name);
-  
-  // Update state immediately
-  updateState({ 
-    searchQuery: location.name,
-    showSearchResults: false,
-    selectedLocation: location
-  });
-
-  // Blur the search input
-  searchInputRef.current?.blur();
-
-  let weatherData = null;
-  let aqiData = null;
-
-  // Add marker first with current data (if available)
-  const existingWeather = state.weatherData[location.name];
-  const existingAqi = state.aqiData[location.name];
-  
-  // Add marker immediately with existing data
-  setTimeout(() => {
-    addSearchMarker(location, existingWeather, existingAqi);
-  }, 100);
-
-  // Fetch new data based on current layer
-  if (state.dataLayer === 'weather') {
-    console.log('🌡️ Fetching weather data for:', location.name);
-    weatherData = await fetchWeatherForLocation(location);
-    if (weatherData) {
-      updateState(prev => ({
-        ...prev,
-        weatherData: {
-          ...prev.weatherData,
-          [location.name]: weatherData
-        }
-      }));
+      let popupContent = `<div class="popup-content"><div class="popup-title">${location.name.replace(/'/g, "\\'")}</div>`;
       
-      // Update marker with fresh weather data
-      setTimeout(() => {
-        addSearchMarker(location, weatherData, existingAqi);
-      }, 100);
-    }
-  } else if (state.dataLayer === 'aqi') {
-    console.log('🌿 Fetching AQI data for:', location.name);
-    aqiData = await fetchAQIForLocation(location);
-    if (aqiData) {
-      updateState(prev => ({
-        ...prev,
-        aqiData: {
-          ...prev.aqiData,
-          [location.name]: aqiData
-        }
-      }));
+      if (state.dataLayer === 'weather' && weatherData) {
+        popupContent += `<div class="popup-data"><strong style="color: #00E676;">Weather Conditions</strong><br/>🌡️ Temperature: <strong>${weatherData.temp}°C</strong><br/>💧 Humidity: <strong>${weatherData.humidity}%</strong><br/>☁️ Condition: <strong>${weatherData.condition}</strong></div>`;
+        popupContent += `<button class="nav-button" onclick="navigateToScreen('Weather', '${location.name.replace(/'/g, "\\'")}', ${location.lat}, ${location.lon})">📊 View Weather Details</button>`;
+      } else if (state.dataLayer === 'aqi' && aqiData) {
+        popupContent += `<div class="popup-data"><strong style="color: #00E676;">Air Quality Index</strong><br/>🌫️ PM2.5: <strong>${aqiData.pm25} μg/m³</strong><br/>🌪️ PM10: <strong>${aqiData.pm10} μg/m³</strong><br/>📊 AQI: <strong>${aqiData.aqi}</strong> (${aqiData.status})</div>`;
+        popupContent += `<button class="nav-button" onclick="navigateToScreen('Aqi', '${location.name.replace(/'/g, "\\'")}', ${location.lat}, ${location.lon})">🌿 View AQI Details</button>`;
+      } else {
+        popupContent += '<div class="popup-data">📍 <strong>Searched Location</strong><br/>Select a data layer to view more information</div>';
+      }
       
-      // Update marker with fresh AQI data
-      setTimeout(() => {
-        addSearchMarker(location, existingWeather, aqiData);
-      }, 100);
+      popupContent += '</div>';
+
+      const jsCode = `
+        try {
+          console.log('🔧 Adding search marker for: ${location.name}');
+          
+          if (window.searchMarker) {
+            console.log('🗑️ Removing existing search marker');
+            map.removeLayer(window.searchMarker);
+            window.searchMarker = null;
+          }
+          
+          const customIcon = L.divIcon({
+            className: 'search-marker',
+            html: \`
+              <div style="
+                position: relative;
+                width: 28px;
+                height: 28px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+              ">
+                <div style="
+                  position: absolute;
+                  width: 28px;
+                  height: 28px;
+                  background: ${pulseColorRgba};
+                  border-radius: 50%;
+                  animation: markerPulse 2s infinite;
+                "></div>
+                <div style="
+                  width: 20px;
+                  height: 20px;
+                  background: linear-gradient(135deg, ${markerColor} 0%, ${markerColor}dd 100%);
+                  border-radius: 50%;
+                  border: 3px solid rgba(255,255,255,0.9);
+                  box-shadow: 0 0 0 2px ${pulseColorRgba}, 0 3px 12px rgba(0,0,0,0.4);
+                  position: relative;
+                  z-index: 1;
+                "></div>
+              </div>
+            \`,
+            iconSize: [28, 28],
+            iconAnchor: [14, 14]
+          });
+          
+          window.searchMarker = L.marker([${location.lat}, ${location.lon}], { 
+            icon: customIcon,
+            zIndexOffset: 1000 
+          }).addTo(map);
+          
+          console.log('✅ Search marker added successfully');
+          
+          window.searchMarker.bindPopup(\`${popupContent.replace(/`/g, '\\`')}\`, { 
+            maxWidth: 280, 
+            className: 'custom-popup' 
+          }).openPopup();
+          
+          map.setView([${location.lat}, ${location.lon}], Math.max(map.getZoom(), 14), {
+            animate: true,
+            duration: 0.8,
+            easeLinearity: 0.25
+          });
+          
+          console.log('🎯 Map centered on search location');
+          
+        } catch (error) {
+          console.error('❌ Error in addSearchMarker:', error);
+        }
+        
+        true;
+      `;
+
+      console.log('🚀 Injecting search marker JavaScript');
+      webViewRef.current.injectJavaScript(jsCode);
     }
-  }
-};
+  };
+
+  const handleLocationSelect = async (location) => {
+    console.log('🖱️ Location selected:', location.name);
+    
+    updateState({ 
+      searchQuery: location.name,
+      showSearchResults: false,
+      selectedLocation: location
+    });
+
+    searchInputRef.current?.blur();
+
+    let weatherData = null;
+    let aqiData = null;
+
+    const existingWeather = state.weatherData[location.name];
+    const existingAqi = state.aqiData[location.name];
+    
+    setTimeout(() => {
+      addSearchMarker(location, existingWeather, existingAqi);
+    }, 100);
+
+    if (state.dataLayer === 'weather') {
+      console.log('🌡️ Fetching weather data for:', location.name);
+      weatherData = await fetchWeatherForLocation(location);
+      if (weatherData) {
+        updateState(prev => ({
+          ...prev,
+          weatherData: {
+            ...prev.weatherData,
+            [location.name]: weatherData
+          }
+        }));
+        
+        setTimeout(() => {
+          addSearchMarker(location, weatherData, existingAqi);
+        }, 100);
+      }
+    } else if (state.dataLayer === 'aqi') {
+      console.log('🌿 Fetching AQI data for:', location.name);
+      aqiData = await fetchAQIForLocation(location);
+      if (aqiData) {
+        updateState(prev => ({
+          ...prev,
+          aqiData: {
+            ...prev.aqiData,
+            [location.name]: aqiData
+          }
+        }));
+        
+        setTimeout(() => {
+          addSearchMarker(location, existingWeather, aqiData);
+        }, 100);
+      }
+    }
+  };
 
   const toggleDrawer = () => {
     const toValue = state.drawerOpen ? -DRAWER_WIDTH : 0;
@@ -579,64 +570,59 @@ const addSearchMarker = (location, weatherData = null, aqiData = null) => {
   const setDataLayer = (layer) => {
     updateState({ dataLayer: layer });
     
-    // If there's a selected location, update its marker with new data layer
     if (state.selectedLocation) {
       const location = state.selectedLocation;
       const weatherData = state.weatherData[location.name];
       const aqiData = state.aqiData[location.name];
       
-      // Add marker with existing data
       setTimeout(() => {
         addSearchMarker(location, weatherData, aqiData);
       }, 100);
     }
   };
 
- const handleNavigation = (event) => {
-  console.log('🚀 Raw event data:', event.nativeEvent.data);
-  
-  try {
-    const data = JSON.parse(event.nativeEvent.data);
-    console.log('📋 Parsed navigation data:', data);
+  const handleNavigation = (event) => {
+    console.log('🚀 Raw event data:', event.nativeEvent.data);
     
-    if (data.action === 'navigate') {
-      console.log('🧭 Navigation triggered for:', data.screen, data.cityName);
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      console.log('📋 Parsed navigation data:', data);
       
-      // Add a small delay to ensure state is properly updated
-      setTimeout(() => {
-        try {
-          console.log('🎯 Attempting navigation to:', data.screen);
-          
-          // Navigate with parameters
-          navigation.navigate(data.screen, {
-            cityName: data.cityName,
-            lat: parseFloat(data.lat),
-            lon: parseFloat(data.lon)
-          });
-          
-          console.log('✅ Navigation call completed');
-        } catch (navError) {
-          console.error('❌ Navigation error:', navError);
-          console.error('Navigation object:', navigation);
-          
-          // Fallback: try going back and then navigating
+      if (data.action === 'navigate') {
+        console.log('🧭 Navigation triggered for:', data.screen, data.cityName);
+        
+        setTimeout(() => {
           try {
-            navigation.push(data.screen, {
+            console.log('🎯 Attempting navigation to:', data.screen);
+            
+            navigation.navigate(data.screen, {
               cityName: data.cityName,
               lat: parseFloat(data.lat),
               lon: parseFloat(data.lon)
             });
-          } catch (pushError) {
-            console.error('❌ Push navigation also failed:', pushError);
+            
+            console.log('✅ Navigation call completed');
+          } catch (navError) {
+            console.error('❌ Navigation error:', navError);
+            console.error('Navigation object:', navigation);
+            
+            try {
+              navigation.push(data.screen, {
+                cityName: data.cityName,
+                lat: parseFloat(data.lat),
+                lon: parseFloat(data.lon)
+              });
+            } catch (pushError) {
+              console.error('❌ Push navigation also failed:', pushError);
+            }
           }
-        }
-      }, 100);
+        }, 100);
+      }
+    } catch (parseError) {
+      console.error('❌ JSON parse error:', parseError);
+      console.error('Raw data:', event.nativeEvent.data);
     }
-  } catch (parseError) {
-    console.error('❌ JSON parse error:', parseError);
-    console.error('Raw data:', event.nativeEvent.data);
-  }
-};
+  };
 
   useEffect(() => {
     fetchCities();
@@ -729,11 +715,6 @@ const addSearchMarker = (location, weatherData = null, aqiData = null) => {
                 tileSize: 256
             }).addTo(map);
             
-            const cities = ${JSON.stringify(state.cities)};
-            const dataLayer = '${state.dataLayer}';
-            const weatherData = ${JSON.stringify(state.weatherData)};
-            const aqiData = ${JSON.stringify(state.aqiData)};
-            
             const getWeatherColor = (condition, temp) => {
               if (temp >= 35) return '#FF5722';
               if (temp >= 30) return '#FF9800';
@@ -743,39 +724,28 @@ const addSearchMarker = (location, weatherData = null, aqiData = null) => {
             };
             
             const getAQIColor = (aqi) => {
-              if (aqi <= 20) return '#4CAF50';
-              if (aqi <= 40) return '#8BC34A';
-              if (aqi <= 60) return '#FFC107';
-              if (aqi <= 80) return '#FF9800';
-              return '#F44336';
+              if (aqi <= 50) return '#00E676';
+              if (aqi <= 100) return '#FFC107';
+              if (aqi <= 150) return '#FF9800';
+              if (aqi <= 200) return '#F44336';
+              if (aqi <= 300) return '#9C27B0';
+              return '#B71C1C';
             };
 
-            const navigateToScreen = (screen, cityName, lat, lon) => {
-                console.log('🌐 WebView: Attempting to navigate', { screen, cityName, lat, lon });
-                
-                const navigationData = {
-                    action: 'navigate',
-                    screen: screen,
-                    cityName: cityName,
-                    lat: lat,
-                    lon: lon
-                };
-                
-                console.log('🌐 WebView: Sending message', navigationData);
-                
-                if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-                    try {
-                        window.ReactNativeWebView.postMessage(JSON.stringify(navigationData));
-                        console.log('✅ WebView: Message sent successfully');
-                    } catch (error) {
-                        console.error('❌ WebView: Message send error', error);
-                    }
-                } else {
-                    console.error('❌ WebView: ReactNativeWebView not available');
-                    console.log('Available objects:', Object.keys(window));
-                }
+            const getAQIStatus = (aqi) => {
+              if (aqi <= 50) return 'Good';
+              if (aqi <= 100) return 'Moderate';
+              if (aqi <= 150) return 'Unhealthy for Sensitive';
+              if (aqi <= 200) return 'Unhealthy';
+              if (aqi <= 300) return 'Very Unhealthy';
+              return 'Hazardous';
             };
-            
+
+            const cities = ${JSON.stringify(state.cities)};
+            const dataLayer = '${state.dataLayer}';
+            const weatherData = ${JSON.stringify(state.weatherData)};
+            const aqiData = ${JSON.stringify(state.aqiData)};
+
             cities.forEach(city => {
                 let markerColor = '#00E676';
                 let pulseColor = 'rgba(0,230,118,0.4)';
@@ -830,12 +800,68 @@ const addSearchMarker = (location, weatherData = null, aqiData = null) => {
             if (dataLayer === 'weather') {
                 const legend = document.createElement('div');
                 legend.className = 'legend';
-                legend.innerHTML = \`<div class="legend-header" onclick="toggleLegend()"><div class="legend-title">Temperature Scale</div><div class="legend-toggle" id="legendToggle">▼</div></div><div class="legend-content" id="legendContent"><div class="legend-item"><div class="legend-color" style="background: #FF5722;"></div><span class="legend-text">35°C+ Very Hot</span></div><div class="legend-item"><div class="legend-color" style="background: #FF9800;"></div><span class="legend-text">30-34°C Hot</span></div><div class="legend-item"><div class="legend-color" style="background: #FFC107;"></div><span class="legend-text">25-29°C Warm</span></div><div class="legend-item"><div class="legend-color" style="background: #4CAF50;"></div><span class="legend-text">20-24°C Pleasant</span></div><div class="legend-item"><div class="legend-color" style="background: #2196F3;"></div><span class="legend-text">&lt;20°C Cool</span></div></div>\`;
+                legend.innerHTML = \`
+                  <div class="legend-header" onclick="toggleLegend()">
+                    <div class="legend-title">Temperature Scale</div>
+                    <div class="legend-toggle" id="legendToggle">▼</div>
+                  </div>
+                  <div class="legend-content" id="legendContent">
+                    <div class="legend-item">
+                      <div class="legend-color" style="background: #FF5722;"></div>
+                      <span class="legend-text">35°C+ Very Hot</span>
+                    </div>
+                    <div class="legend-item">
+                      <div class="legend-color" style="background: #FF9800;"></div>
+                      <span class="legend-text">30-34°C Hot</span>
+                    </div>
+                    <div class="legend-item">
+                      <div class="legend-color" style="background: #FFC107;"></div>
+                      <span class="legend-text">25-29°C Warm</span>
+                    </div>
+                    <div class="legend-item">
+                      <div class="legend-color" style="background: #4CAF50;"></div>
+                      <span class="legend-text">20-24°C Pleasant</span>
+                    </div>
+                    <div class="legend-item">
+                      <div class="legend-color" style="background: #2196F3;"></div>
+                      <span class="legend-text">&lt;20°C Cool</span>
+                    </div>
+                  </div>\`;
                 document.body.appendChild(legend);
             } else if (dataLayer === 'aqi') {
                 const legend = document.createElement('div');
                 legend.className = 'legend';
-                legend.innerHTML = \`<div class="legend-header" onclick="toggleLegend()"><div class="legend-title">Air Quality Index</div><div class="legend-toggle" id="legendToggle">▼</div></div><div class="legend-content" id="legendContent"><div class="legend-item"><div class="legend-color" style="background: #4CAF50;"></div><span class="legend-text">0-20 Good</span></div><div class="legend-item"><div class="legend-color" style="background: #8BC34A;"></div><span class="legend-text">21-40 Fair</span></div><div class="legend-item"><div class="legend-color" style="background: #FFC107;"></div><span class="legend-text">41-60 Moderate</span></div><div class="legend-item"><div class="legend-color" style="background: #FF9800;"></div><span class="legend-text">61-80 Poor</span></div><div class="legend-item"><div class="legend-color" style="background: #F44336;"></div><span class="legend-text">81+ Very Poor</span></div></div>\`;
+                legend.innerHTML = \`
+                  <div class="legend-header" onclick="toggleLegend()">
+                    <div class="legend-title">Air Quality Index (US)</div>
+                    <div class="legend-toggle" id="legendToggle">▼</div>
+                  </div>
+                  <div class="legend-content" id="legendContent">
+                    <div class="legend-item">
+                      <div class="legend-color" style="background: #00E676;"></div>
+                      <span class="legend-text">0-50 Good</span>
+                    </div>
+                    <div class="legend-item">
+                      <div class="legend-color" style="background: #FFC107;"></div>
+                      <span class="legend-text">51-100 Moderate</span>
+                    </div>
+                    <div class="legend-item">
+                      <div class="legend-color" style="background: #FF9800;"></div>
+                      <span class="legend-text">101-150 Unhealthy for Sensitive</span>
+                    </div>
+                    <div class="legend-item">
+                      <div class="legend-color" style="background: #F44336;"></div>
+                      <span class="legend-text">151-200 Unhealthy</span>
+                    </div>
+                    <div class="legend-item">
+                      <div class="legend-color" style="background: #9C27B0;"></div>
+                      <span class="legend-text">201-300 Very Unhealthy</span>
+                    </div>
+                    <div class="legend-item">
+                      <div class="legend-color" style="background: #B71C1C;"></div>
+                      <span class="legend-text">300+ Hazardous</span>
+                    </div>
+                  </div>\`;
                 document.body.appendChild(legend);
             }
             
@@ -851,24 +877,49 @@ const addSearchMarker = (location, weatherData = null, aqiData = null) => {
                     toggle.classList.remove('collapsed');
                 }
             };
+
+            const navigateToScreen = (screen, cityName, lat, lon) => {
+                console.log('🌐 WebView: Attempting to navigate', { screen, cityName, lat, lon });
+                
+                const navigationData = {
+                    action: 'navigate',
+                    screen: screen,
+                    cityName: cityName,
+                    lat: lat,
+                    lon: lon
+                };
+                
+                console.log('🌐 WebView: Sending message', navigationData);
+                
+                if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+                    try {
+                        window.ReactNativeWebView.postMessage(JSON.stringify(navigationData));
+                        console.log('✅ WebView: Message sent successfully');
+                    } catch (error) {
+                        console.error('❌ WebView: Message send error', error);
+                    }
+                } else {
+                    console.error('❌ WebView: ReactNativeWebView not available');
+                    console.log('Available objects:', Object.keys(window));
+                }
+            };
         </script>
     </body>
     </html>
   `, [state.cities, state.dataLayer, state.weatherData, state.aqiData]);
 
   const handleWebViewLoad = () => {
-  console.log('🌐 WebView loaded');
-  
-  // Inject debugging script
-  webViewRef.current?.injectJavaScript(`
-    console.log('🔧 WebView: Checking ReactNativeWebView availability');
-    console.log('ReactNativeWebView available:', !!window.ReactNativeWebView);
-    if (window.ReactNativeWebView) {
-      console.log('postMessage available:', !!window.ReactNativeWebView.postMessage);
-    }
-    true;
-  `);
-};
+    console.log('🌐 WebView loaded');
+    webViewRef.current?.injectJavaScript(`
+      console.log('🔧 WebView: Checking ReactNativeWebView availability');
+      console.log('ReactNativeWebView available:', !!window.ReactNativeWebView);
+      if (window.ReactNativeWebView) {
+        console.log('postMessage available:', !!window.ReactNativeWebView.postMessage);
+      }
+      true;
+    `);
+  };
+
   const ControlItem = ({ icon, title, subtitle, active, onPress }) => (
     <TouchableOpacity style={[styles.controlItem, active && styles.controlItemActive]} onPress={onPress}>
       <Ionicons name={icon} size={20} color={active ? "#00E676" : "rgba(255,255,255,0.6)"} />
@@ -881,34 +932,32 @@ const addSearchMarker = (location, weatherData = null, aqiData = null) => {
   );
 
   const SearchResultItem = ({ item, onPress }) => (
-  <TouchableOpacity 
-    style={styles.searchResultItem} 
-    onPress={() => {
-      console.log('🖱️ Search item pressed:', item.name);
-      onPress(item);
-    }}
-    activeOpacity={0.7}
-  >
-    <View style={styles.searchResultIconContainer}>
-      {item.type === 'city' || item.type === 'town' ? (
-        <Ionicons name="business" size={18} color="#00E676" />
-      ) : (
-        <Ionicons name="location" size={18} color="#00E676" />
-      )}
-    </View>
-    <View style={styles.searchResultTextContainer}>
-      <Text style={styles.searchResultTitle} numberOfLines={1}>
-        {item.name}
-      </Text>
-      <Text style={styles.searchResultSubtitle} numberOfLines={2}>
-        {item.address ? item.address.split(',').slice(0, 3).join(',') : 'Location'}
-      </Text>
-    </View>
-  </TouchableOpacity>
-);
+    <TouchableOpacity 
+      style={styles.searchResultItem} 
+      onPress={() => {
+        console.log('🖱️ Search item pressed:', item.name);
+        onPress(item);
+      }}
+      activeOpacity={0.7}
+    >
+      <View style={styles.searchResultIconContainer}>
+        {item.type === 'city' || item.type === 'town' ? (
+          <Ionicons name="business" size={18} color="#00E676" />
+        ) : (
+          <Ionicons name="location" size={18} color="#00E676" />
+        )}
+      </View>
+      <View style={styles.searchResultTextContainer}>
+        <Text style={styles.searchResultTitle} numberOfLines={1}>
+          {item.name}
+        </Text>
+        <Text style={styles.searchResultSubtitle} numberOfLines={2}>
+          {item.address ? item.address.split(',').slice(0, 3).join(',') : 'Location'}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
 
-  console.log('Search results:', state.searchResults);
-  console.log('Show results:', state.showSearchResults);
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
@@ -957,37 +1006,37 @@ const addSearchMarker = (location, weatherData = null, aqiData = null) => {
         </LinearGradient>
       </SafeAreaView>
 
-        {(state.showSearchResults && state.searchQuery.length > 2) && (
-          <View style={styles.searchResultsContainer}>
-            {state.isSearching ? (
-              <View style={styles.searchLoadingContainer}>
-                <ActivityIndicator size="small" color="#00E676" />
-                <Text style={styles.searchLoadingText}>Searching...</Text>
-              </View>
-            ) : state.searchResults.length > 0 ? (
-              <FlatList
-                data={state.searchResults}
-                renderItem={({ item }) => (
-                  <SearchResultItem 
-                    item={item} 
-                    onPress={handleLocationSelect} 
-                  />
-                )}
-                keyExtractor={(item, index) => `${item.name}-${item.lat}-${item.lon}-${index}`}
-                keyboardShouldPersistTaps="always"
-                showsVerticalScrollIndicator={false}
-                style={styles.searchResultsList}
-                contentContainerStyle={styles.searchResultsContent}
-              />
-            ) : (
-              <View style={styles.noResultsContainer}>
-                <Ionicons name="search" size={24} color="rgba(255,255,255,0.4)" />
-                <Text style={styles.noResultsText}>No locations found</Text>
-                <Text style={styles.noResultsSubtext}>Try a different search term</Text>
-              </View>
-            )}
-          </View>
-        )}
+      {(state.showSearchResults && state.searchQuery.length > 2) && (
+        <View style={styles.searchResultsContainer}>
+          {state.isSearching ? (
+            <View style={styles.searchLoadingContainer}>
+              <ActivityIndicator size="small" color="#00E676" />
+              <Text style={styles.searchLoadingText}>Searching...</Text>
+            </View>
+          ) : state.searchResults.length > 0 ? (
+            <FlatList
+              data={state.searchResults}
+              renderItem={({ item }) => (
+                <SearchResultItem 
+                  item={item} 
+                  onPress={handleLocationSelect} 
+                />
+              )}
+              keyExtractor={(item, index) => `${item.name}-${item.lat}-${item.lon}-${index}`}
+              keyboardShouldPersistTaps="always"
+              showsVerticalScrollIndicator={false}
+              style={styles.searchResultsList}
+              contentContainerStyle={styles.searchResultsContent}
+            />
+          ) : (
+            <View style={styles.noResultsContainer}>
+              <Ionicons name="search" size={24} color="rgba(255,255,255,0.4)" />
+              <Text style={styles.noResultsText}>No locations found</Text>
+              <Text style={styles.noResultsSubtext}>Try a different search term</Text>
+            </View>
+          )}
+        </View>
+      )}
 
       <Animated.View 
         style={[
@@ -1082,104 +1131,94 @@ const styles = StyleSheet.create({
     right: 12,
     top: 10,
   },
+  searchResultsContainer: {
+    position: 'absolute',
+    top: Platform.OS === 'android' ? StatusBar.currentHeight + 85 : 105,
+    left: 20,
+    right: 20,
+    maxHeight: 250,
+    backgroundColor: 'rgba(26, 26, 46, 0.98)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 230, 118, 0.3)',
+    zIndex: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 8,
+    overflow: 'hidden',
+  },
   searchResultsList: {
-  maxHeight: 240,
-},
-searchResultsContent: {
-  paddingVertical: 8,
-},
-searchLoadingContainer: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'center',
-  paddingVertical: 20,
-  paddingHorizontal: 16,
-},
-
-searchLoadingText: {
-  color: 'rgba(255, 255, 255, 0.8)',
-  fontSize: 14,
-  marginLeft: 8,
-},
-
-
-noResultsContainer: {
-  alignItems: 'center',
-  justifyContent: 'center',
-  paddingVertical: 30,
-  paddingHorizontal: 20,
-},
-
-noResultsText: {
-  color: 'rgba(255, 255, 255, 0.8)',
-  fontSize: 16,
-  fontWeight: '600',
-  marginTop: 8,
-  textAlign: 'center',
-},
-
-noResultsSubtext: {
-  color: 'rgba(255, 255, 255, 0.5)',
-  fontSize: 12,
-  marginTop: 4,
-  textAlign: 'center',
-},
-searchResultsContainer: {
-  position: 'absolute',
-  top: Platform.OS === 'android' ? StatusBar.currentHeight + 85 : 105,
-  left: 20,
-  right: 20,
-  maxHeight: 250,
-  backgroundColor: 'rgba(26, 26, 46, 0.98)',
-  borderRadius: 12,
-  borderWidth: 1,
-  borderColor: 'rgba(0, 230, 118, 0.3)',
-  zIndex: 15,
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: 4 },
-  shadowOpacity: 0.3,
-  shadowRadius: 6,
-  elevation: 8,
-  overflow: 'hidden', // Add this to prevent content overflow
-},
-
-searchResultItem: {
-  paddingVertical: 14,
-  paddingHorizontal: 16,
-  flexDirection: 'row',
-  alignItems: 'center',
-  minHeight: 60, // Ensure minimum height
-  borderBottomWidth: StyleSheet.hairlineWidth,
-  borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-},
-
-searchResultIconContainer: {
-  width: 36,
-  height: 36,
-  borderRadius: 18,
-  backgroundColor: 'rgba(0, 230, 118, 0.15)',
-  justifyContent: 'center',
-  alignItems: 'center',
-  marginRight: 12,
-},
-
-searchResultTextContainer: {
-  flex: 1,
-  justifyContent: 'center',
-},
-
-searchResultTitle: {
-  color: '#FFFFFF',
-  fontSize: 15,
-  fontWeight: '600',
-  marginBottom: 2,
-},
-
-searchResultSubtitle: {
-  color: 'rgba(255, 255, 255, 0.6)',
-  fontSize: 12,
-  lineHeight: 16,
-},
+    maxHeight: 240,
+  },
+  searchResultsContent: {
+    paddingVertical: 8,
+  },
+  searchLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+  },
+  searchLoadingText: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 14,
+    marginLeft: 8,
+  },
+  noResultsContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 30,
+    paddingHorizontal: 20,
+  },
+  noResultsText: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  noResultsSubtext: {
+    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: 12,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  searchResultItem: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 60,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  searchResultIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0, 230, 118, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  searchResultTextContainer: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  searchResultTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  searchResultSubtitle: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 12,
+    lineHeight: 16,
+  },
   drawer: { position: 'absolute', top: 0, right: -DRAWER_WIDTH, width: DRAWER_WIDTH, height: '100%', zIndex: 20 },
   drawerContent: { flex: 1, borderLeftWidth: 1, borderLeftColor: 'rgba(0,230,118,0.3)' },
   drawerHeader: {

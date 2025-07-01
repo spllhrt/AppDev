@@ -21,14 +21,14 @@ pollutionApiClient.interceptors.request.use(async (config) => {
 /**
  * Classify pollution source by location and pollutant data
  * @param {{ lat: number, lon: number, pollutants: { pm2_5: number, no2?: number, so2?: number } }} data
- * @returns {Promise<{ source: string }>} e.g. { source: 'Traffic' }
+ * @returns {Promise<{ predicted_source: string, confidence: number }>}
  */
 export const classifyPollutionSource = async (data) => {
   try {
     console.log('Pollution API: Classifying pollution source with data:', data);
-    
+
     const response = await pollutionApiClient.post("/classify", data, {
-      headers: { 
+      headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
       },
@@ -64,6 +64,31 @@ export const classifyPollutionSource = async (data) => {
         status: 'UNKNOWN_ERROR',
       };
     }
+  }
+};
+
+/**
+ * Admin: Fetch pollution classification logs
+ * @param {{ startDate?: string, endDate?: string, sourceType?: string }} [params]
+ * @returns {Promise<{ success: boolean, count: number, data: object[] }>}
+ */
+export const getPollutionClassificationLogs = async (params = {}) => {
+  try {
+    const response = await pollutionApiClient.get("/pollution-sources", {
+      params,
+      headers: {
+        Accept: "application/json",
+      },
+    });
+
+    console.log("Pollution API: Retrieved logs:", response.data);
+    return response.data;
+  } catch (error) {
+    console.error("Pollution API: Failed to fetch logs:", error);
+    throw {
+      message: error?.response?.data?.message || "Failed to fetch classification logs",
+      status: error?.response?.status || "UNKNOWN",
+    };
   }
 };
 

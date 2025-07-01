@@ -1,4 +1,4 @@
-// AdminNavigator.js - Enhanced with Drawer Navigation, Analytics, Cross-Platform Alerts, and History Screen
+// AdminNavigator.js - Enhanced with Pollution Source Insights
 import React, { useState } from 'react';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -19,6 +19,7 @@ import AdminProfileScreen from '../screens/admin/ProfileScreen';
 import AdminAnalyticsScreen from '../screens/admin/AnalyticsScreen';
 import AdminUsersScreen from '../screens/admin/UsersScreen';
 import AdminHistoryScreen from '../screens/admin/HistoryScreen';
+import AdminPollutionSourcesScreen from '../screens/admin/PollutionSource'; // New import
 
 const Tab = createBottomTabNavigator();
 const Drawer = createDrawerNavigator();
@@ -148,8 +149,14 @@ const CustomDrawerContent = ({ navigation }) => {
       iconOutline: 'people-outline'
     },
     {
+      name: 'PollutionSources',
+      title: 'Pollution Sources',
+      icon: 'warning',
+      iconOutline: 'warning-outline'
+    },
+    {
       name: 'History',
-      title: 'Activity History',
+      title: 'Health Risk Records',
       icon: 'time',
       iconOutline: 'time-outline'
     }
@@ -160,7 +167,7 @@ const CustomDrawerContent = ({ navigation }) => {
       <View style={styles.drawerHeader}>
         <Ionicons name="shield-checkmark" size={40} color="#3b82f6" />
         <Text style={styles.drawerHeaderTitle}>Admin Panel</Text>
-        <Text style={styles.drawerHeaderSubtitle}>Management Console</Text>
+        <Text style={styles.drawerHeaderSubtitle}>Environmental Management</Text>
         {user && (
           <View style={styles.userInfo}>
             <Text style={styles.userNameText}>
@@ -222,7 +229,7 @@ const AdminTabNavigator = () => {
         tabBarIcon: ({ focused, color, size }) => {
           let iconName;
           if (route.name === 'AdminDashboard') {
-            iconName = focused ? 'dashboard' : 'dashboard-outline';
+            iconName = focused ? 'home' : 'home-outline';
           } else if (route.name === 'AdminProfile') {
             iconName = focused ? 'person' : 'person-outline';
           }
@@ -314,10 +321,21 @@ const AdminNavigator = () => {
       />
       
       <Drawer.Screen
+        name="PollutionSources"
+        component={AdminPollutionSourcesScreen}
+        options={{
+          title: 'Pollution Sources',
+          drawerIcon: ({ color, size }) => (
+            <Ionicons name="warning-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      
+      <Drawer.Screen
         name="History"
         component={AdminHistoryScreen}
         options={{
-          title: 'Activity History',
+          title: 'Health Risk Records',
           drawerIcon: ({ color, size }) => (
             <Ionicons name="time-outline" size={size} color={color} />
           ),

@@ -22,6 +22,7 @@ const AqiScreen = ({ navigation, route }) => {
   const [showMap, setShowMap] = useState(false);
   const [useGPS, setUseGPS] = useState(false);
   const [pollutionSource, setPollutionSource] = useState(null);
+  const [displayLocationName, setDisplayLocationName] = useState('');
 
   // Get parameters from navigation
   const { cityName, lat, lon } = route?.params || {};
@@ -30,79 +31,185 @@ const AqiScreen = ({ navigation, route }) => {
   useEffect(() => { 
     initializeAQI(); 
   }, [useGPS, cityName, lat, lon]);
-
-  const initializeAQI = async () => {
+const initializeAQI = async () => {
+  try {
+    setLoading(true);
+    let coords;
+    let locationName = '';
+    
     try {
-      setLoading(true);
-      let coords;
-      
-      // Use parameter location if provided
+      // Priority 1: Use parameter location if provided
       if (isParameterLocation) {
-        coords = { latitude: lat, longitude: lon, name: cityName };
-      } else {
-        coords = useGPS || !user?.city ? await getCurrentLocation() : await geocodeCity(user.city).catch(() => getCurrentLocation());
+        coords = { latitude: lat, longitude: lon };
+        locationName = cityName;
+        const address = await reverseGeocode(lat, lon);
+        locationName = address?.city || address?.region || cityName;
+      } 
+      // Priority 2: Use GPS if enabled
+      else if (useGPS) {
+        coords = await getCurrentLocation();
+        const address = await reverseGeocode(coords.latitude, coords.longitude);
+        locationName = address?.city || address?.region || 'Current Location';
       }
-      
-      if (coords) {
-        await fetchAQIData(coords.latitude, coords.longitude);
-        setLocation(coords);
+      // Priority 3: Use user's city from profile
+      else if (user?.city) {
+        coords = await geocodeCity(user.city);
+        if (coords) {
+          const address = await reverseGeocode(coords.latitude, coords.longitude);
+          locationName = address?.city || address?.region || user.city;
+        }
       }
-    } catch (error) {
-      Alert.alert('AQI Error', 'Failed to load air quality data.', [{ text: 'Retry', onPress: initializeAQI }, { text: 'Cancel', style: 'cancel' }]);
-    } finally {
-      setLoading(false);
+      // Fallback: Use GPS as last resort
+      else {
+        coords = await getCurrentLocation();
+        const address = await reverseGeocode(coords.latitude, coords.longitude);
+        locationName = address?.city || address?.region || 'Current Location';
+      }
+    } catch (geocodeError) {
+      console.log('Geocoding error, using fallback Manila coordinates:', geocodeError);
+      coords = { latitude: 14.5995, longitude: 120.9842 };
+      locationName = 'Manila';
     }
-  };
+    
+    if (coords) {
+      setLocation({ ...coords, name: locationName });
+      setDisplayLocationName(locationName);
+      await fetchAQIData(coords.latitude, coords.longitude);
+    }
+  } catch (error) {
+    Alert.alert('AQI Error', 'Failed to load air quality data.', [
+      { text: 'Retry', onPress: initializeAQI }, 
+      { text: 'Cancel', style: 'cancel' }
+    ]);
+  } finally {
+    setLoading(false);
+  }
+};
 
-    const getLocationDisplayText = () => {
-    if (isParameterLocation) {
-      return cityName;
+  const reverseGeocode = async (latitude, longitude) => {
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10`,
+      {
+        headers: {
+          'User-Agent': 'YourAppName/1.0 (your@email.com)' // Required by Nominatim usage policy
+        }
+      }
+    );
+    
+    // First check if response is HTML
+    const text = await response.text();
+    if (text.startsWith('<!DOCTYPE html>') || text.startsWith('<')) {
+      throw new Error('Received HTML response instead of JSON');
     }
-    return useGPS ? 'Current Location' : user?.city || 'Unknown Location';
-  };
+    
+    const data = JSON.parse(text);
+    return {
+      city: data.address?.city || data.address?.town,
+      region: data.address?.state || data.address?.region,
+      country: data.address?.country
+    };
+  } catch (error) {
+    console.log('Reverse geocoding failed:', error);
+    return null;
+  }
+};
+
+const geocodeCity = async (city) => {
+  try {
+    // First try with Philippines-specific query
+    let response = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}, Philippines&format=json&limit=1`,
+      {
+        headers: {
+          'User-Agent': 'YourAppName/1.0 (your@email.com)' // Required by Nominatim usage policy
+        }
+      }
+    );
+    
+    // Check if response is HTML (indicating an error)
+    const text = await response.text();
+    if (text.startsWith('<!DOCTYPE html>') || text.startsWith('<')) {
+      throw new Error('Received HTML response instead of JSON');
+    }
+    
+    const data = JSON.parse(text);
+    
+    if (data.length > 0) {
+      return {
+        latitude: parseFloat(data[0].lat),
+        longitude: parseFloat(data[0].lon)
+      };
+    }
+    
+    // Fallback to our predefined city coordinates if Nominatim fails
+    const philippineCities = {
+      'manila': { lat: 14.5995, lon: 120.9842 },
+      'makati': { lat: 14.5547, lon: 121.0244 },
+      'quezon city': { lat: 14.6760, lon: 121.0437 },
+      'cebu': { lat: 10.3157, lon: 123.8854 },
+      'davao': { lat: 7.1907, lon: 125.4553 },
+      // Add more cities as needed
+    };
+    
+    const normalizedCity = city.toLowerCase().trim();
+    if (philippineCities[normalizedCity]) {
+      return philippineCities[normalizedCity];
+    }
+    
+    throw new Error('City not found');
+  } catch (error) {
+    console.log('Geocoding failed:', error);
+    throw error;
+  }
+};
+
   const getCurrentLocation = async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') throw new Error('Location permission denied');
-    const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced, timeout: 15000, maximumAge: 300000 });
-    return { latitude: location.coords.latitude, longitude: location.coords.longitude };
-  };
-
-  const geocodeCity = async (city) => {
-    const queries = [`${city}, Philippines`, city, city.replace(/\s+City$/i, '').trim()];
-    for (const query of queries) {
-      try {
-        const response = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=5&language=en&format=json`);
-        if (!response.ok) continue;
-        const data = await response.json();
-        if (data.results && data.results.length > 0) {
-          const result = data.results.find(r => r.country === 'Philippines') || data.results[0];
-          return { latitude: result.latitude, longitude: result.longitude, name: result.name, country: result.country };
-        }
-      } catch (error) { continue; }
-    }
-    throw new Error(`Location "${city}" not found`);
+    const location = await Location.getCurrentPositionAsync({ 
+      accuracy: Location.Accuracy.Balanced, 
+      timeout: 15000, 
+      maximumAge: 300000 
+    });
+    return { 
+      latitude: location.coords.latitude, 
+      longitude: location.coords.longitude 
+    };
   };
 
   const fetchAQIData = async (lat, lon) => {
-    const response = await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&hourly=pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone,aerosol_optical_depth,dust,uv_index,ammonia&forecast_days=5&timezone=auto`);
-    if (!response.ok) throw new Error(`AQI API error: ${response.status}`);
-    const data = await response.json();
-    if (!data.hourly || !data.hourly.pm2_5) throw new Error('Invalid AQI data');
-    
-    const processedData = { ...data, daily: calculateDailyAQI(data.hourly) };
-    
-    // Classify pollution source
-    const currentPM25 = data.hourly.pm2_5[0] || 0;
-    const currentNO2 = data.hourly.nitrogen_dioxide[0] || 0;
-    const currentSO2 = data.hourly.sulphur_dioxide[0] || 0;
-    await classifySource(lat, lon, currentPM25, currentNO2, currentSO2);
+    try {
+      const response = await fetch(
+        `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&hourly=pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone,aerosol_optical_depth,dust,uv_index,ammonia&forecast_days=5&timezone=auto`
+      );
+      if (!response.ok) throw new Error(`AQI API error: ${response.status}`);
+      const data = await response.json();
+      if (!data.hourly?.pm2_5) throw new Error('Invalid AQI data');
+      
+      const processedData = { ...data, daily: calculateDailyAQI(data.hourly) };
+      setAqiData(processedData);
 
-    setAqiData(processedData);
+      // Classify pollution source using the same coordinates
+      const currentPM25 = data.hourly.pm2_5[0] || 0;
+      const currentNO2 = data.hourly.nitrogen_dioxide[0] || 0;
+      const currentSO2 = data.hourly.sulphur_dioxide[0] || 0;
+      
+      await classifySource(lat, lon, currentPM25, currentNO2, currentSO2);
+    } catch (error) {
+      console.error('Failed to fetch AQI data:', error);
+      throw error;
+    }
   };
-  
+
   const classifySource = async (lat, lon, pm25, no2 = 0, so2 = 0) => {
     try {
-      const result = await classifyPollutionSource({ lat, lon, pollutants: { pm2_5: pm25, no2, so2 } });
+      console.log(`Classifying source for ${lat}, ${lon}`);
+      const result = await classifyPollutionSource({
+        lat,
+        lon, 
+        pollutants: { pm2_5: pm25, no2, so2 }
+      });
       setPollutionSource(result.source);
     } catch (error) {
       console.log('Source classification failed:', error.message);
@@ -110,6 +217,11 @@ const AqiScreen = ({ navigation, route }) => {
     }
   };
 
+   const getLocationDisplayText = () => {
+    if (isParameterLocation) return displayLocationName || cityName;
+    return displayLocationName || (useGPS ? 'Current Location' : user?.city || 'Unknown Location');
+  };
+  
   const calculateDailyAQI = (hourly) => {
     const days = [];
     for (let i = 0; i < 5; i++) {

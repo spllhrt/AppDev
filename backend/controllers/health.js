@@ -276,7 +276,6 @@ Respond ONLY with the JSON object, no additional text.
     }
 }
 
-// Update health profile
 exports.updateHealthProfile = async (req, res, next) => {
     try {
         const userId = req.user.id;
@@ -291,33 +290,21 @@ exports.updateHealthProfile = async (req, res, next) => {
             outdoorExposure
         } = req.body;
 
-        // Validate age if provided
-        if (age && (age < 1 || age > 120)) {
-            return res.status(400).json({
-                success: false,
-                message: "Age must be between 1 and 120"
-            });
-        }
-
-        // Validate gender if provided
         const validGenders = ['male', 'female', 'other', 'prefer_not_to_say'];
-        if (gender && !validGenders.includes(gender)) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid gender. Must be one of: " + validGenders.join(', ')
-            });
-        }
-
-        // Validate outdoor exposure if provided
         const validExposureLevels = ['low', 'moderate', 'high'];
-        if (outdoorExposure && !validExposureLevels.includes(outdoorExposure)) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid outdoor exposure level. Must be one of: " + validExposureLevels.join(', ')
-            });
+
+        if (age && (age < 1 || age > 120)) {
+            return res.status(400).json({ success: false, message: "Age must be between 1 and 120" });
         }
 
-        // Build update object
+        if (gender && !validGenders.includes(gender)) {
+            return res.status(400).json({ success: false, message: "Invalid gender. Must be one of: " + validGenders.join(', ') });
+        }
+
+        if (outdoorExposure && !validExposureLevels.includes(outdoorExposure)) {
+            return res.status(400).json({ success: false, message: "Invalid outdoor exposure level. Must be one of: " + validExposureLevels.join(', ') });
+        }
+
         const updateData = {};
         if (age !== undefined) updateData.age = age;
         if (gender !== undefined) updateData.gender = gender;
@@ -328,21 +315,38 @@ exports.updateHealthProfile = async (req, res, next) => {
         if (hasRespiratoryIssues !== undefined) updateData.hasRespiratoryIssues = hasRespiratoryIssues;
         if (outdoorExposure !== undefined) updateData.outdoorExposure = outdoorExposure;
 
-        const user = await User.findByIdAndUpdate(userId, updateData, {
+        let user = await User.findByIdAndUpdate(userId, updateData, {
             new: true,
             runValidators: true
         });
 
         if (!user) {
-            return res.status(404).json({
-                success: false,
-                message: "User not found"
-            });
+            return res.status(404).json({ success: false, message: "User not found" });
         }
+
+        // Clustering logic here:
+        const clusters = [];
+
+        if (user.age > 60 && (user.hasAsthma || user.hasRespiratoryIssues)) {
+            clusters.push("Elderly Respiratory");
+        }
+        if (user.isSmoker) {
+            clusters.push("Smokers");
+        }
+        if (user.age < 18 && user.outdoorExposure === "high") {
+            clusters.push("Outdoor Youth");
+        }
+        if (clusters.length === 0) {
+            clusters.push("General Population");
+        }
+
+        user.clusters = clusters;
+        await user.save();
 
         return res.status(200).json({
             success: true,
             message: "Health profile updated successfully",
+            clusters: user.clusters,
             healthProfile: {
                 age: user.age,
                 gender: user.gender,
@@ -364,6 +368,7 @@ exports.updateHealthProfile = async (req, res, next) => {
         });
     }
 };
+
 
 // Get health profile
 exports.getHealthProfile = async (req, res, next) => {

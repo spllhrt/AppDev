@@ -76,6 +76,10 @@ const userSchema = new mongoose.Schema({
         enum: ['low', 'moderate', 'high'],
         default: 'moderate'
     },
+    clusters: {
+        type: [String],
+        default: []
+    },
     // Store latest assessment results
     // Updated lastAssessment field for User schema
     lastAssessment: {
