@@ -20,6 +20,7 @@ const HomeScreen = () => {
   const [aqiData, setAqiData] = useState(null);
   const [location, setLocation] = useState(null);
   const [displayLocationName, setDisplayLocationName] = useState('');
+  const [philippineCitiesAqi, setPhilippineCitiesAqi] = useState([]);
 
   const { user } = useSelector(state => state.auth || {});
   const userModel = user || { name: 'User', city: 'Manila', country: 'Philippines' };
@@ -31,6 +32,7 @@ const HomeScreen = () => {
 
   useEffect(() => {
     initializeAQI();
+    fetchMajorCitiesAqi();
   }, [useGPS]);
 
   useEffect(() => {
@@ -42,6 +44,57 @@ const HomeScreen = () => {
 
   const handleChatPress = () => {
     navigation.navigate('Chatbot');
+  };
+
+  // Fetch AQI for major Philippine cities
+  const fetchMajorCitiesAqi = async () => {
+    const cities = [
+      { name: 'Manila', lat: 14.5995, lon: 120.9842 },
+      { name: 'Quezon City', lat: 14.6760, lon: 121.0437 },
+      { name: 'Makati', lat: 14.5547, lon: 121.0244 },
+      { name: 'Cebu', lat: 10.3157, lon: 123.8854 },
+      { name: 'Davao', lat: 7.1907, lon: 125.4553 },
+      { name: 'Baguio', lat: 16.4023, lon: 120.5960 },
+      { name: 'Cagayan de Oro', lat: 8.4542, lon: 124.6319 },
+      { name: 'Iloilo', lat: 10.7202, lon: 122.5621 },
+      { name: 'Bacolod', lat: 10.6407, lon: 122.9687 },
+      { name: 'Zamboanga', lat: 6.9214, lon: 122.0790 }
+    ];
+
+    try {
+      const aqiPromises = cities.map(async city => {
+        try {
+          const response = await fetch(
+            `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${city.lat}&longitude=${city.lon}&hourly=pm2_5&forecast_days=1&timezone=auto`
+          );
+          if (!response.ok) return null;
+          const data = await response.json();
+          if (!data.hourly?.pm2_5) return null;
+          
+          // Calculate average PM2.5 for today
+          const pm25Values = data.hourly.pm2_5.filter(val => val !== null);
+          const avgPM25 = pm25Values.reduce((sum, val) => sum + val, 0) / pm25Values.length;
+          const aqi = pm25ToAQI(avgPM25);
+          
+          return {
+            ...city,
+            aqi,
+            category: getAQICategory(aqi)
+          };
+        } catch (error) {
+          console.error(`Failed to fetch AQI for ${city.name}:`, error);
+          return null;
+        }
+      });
+
+      const results = await Promise.all(aqiPromises);
+      const validResults = results.filter(city => city !== null);
+      validResults.sort((a, b) => a.aqi - b.aqi); // Sort by AQI (best to worst)
+      
+      setPhilippineCitiesAqi(validResults);
+    } catch (error) {
+      console.error('Failed to fetch cities AQI:', error);
+    }
   };
 
   // AQI Functions from AQIScreen
@@ -420,6 +473,7 @@ Format your response as a JSON object with a single 'text' property containing t
 
   const onRefresh = () => {
     initializeAQI();
+    fetchMajorCitiesAqi();
   };
 
   if (loading) {
@@ -455,6 +509,10 @@ Format your response as a JSON object with a single 'text' property containing t
   const currentAQI = aqiData.daily[0];
   const aqiInfo = getAQICategory(currentAQI.aqi);
   const pollutants = getCurrentPollutants();
+
+  // Get top 3 best and worst cities
+  const bestCities = philippineCitiesAqi.slice(0, 3);
+  const worstCities = [...philippineCitiesAqi].reverse().slice(0, 3);
 
   return (
     <View style={styles.container}>
@@ -557,6 +615,43 @@ Format your response as a JSON object with a single 'text' property containing t
               </View>
             )}
 
+            {/* Cities AQI Bulletin */}
+            {philippineCitiesAqi.length > 0 && (
+              <View style={styles.bulletinSection}>
+                <Text style={styles.sectionTitle}>Philippines Air Quality Bulletin</Text>
+                
+                <View style={styles.bulletinRow}>
+                  {/* Best Cities */}
+                  <View style={styles.bulletinColumn}>
+                    <Text style={styles.bulletinSubtitle}>Cleanest Air</Text>
+                    {bestCities.map((city, index) => (
+                      <View key={`best-${index}`} style={styles.cityItem}>
+                        <Text style={styles.cityName}>{city.name}</Text>
+                        <View style={styles.cityAqiContainer}>
+                          <Text style={[styles.cityAqi, { color: city.category.color }]}>{city.aqi}</Text>
+                          <View style={[styles.cityAqiDot, { backgroundColor: city.category.color }]} />
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                  
+                  {/* Worst Cities */}
+                  <View style={styles.bulletinColumn}>
+                    <Text style={styles.bulletinSubtitle}>Worst Air Quality</Text>
+                    {worstCities.map((city, index) => (
+                      <View key={`worst-${index}`} style={styles.cityItem}>
+                        <Text style={styles.cityName}>{city.name}</Text>
+                        <View style={styles.cityAqiContainer}>
+                          <Text style={[styles.cityAqi, { color: city.category.color }]}>{city.aqi}</Text>
+                          <View style={[styles.cityAqiDot, { backgroundColor: city.category.color }]} />
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              </View>
+            )}
+
             {/* Health Recommendation */}
             <View style={styles.healthSection}>
               <TouchableOpacity style={styles.healthCard} onPress={() => navigation.navigate('Health')}>
@@ -575,11 +670,10 @@ Format your response as a JSON object with a single 'text' property containing t
 
             {/* Quick Access */}
             <View style={styles.quickSection}>
-              <Text style={styles.sectionTitle}>Quick Access</Text>
               <View style={styles.quickGrid}>
                 {[
                   { icon: 'cloud-outline', title: 'Weather Forecast', screen: 'Weather' },
-                  { icon: 'speedometer-outline', title: 'Air Quality', screen: 'Aqi' }
+                  { icon: 'speedometer-outline', title: 'Air Quality', screen: 'Aqi' },
                 ].map((item, index) => (
                   <TouchableOpacity 
                     key={index} 
@@ -668,6 +762,48 @@ const styles = StyleSheet.create({
   advisoryIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(0,230,118,0.2)', justifyContent: 'center', alignItems: 'center', marginRight: 12, marginTop: 2 },
   advisoryText: { color: 'rgba(255,255,255,0.9)', fontSize: 14, fontWeight: '500', flex: 1, lineHeight: 20 },
 
+  bulletinSection: { paddingHorizontal: 20, marginBottom: 24 },
+  bulletinRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 },
+  bulletinColumn: { width: '48%' },
+  bulletinSubtitle: { 
+    color: '#FFFFFF', 
+    fontSize: 14, 
+    fontWeight: '600', 
+    marginBottom: 12,
+    paddingBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,230,118,0.3)'
+  },
+  cityItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.05)'
+  },
+  cityName: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 13,
+    flex: 1
+  },
+  cityAqiContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
+  },
+  cityAqi: {
+    fontSize: 14,
+    fontWeight: '600',
+    minWidth: 30,
+    textAlign: 'right'
+  },
+  cityAqiDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5
+  },
+
   healthSection: { paddingHorizontal: 20, marginBottom: 24 },
   healthCard: { backgroundColor: 'rgba(0,230,118,0.1)', borderRadius: 16, padding: 20, borderColor: 'rgba(0,230,118,0.3)', borderWidth: 1 },
   healthContent: { flexDirection: 'row', alignItems: 'center' },
@@ -676,7 +812,7 @@ const styles = StyleSheet.create({
   healthTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '600', marginBottom: 4 },
   healthDesc: { color: 'rgba(255,255,255,0.7)', fontSize: 13, lineHeight: 18 },
 
-  quickSection: { paddingHorizontal: 20, paddingBottom:100},
+  quickSection: { paddingHorizontal: 20, paddingBottom: 100 },
   sectionTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700', marginBottom: 16 },
   quickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   quickItem: { width: (width - 52) / 2 },
@@ -685,42 +821,43 @@ const styles = StyleSheet.create({
   quickTitle: { color: 'rgba(255,255,255,0.9)', fontSize: 12, fontWeight: '500', textAlign: 'center' },
 
   chatContainer: {
-  position: 'absolute',
-  bottom: 120,
-  right: 20,
-  alignItems: 'flex-end',
-},
-chatButton: {
-  width: 56,
-  height: 56,
-  borderRadius: 28,
-  backgroundColor: 'transparent',
-  justifyContent: 'center',
-  alignItems: 'center',
-  borderWidth: 2,
-  borderColor: 'rgba(0,230,118,0.8)',
-  shadowColor: '#00E676',
-  shadowOffset: { width: 0, height: 4 },
-  shadowOpacity: 0.3,
-  shadowRadius: 8,
-  elevation: 8,
-},
-chatLabel: {
-  position: 'absolute',
-  right: 66,
-  top: 16,
-  backgroundColor: 'rgba(0,0,0,0.9)',
-  paddingHorizontal: 12,
-  paddingVertical: 8,
-  borderRadius: 12,
-  borderColor: 'rgba(0,230,118,0.3)',
-  borderWidth: 1,
-},
-chatLabelText: {
-  color: 'rgba(255,255,255,0.9)',
-  fontSize: 12,
-  fontWeight: '500',
-},
+    position: 'absolute',
+    bottom: 120,
+    right: 20,
+    alignItems: 'flex-end',
+  },
+  chatButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(0,230,118,0.8)',
+    shadowColor: '#00E676',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  chatLabel: {
+    position: 'absolute',
+    right: 66,
+    top: 16,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderColor: 'rgba(0,230,118,0.3)',
+    borderWidth: 1,
+  },
+  chatLabelText: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 12,
+    fontWeight: '500',
+  },
   bottomSpace: { height: 0 }
 });
+
 export default HomeScreen;
