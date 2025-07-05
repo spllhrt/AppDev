@@ -15,6 +15,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import HomeScreen from '../screens/user/HomeScreen';
 import WeatherScreen from '../screens/user/WeatherScreen';
+import ReportScreen from '../screens/user/ReportScreen';
+import MyReportScreen from '../screens/user/MyReportsScreen';
 import AqiScreen from '../screens/user/AqiScreen';
 import ProfileScreen from '../screens/user/ProfileScreen';
 import SettingsScreen from '../screens/SettingsScreen';
@@ -250,6 +252,22 @@ const UserNavigator = () => {
         }}
       />
       
+      <Stack.Screen 
+        name="Report" 
+        component={ReportScreen}
+        options={{
+          title: 'Report',
+        }}
+      />
+
+      <Stack.Screen 
+        name="MyReport" 
+        component={MyReportScreen}
+        options={{
+          title: 'MyReport',
+        }}
+      />
+
       <Stack.Screen 
         name="Weather" 
         component={WeatherScreen}

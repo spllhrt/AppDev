@@ -467,7 +467,7 @@ Format your response as a JSON object with a single 'text' property containing t
         lon: location?.longitude
       });
     } else {
-      Alert.alert('Coming Soon', 'This feature is coming soon!');
+      navigation.navigate(screen);
     }
   };
 
@@ -674,6 +674,8 @@ Format your response as a JSON object with a single 'text' property containing t
                 {[
                   { icon: 'cloud-outline', title: 'Weather Forecast', screen: 'Weather' },
                   { icon: 'speedometer-outline', title: 'Air Quality', screen: 'Aqi' },
+                  { icon: 'megaphone-outline', title: 'Report', screen: 'Report' },
+                  { icon: 'list-outline', title: 'My Reports', screen: 'MyReport' },
                 ].map((item, index) => (
                   <TouchableOpacity 
                     key={index} 

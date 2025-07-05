@@ -19,7 +19,6 @@ import AdminProfileScreen from '../screens/admin/ProfileScreen';
 import AdminAnalyticsScreen from '../screens/admin/AnalyticsScreen';
 import AdminUsersScreen from '../screens/admin/UsersScreen';
 import AdminHistoryScreen from '../screens/admin/HistoryScreen';
-import ReportsScreen from '../screens/admin/ReportsScreen';
 import AdminPollutionSourcesScreen from '../screens/admin/PollutionSource'; // New import
 
 const Tab = createBottomTabNavigator();
@@ -160,12 +159,6 @@ const CustomDrawerContent = ({ navigation }) => {
       title: 'Health Risk Records',
       icon: 'time',
       iconOutline: 'time-outline'
-    },
-    {
-      name: 'Reports',
-      title: 'Incident Reports',
-      icon: 'list',
-      iconOutline: 'list-outline'
     }
   ];
 
@@ -345,16 +338,6 @@ const AdminNavigator = () => {
           title: 'Health Risk Records',
           drawerIcon: ({ color, size }) => (
             <Ionicons name="time-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Drawer.Screen
-        name="Reports"
-        component={ReportsScreen}
-        options={{
-          title: 'Incident Reports',
-          drawerIcon: ({ color, size }) => (
-            <Ionicons name="list-outline" size={size} color={color} />
           ),
         }}
       />
