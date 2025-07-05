@@ -14,6 +14,9 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle, Rect, Line, Text as SvgText, Path, Defs, LinearGradient, Stop } from 'react-native-svg';
+import { Picker } from '@react-native-picker/picker';
+import { getAssessmentHistory } from '../../api/health';
+import { getPollutionClassificationLogs } from '../../api/pollutionSource';
 import { getAllUsers } from '../../api/auth';
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -21,6 +24,9 @@ const { width: screenWidth } = Dimensions.get('window');
 const AdminAnalyticsScreen = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [dateRange, setDateRange] = useState('last30days');
+  const [riskLevelData, setRiskLevelData] = useState([]);
+  const [pollutionSourceData, setPollutionSourceData] = useState([]);
   const [users, setUsers] = useState([]);
   const [analytics, setAnalytics] = useState({
     totalUsers: 0,
@@ -33,37 +39,173 @@ const AdminAnalyticsScreen = () => {
   });
 
   useEffect(() => {
-    fetchAnalyticsData();
-  }, []);
+    fetchAllData();
+  }, [dateRange]);
 
-  const fetchAnalyticsData = async () => {
+  const fetchAllData = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const response = await getAllUsers();
-      const usersData = response.users || [];
-      setUsers(usersData);
-      processAnalyticsData(usersData);
+      await Promise.all([
+        fetchAnalyticsData(),
+        fetchRiskLevelData(),
+        fetchPollutionSourceData()
+      ]);
     } catch (error) {
-      console.error('Error fetching analytics:', error);
-      Alert.alert('Error', 'Failed to load analytics data');
+      console.error('Error fetching data:', error);
+      Alert.alert('Error', 'Failed to load data');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
+  const fetchAnalyticsData = async () => {
+    try {
+      const response = await getAllUsers();
+      const usersData = response.users || [];
+      setUsers(usersData);
+      processAnalyticsData(usersData);
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const fetchRiskLevelData = async () => {
+    try {
+      // Calculate date range
+      const { startDate } = getDateRange();
+      
+      // Fetch risk level data
+      const response = await getAssessmentHistory(1000); // Get all assessments
+      const filteredData = response.assessments.filter(assessment => {
+        if (!startDate) return true;
+        const assessedDate = new Date(assessment.assessedAt);
+        return assessedDate >= startDate;
+      });
+
+      // Process risk levels
+      const riskLevelCounts = {
+        low: 0,
+        moderate: 0,
+        high: 0,
+        very_high: 0
+      };
+      
+      filteredData.forEach(assessment => {
+        const level = assessment.riskLevel;
+        if (riskLevelCounts.hasOwnProperty(level)) {
+          riskLevelCounts[level]++;
+        }
+      });
+
+      const totalAssessments = filteredData.length;
+      const chartData = Object.keys(riskLevelCounts).map(level => ({
+        name: level.charAt(0).toUpperCase() + level.slice(1).replace('_', ' '),
+        count: riskLevelCounts[level],
+        color: getRiskLevelColor(level),
+        percentage: totalAssessments > 0 ? (riskLevelCounts[level] / totalAssessments) * 100 : 0
+      }));
+
+      setRiskLevelData(chartData);
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const fetchPollutionSourceData = async () => {
+    try {
+      // Calculate date range
+      const { startDate, endDate } = getDateRange();
+      
+      // Fetch pollution source data
+      const response = await getPollutionClassificationLogs({
+        startDate: startDate?.toISOString(),
+        endDate: endDate.toISOString()
+      });
+
+      // Process pollution sources
+      const sourceCounts = {};
+      response.data.forEach(item => {
+        const source = item.predicted_source || 'Unknown';
+        sourceCounts[source] = (sourceCounts[source] || 0) + 1;
+      });
+
+      const totalSources = response.count;
+      const chartData = Object.keys(sourceCounts).map(source => ({
+        name: source,
+        count: sourceCounts[source],
+        color: getPollutionSourceColor(source),
+        percentage: totalSources > 0 ? (sourceCounts[source] / totalSources) * 100 : 0
+      }));
+
+      setPollutionSourceData(chartData);
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const getDateRange = () => {
+    const endDate = new Date();
+    let startDate = new Date();
+    
+    switch(dateRange) {
+      case 'last7days':
+        startDate.setDate(startDate.getDate() - 7);
+        break;
+      case 'last30days':
+        startDate.setDate(startDate.getDate() - 30);
+        break;
+      case 'last90days':
+        startDate.setDate(startDate.getDate() - 90);
+        break;
+      case 'alltime':
+      default:
+        startDate = null;
+    }
+    
+    return { startDate, endDate };
+  };
+
+  const getRiskLevelColor = (level) => {
+    const colors = {
+      'low': '#4CAF50',      // Green
+      'moderate': '#FFC107',  // Amber
+      'high': '#FF9800',      // Orange
+      'very_high': '#F44336'  // Red
+    };
+    return colors[level] || '#9E9E9E';
+  };
+
+  const getPollutionSourceColor = (source) => {
+    const sourceColors = {
+      'vehicular': '#FF5722',
+      'industrial': '#607D8B',
+      'construction': '#795548',
+      'wildfire': '#FF9800',
+      'agricultural': '#4CAF50',
+      'residential': '#9C27B0',
+      'default': '#2196F3'
+    };
+    
+    const lowerSource = source.toLowerCase();
+    if (lowerSource.includes('vehicle')) return sourceColors.vehicular;
+    if (lowerSource.includes('industry')) return sourceColors.industrial;
+    if (lowerSource.includes('construct')) return sourceColors.construction;
+    if (lowerSource.includes('wildfire')) return sourceColors.wildfire;
+    if (lowerSource.includes('agricultur')) return sourceColors.agricultural;
+    if (lowerSource.includes('resident')) return sourceColors.residential;
+    return sourceColors.default;
+  };
+
   const processAnalyticsData = (usersData) => {
-    // Filter out admin users from the analytics
     const regularUsersOnly = usersData.filter(user => user.role !== 'admin');
     const totalUsers = regularUsersOnly.length;
     
-    // Count users by role
     const adminUsers = usersData.filter(user => user.role === 'admin').length;
     const regularUsers = regularUsersOnly.length;
     
-    // Count users by status (only for regular users)
     const activeUsers = regularUsersOnly.filter(user => {
-      if (!user.status) return true; // Default to active if no status
+      if (!user.status) return true;
       const status = user.status.toLowerCase();
       return status === 'active' || status === 'verified' || status === 'enabled';
     }).length;
@@ -74,10 +216,8 @@ const AdminAnalyticsScreen = () => {
       return status === 'inactive' || status === 'deactivated' || status === 'suspended' || status === 'disabled';
     }).length;
     
-    // Generate real monthly registration data based on createdAt dates (only regular users)
     const monthlyData = generateRealMonthlyRegistrations(regularUsersOnly);
     
-    // Status distribution for pie chart (only regular users)
     const statusDistribution = [
       {
         name: 'Active',
@@ -92,15 +232,6 @@ const AdminAnalyticsScreen = () => {
         percentage: totalUsers > 0 ? (deactivatedUsers / totalUsers) * 100 : 0,
       }
     ];
-
-    // Debug logging
-    console.log('Analytics Debug:', {
-      totalUsers,
-      activeUsers,
-      deactivatedUsers,
-      statusDistribution,
-      sampleUsers: regularUsersOnly.slice(0, 3).map(u => ({ status: u.status, role: u.role }))
-    });
 
     setAnalytics({
       totalUsers,
@@ -117,17 +248,14 @@ const AdminAnalyticsScreen = () => {
     const currentDate = new Date();
     const monthlyData = [];
     
-    // Initialize 6 months of data
     for (let i = 5; i >= 0; i--) {
       const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
       const monthName = date.toLocaleDateString('en-US', { month: 'short' });
       const year = date.getFullYear();
       const month = date.getMonth();
       
-      // Count actual registrations for this month
       const registrationsCount = usersData.filter(user => {
         if (!user.createdAt) return false;
-        
         const userDate = new Date(user.createdAt);
         return userDate.getFullYear() === year && userDate.getMonth() === month;
       }).length;
@@ -148,19 +276,18 @@ const AdminAnalyticsScreen = () => {
   };
 
   const getTrendData = () => {
-    // Calculate trends based on last month vs current month data
     const currentMonth = analytics.monthlyRegistrations[analytics.monthlyRegistrations.length - 1]?.count || 0;
     const lastMonth = analytics.monthlyRegistrations[analytics.monthlyRegistrations.length - 2]?.count || 0;
     
     return {
       userRegistrationTrend: calculateTrend(currentMonth, lastMonth),
-      activeUsersTrend: Math.round((analytics.activeUsers / analytics.totalUsers) * 100) - 70, // Compare to 70% baseline
+      activeUsersTrend: Math.round((analytics.activeUsers / analytics.totalUsers) * 100) - 70,
     };
   };
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchAnalyticsData();
+    fetchAllData();
   };
 
   const StatCard = ({ title, value, icon, color = '#6366f1', subtitle, trend }) => (
@@ -195,7 +322,6 @@ const AdminAnalyticsScreen = () => {
     const centerX = size / 2;
     const centerY = size / 2;
     
-    // Filter out items with 0 count/percentage and ensure we have valid data
     const validData = data.filter(item => item.count > 0 && item.percentage > 0);
     
     if (validData.length === 0) {
@@ -231,17 +357,14 @@ const AdminAnalyticsScreen = () => {
       <View style={styles.pieChartContainer}>
         <Svg width={size} height={size}>
           <Defs>
-            <LinearGradient id="activeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <Stop offset="0%" stopColor="#10b981" stopOpacity="1" />
-              <Stop offset="100%" stopColor="#059669" stopOpacity="1" />
-            </LinearGradient>
-            <LinearGradient id="deactivatedGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <Stop offset="0%" stopColor="#ef4444" stopOpacity="1" />
-              <Stop offset="100%" stopColor="#dc2626" stopOpacity="1" />
-            </LinearGradient>
+            {validData.map((item, index) => (
+              <LinearGradient key={`gradient-${index}`} id={`gradient-${index}`} x1="0%" y1="0%" x2="100%" y2="100%">
+                <Stop offset="0%" stopColor={item.color} stopOpacity="1" />
+                <Stop offset="100%" stopColor={item.color} stopOpacity="0.8" />
+              </LinearGradient>
+            ))}
           </Defs>
           
-          {/* Background circle for better visibility */}
           <Circle
             cx={centerX}
             cy={centerY}
@@ -256,14 +379,13 @@ const AdminAnalyticsScreen = () => {
             const endAngle = (cumulativePercentage + item.percentage) * 3.6;
             cumulativePercentage += item.percentage;
             
-            // Skip very small slices (less than 1 degree)
             if (endAngle - startAngle < 1) return null;
             
             return (
               <Path
                 key={index}
                 d={createArcPath(startAngle, endAngle, radius, centerX, centerY)}
-                fill={item.name === 'Active' ? "url(#activeGrad)" : "url(#deactivatedGrad)"}
+                fill={`url(#gradient-${index})`}
                 stroke="#fff"
                 strokeWidth="2"
               />
@@ -288,16 +410,15 @@ const AdminAnalyticsScreen = () => {
     if (!data || data.length === 0) {
       return (
         <View style={[styles.lineChartContainer, { height, justifyContent: 'center', alignItems: 'center' }]}>
-          <Text style={styles.noDataText}>No registration data available</Text>
+          <Text style={styles.noDataText}>No data available</Text>
         </View>
       );
     }
 
-    const maxValue = Math.max(...data.map(item => item.count), 1); // Ensure minimum of 1
+    const maxValue = Math.max(...data.map(item => item.count), 1);
     const minValue = Math.min(...data.map(item => item.count));
     const stepX = (width - 80) / Math.max(data.length - 1, 1);
     
-    // Generate Y-axis labels
     const yAxisSteps = 4;
     const yAxisLabels = [];
     for (let i = 0; i <= yAxisSteps; i++) {
@@ -327,7 +448,6 @@ const AdminAnalyticsScreen = () => {
             </LinearGradient>
           </Defs>
           
-          {/* Draw Y-axis grid lines and labels */}
           {yAxisLabels.map((label, index) => {
             const y = height - 40 - ((label / maxValue) * (height - 80));
             return (
@@ -354,7 +474,6 @@ const AdminAnalyticsScreen = () => {
             );
           })}
           
-          {/* Draw the line */}
           <Path
             d={pathData}
             stroke="url(#lineGrad)"
@@ -363,7 +482,6 @@ const AdminAnalyticsScreen = () => {
             strokeLinecap="round"
           />
           
-          {/* Draw circles and month labels */}
           {data.map((item, index) => {
             const x = 40 + index * stepX;
             const y = height - 40 - ((item.count / maxValue) * (height - 80));
@@ -417,15 +535,13 @@ const AdminAnalyticsScreen = () => {
         }
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Analytics Dashboard</Text>
           <Text style={styles.headerSubtitle}>
-            Monitor your platform's performance and user activity
+            Monitor platform performance and environmental data
           </Text>
         </View>
 
-        {/* Statistics Cards Grid */}
         <View style={styles.statsGrid}>
           <View style={styles.statsRow}>
             <StatCard
@@ -461,22 +577,45 @@ const AdminAnalyticsScreen = () => {
           </View>
         </View>
 
-        {/* Charts Section */}
+        <View style={styles.filterContainer}>
+          <Text style={styles.filterLabel}>Date Range:</Text>
+          <View style={styles.pickerContainer}>
+            <Picker
+              selectedValue={dateRange}
+              onValueChange={(itemValue) => setDateRange(itemValue)}
+              style={styles.picker}
+              dropdownIconColor="#64748b"
+            >
+              <Picker.Item label="Last 7 Days" value="last7days" />
+              <Picker.Item label="Last 30 Days" value="last30days" />
+              <Picker.Item label="Last 90 Days" value="last90days" />
+              <Picker.Item label="All Time" value="alltime" />
+            </Picker>
+          </View>
+        </View>
+
         <View style={styles.chartsSection}>
-          {/* User Status Distribution */}
           <View style={styles.chartCard}>
             <Text style={styles.chartTitle}>User Status Distribution</Text>
             <PieChart data={analytics.userStatusDistribution} />
           </View>
 
-          {/* Registration Trends */}
           <View style={styles.chartCard}>
-            <Text style={styles.chartTitle}>Monthly Registration Trends</Text>
+            <Text style={styles.chartTitle}>Health Risk Levels</Text>
+            <PieChart data={riskLevelData} />
+          </View>
+
+          <View style={styles.chartCard}>
+            <Text style={styles.chartTitle}>Pollution Sources</Text>
+            <PieChart data={pollutionSourceData} />
+          </View>
+
+          <View style={styles.chartCard}>
+            <Text style={styles.chartTitle}>Monthly Registrations</Text>
             <LineChart data={analytics.monthlyRegistrations} />
           </View>
         </View>
 
-        {/* Quick Actions */}
         <View style={styles.actionsCard}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
           <View style={styles.actionButtons}>
@@ -599,6 +738,31 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     marginTop: 4,
     fontWeight: '500',
+  },
+  filterContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 10,
+  },
+  filterLabel: {
+    fontSize: 14,
+    color: '#64748b',
+    fontWeight: '500',
+    marginRight: 10,
+  },
+  pickerContainer: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    overflow: 'hidden',
+  },
+  picker: {
+    width: '100%',
+    height: 50,
+    color: '#1e293b',
   },
   chartsSection: {
     padding: 20,
