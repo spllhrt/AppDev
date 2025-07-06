@@ -419,7 +419,7 @@ const AdminAnalyticsScreen = () => {
       >
         <View style={styles.header}>
           <View style={styles.headerTopRow}>
-            <View>
+            <View style={styles.headerContent}>
               <Text style={styles.headerTitle}>Analytics Dashboard</Text>
               <Text style={styles.headerSubtitle}>Monitor platform performance and environmental data</Text>
             </View>
@@ -432,12 +432,32 @@ const AdminAnalyticsScreen = () => {
 
         <View style={styles.statsGrid}>
           <View style={styles.statsRow}>
-            <StatCard title="Total Users" value={analytics.totalUsers.toLocaleString()} icon="people" color="#6366f1" />
-            <StatCard title="Active Users" value={analytics.activeUsers.toLocaleString()} icon="checkmark-circle" color="#10b981" />
+            <StatCard 
+              title="Total Users" 
+              value={analytics.totalUsers.toLocaleString()} 
+              icon="people" 
+              color="#6366f1" 
+            />
+            <StatCard 
+              title="Active Users" 
+              value={analytics.activeUsers.toLocaleString()} 
+              icon="checkmark-circle" 
+              color="#10b981" 
+            />
           </View>
           <View style={styles.statsRow}>
-            <StatCard title="Admin Users" value={analytics.adminUsers.toLocaleString()} icon="shield-checkmark" color="#f59e0b" />
-            <StatCard title="Deactivated" value={analytics.deactivatedUsers.toLocaleString()} icon="ban" color="#ef4444" />
+            <StatCard 
+              title="Admin Users" 
+              value={analytics.adminUsers.toLocaleString()} 
+              icon="shield-checkmark" 
+              color="#f59e0b" 
+            />
+            <StatCard 
+              title="Deactivated" 
+              value={analytics.deactivatedUsers.toLocaleString()} 
+              icon="ban" 
+              color="#ef4444" 
+            />
           </View>
         </View>
 
@@ -484,19 +504,51 @@ const AdminAnalyticsScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
-  scrollView: { flex: 1 },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
-  loadingText: { marginTop: 12, fontSize: 16, color: '#64748b', fontWeight: '500' },
-  header: { padding: 24, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+  container: { 
+    flex: 1, 
+    backgroundColor: '#f8fafc' 
+  },
+  scrollView: { 
+    flex: 1 
+  },
+  loadingContainer: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    backgroundColor: '#f8fafc' 
+  },
+  loadingText: { 
+    marginTop: 12, 
+    fontSize: 16, 
+    color: '#64748b', 
+    fontWeight: '500' 
+  },
+  header: { 
+    padding: 24, 
+    backgroundColor: '#fff', 
+    borderBottomWidth: 1, 
+    borderBottomColor: '#e2e8f0' 
+  },
   headerTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
   },
-  headerTitle: { fontSize: 28, fontWeight: '700', color: '#1e293b' },
-  headerSubtitle: { fontSize: 15, color: '#64748b', marginTop: 4 },
+  headerContent: {
+    flex: 1,
+    marginRight: 16,
+  },
+  headerTitle: { 
+    fontSize: 28, 
+    fontWeight: '700', 
+    color: '#1e293b' 
+  },
+  headerSubtitle: { 
+    fontSize: 15, 
+    color: '#64748b', 
+    marginTop: 4 
+  },
   exportButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -511,29 +563,131 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#6366f1',
   },
-  statsGrid: { padding: 20, gap: 16 },
-  statsRow: { flexDirection: 'row', gap: 16 },
-  statCard: { flex: 1, backgroundColor: '#fff', borderRadius: 16, padding: 20, borderLeftWidth: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
-  statCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
-  statCardTitle: { fontSize: 14, color: '#64748b', fontWeight: '600' },
-  statCardIcon: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  statCardValue: { fontSize: 24, fontWeight: '700' },
-  statCardSubtitle: { fontSize: 12, color: '#94a3b8', marginTop: 4 },
-  filterContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 10 },
-  filterLabel: { fontSize: 14, color: '#64748b', fontWeight: '500', marginRight: 10 },
-  pickerContainer: { flex: 1, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0' },
-  picker: { height: 50 },
-  chartsSection: { padding: 20, gap: 20 },
-  chartCard: { backgroundColor: '#fff', borderRadius: 16, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
-  chartTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b', marginBottom: 20 },
-  pieChartContainer: { alignItems: 'center' },
-  pieChartLegend: { marginTop: 20, alignItems: 'flex-start', gap: 8 },
-  legendItem: { flexDirection: 'row', alignItems: 'center' },
-  legendDot: { width: 10, height: 10, borderRadius: 5, marginRight: 10 },
-  legendText: { fontSize: 14, color: '#475569', fontWeight: '500' },
-  lineChartContainer: { alignItems: 'center' },
-  noDataText: { fontSize: 14, color: '#94a3b8', fontStyle: 'italic' },
-  noDataContainer: { justifyContent: 'center', alignItems: 'center', gap: 8 },
+  statsGrid: { 
+    padding: 20, 
+    gap: 16 
+  },
+  statsRow: { 
+    flexDirection: 'row', 
+    gap: 16 
+  },
+  statCard: { 
+    flex: 1, 
+    backgroundColor: '#fff', 
+    borderRadius: 16, 
+    padding: 20, 
+    borderLeftWidth: 4, 
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 2 }, 
+    shadowOpacity: 0.06, 
+    shadowRadius: 8, 
+    elevation: 3 
+  },
+  statCardHeader: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'flex-start', 
+    marginBottom: 12 
+  },
+  statCardTitle: { 
+    fontSize: 14, 
+    color: '#64748b', 
+    fontWeight: '600' 
+  },
+  statCardIcon: { 
+    width: 44, 
+    height: 44, 
+    borderRadius: 12, 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  statCardValue: { 
+    fontSize: 24, 
+    fontWeight: '700' 
+  },
+  statCardSubtitle: { 
+    fontSize: 12, 
+    color: '#94a3b8', 
+    marginTop: 4 
+  },
+  filterContainer: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    paddingHorizontal: 20, 
+    paddingBottom: 10 
+  },
+  filterLabel: { 
+    fontSize: 14, 
+    color: '#64748b', 
+    fontWeight: '500', 
+    marginRight: 10 
+  },
+  pickerContainer: { 
+    flex: 1, 
+    backgroundColor: '#fff', 
+    borderRadius: 12, 
+    borderWidth: 1, 
+    borderColor: '#e2e8f0' 
+  },
+  picker: { 
+    height: 50 
+  },
+  chartsSection: { 
+    padding: 20, 
+    gap: 20 
+  },
+  chartCard: { 
+    backgroundColor: '#fff', 
+    borderRadius: 16, 
+    padding: 20, 
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 2 }, 
+    shadowOpacity: 0.06, 
+    shadowRadius: 8, 
+    elevation: 3 
+  },
+  chartTitle: { 
+    fontSize: 18, 
+    fontWeight: '700', 
+    color: '#1e293b', 
+    marginBottom: 20 
+  },
+  pieChartContainer: { 
+    alignItems: 'center' 
+  },
+  pieChartLegend: { 
+    marginTop: 20, 
+    alignItems: 'flex-start', 
+    gap: 8 
+  },
+  legendItem: { 
+    flexDirection: 'row', 
+    alignItems: 'center' 
+  },
+  legendDot: { 
+    width: 10, 
+    height: 10, 
+    borderRadius: 5, 
+    marginRight: 10 
+  },
+  legendText: { 
+    fontSize: 14, 
+    color: '#475569', 
+    fontWeight: '500' 
+  },
+  lineChartContainer: { 
+    alignItems: 'center' 
+  },
+  noDataText: { 
+    fontSize: 14, 
+    color: '#94a3b8', 
+    fontStyle: 'italic' 
+  },
+  noDataContainer: { 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    gap: 8 
+  },
 });
 
 export default AdminAnalyticsScreen;
