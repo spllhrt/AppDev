@@ -19,7 +19,6 @@ const AdminDashboard = ({ navigation }) => {
   const { user: currentUser } = useSelector((state) => state.auth);
   const [stats, setStats] = useState({});
   const [recentActivity, setRecentActivity] = useState([]);
-  const [systemHealth, setSystemHealth] = useState({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -42,8 +41,6 @@ const AdminDashboard = ({ navigation }) => {
       setStats({
         totalUsers: totalUsers,
         activeSessions: activeUsers,
-        contentItems: Math.floor(totalUsers * 2.5), // Mock: estimate content items
-        pendingReports: Math.floor(totalUsers * 0.1), // Mock: estimate reports
         adminUsers: adminUsers,
       });
       
@@ -62,13 +59,6 @@ const AdminDashboard = ({ navigation }) => {
       );
       setRecentActivity(mockActivity);
       
-      // Mock system health (in production, this would come from monitoring APIs)
-      setSystemHealth({
-        database: 'healthy',
-        api: 'healthy',
-        storage: 'healthy',
-      });
-      
     } catch (error) {
       Alert.alert('Error', error.message || 'Failed to fetch dashboard data');
       
@@ -76,16 +66,9 @@ const AdminDashboard = ({ navigation }) => {
       setStats({
         totalUsers: 0,
         activeSessions: 0,
-        contentItems: 0,
-        pendingReports: 0,
         adminUsers: 0,
       });
       setRecentActivity([]);
-      setSystemHealth({
-        database: 'unknown',
-        api: 'unknown',
-        storage: 'unknown',
-      });
     } finally {
       setLoading(false);
     }
@@ -155,15 +138,6 @@ const AdminDashboard = ({ navigation }) => {
     }
   };
 
-  const getHealthStatus = (status) => {
-    switch (status) {
-      case 'healthy': return { color: '#27ae60', text: '●' };
-      case 'warning': return { color: '#f39c12', text: '●' };
-      case 'critical': return { color: '#e74c3c', text: '●' };
-      default: return { color: '#95a5a6', text: '●' };
-    }
-  };
-
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -209,54 +183,6 @@ const AdminDashboard = ({ navigation }) => {
             '#27ae60',
             () => navigateToSection('Sessions')
           )}
-          {renderStatCard(
-            'Content Items',
-            stats.contentItems || '0',
-            '📄',
-            '#f39c12',
-            () => navigateToSection('ContentManagement')
-          )}
-          {renderStatCard(
-            'Pending Reports',
-            stats.pendingReports || '0',
-            '⚠️',
-            '#e74c3c',
-            () => navigateToSection('Reports')
-          )}
-        </View>
-      </View>
-
-      {/* System Health */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>System Health</Text>
-        <View style={styles.healthCard}>
-          <View style={styles.healthItem}>
-            <Text style={styles.healthLabel}>Database</Text>
-            <View style={styles.healthStatus}>
-              <Text style={[styles.healthDot, { color: getHealthStatus(systemHealth.database).color }]}>
-                {getHealthStatus(systemHealth.database).text}
-              </Text>
-              <Text style={styles.healthText}>{systemHealth.database || 'Unknown'}</Text>
-            </View>
-          </View>
-          <View style={styles.healthItem}>
-            <Text style={styles.healthLabel}>API Server</Text>
-            <View style={styles.healthStatus}>
-              <Text style={[styles.healthDot, { color: getHealthStatus(systemHealth.api).color }]}>
-                {getHealthStatus(systemHealth.api).text}
-              </Text>
-              <Text style={styles.healthText}>{systemHealth.api || 'Unknown'}</Text>
-            </View>
-          </View>
-          <View style={styles.healthItem}>
-            <Text style={styles.healthLabel}>Storage</Text>
-            <View style={styles.healthStatus}>
-              <Text style={[styles.healthDot, { color: getHealthStatus(systemHealth.storage).color }]}>
-                {getHealthStatus(systemHealth.storage).text}
-              </Text>
-              <Text style={styles.healthText}>{systemHealth.storage || 'Unknown'}</Text>
-            </View>
-          </View>
         </View>
       </View>
 
@@ -412,42 +338,6 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: '#2c3e50',
-  },
-  healthCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  healthItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f2f6',
-  },
-  healthLabel: {
-    fontSize: 16,
-    color: '#2c3e50',
-    fontWeight: '600',
-  },
-  healthStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  healthDot: {
-    fontSize: 16,
-    marginRight: 8,
-  },
-  healthText: {
-    fontSize: 14,
-    color: '#7f8c8d',
-    textTransform: 'capitalize',
   },
   quickActions: {
     flexDirection: 'row',

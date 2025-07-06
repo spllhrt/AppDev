@@ -30,11 +30,11 @@ const HistoryScreen = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({
-    location: '', // Changed from 'city' to 'location'
+    location: '',
     riskLevel: '',
     dateFrom: '',
     dateTo: '',
-    ageGroup: ''
+    actualAge: ''
   });
   const { user } = useSelector((state) => state.auth);
   const navigation = useNavigation();
@@ -72,7 +72,6 @@ const HistoryScreen = () => {
       );
     }
 
-    // Updated to filter by assessment location instead of user city
     if (filters.location.trim() !== '') {
       filtered = filtered.filter(assessment => {
         const location = assessment.assessment?.location || assessment.location;
@@ -98,12 +97,12 @@ const HistoryScreen = () => {
       );
     }
 
-    if (filters.ageGroup !== '') {
+    if (filters.actualAge !== '') {
       filtered = filtered.filter(assessment => {
-        const age = assessment.user?.age;
+        const age = assessment.breakdown?.actualAge;
         if (!age) return false;
         
-        switch (filters.ageGroup) {
+        switch (filters.actualAge) {
           case '18-25':
             return age >= 18 && age <= 25;
           case '26-35':
@@ -125,11 +124,11 @@ const HistoryScreen = () => {
 
   const clearFilters = () => {
     setFilters({
-      location: '', // Changed from 'city' to 'location'
+      location: '',
       riskLevel: '',
       dateFrom: '',
       dateTo: '',
-      ageGroup: ''
+      actualAge: ''
     });
   };
 
@@ -242,9 +241,9 @@ const HistoryScreen = () => {
           </Text>
         </View>
         <View style={styles.detailItem}>
-          <Ionicons name="location-outline" size={16} color="#3b82f6" />
+          <Ionicons name="person-outline" size={16} color="#3b82f6" />
           <Text style={styles.detailText}>
-            {item.assessment?.location || item.location || 'Unknown location'}
+            {item.breakdown?.actualAge ? `${item.breakdown.actualAge} years` : 'Age not available'}
           </Text>
         </View>
       </View>
@@ -281,13 +280,6 @@ const HistoryScreen = () => {
         <Text style={styles.detailLabel}>{label}</Text>
         <Text style={styles.detailValue}>{value || 'N/A'}</Text>
       </View>
-    </View>
-  );
-
-  const renderQuestionAnswer = (question, answer) => (
-    <View style={styles.qaContainer}>
-      <Text style={styles.questionText}>{question}</Text>
-      <Text style={styles.answerText}>{answer}</Text>
     </View>
   );
 
@@ -423,9 +415,9 @@ const HistoryScreen = () => {
 
             {renderFilterOption(
               'Age Group',
-              filters.ageGroup,
+              filters.actualAge,
               ageGroupOptions,
-              (value) => setFilters(prev => ({ ...prev, ageGroup: value }))
+              (value) => setFilters(prev => ({ ...prev, actualAge: value }))
             )}
 
             <TouchableOpacity style={styles.clearFiltersButton} onPress={clearFilters}>
@@ -498,8 +490,11 @@ const HistoryScreen = () => {
                   <Text style={styles.sectionTitle}>User Information</Text>
                   {renderDetailItem('Name', selectedAssessment.user?.name, 'person-outline')}
                   {renderDetailItem('Email', selectedAssessment.user?.email, 'mail-outline')}
-                  {renderDetailItem('Location', selectedAssessment.assessment?.location || selectedAssessment.location, 'location-outline')}
-                  {renderDetailItem('Age', selectedAssessment.user?.age, 'calendar-outline')}
+                  {renderDetailItem(
+                    'Age', 
+                    selectedAssessment.breakdown?.actualAge ? `${selectedAssessment.breakdown.actualAge} years` : 'Not available', 
+                    'calendar-outline'
+                  )}
                 </View>
 
                 <View style={styles.assessmentSection}>
@@ -508,6 +503,11 @@ const HistoryScreen = () => {
                     'Date Assessed', 
                     moment(selectedAssessment.assessedAt).format('MMM D, YYYY h:mm A'), 
                     'time-outline'
+                  )}
+                  {renderDetailItem(
+                    'Location', 
+                    selectedAssessment.assessment?.location || selectedAssessment.location || 'Unknown location', 
+                    'location-outline'
                   )}
                   {renderDetailItem('Risk Level', selectedAssessment.riskLevel, 'alert-circle-outline')}
                   {renderDetailItem('Score', selectedAssessment.riskScore, 'speedometer-outline')}
@@ -848,16 +848,6 @@ const styles = StyleSheet.create({
   assessmentSection: {
     marginBottom: 20,
   },
-  questionsSection: {
-    marginBottom: 20,
-  },
-  notesSection: {
-    marginBottom: 20,
-  },
-  qaItem: {
-    marginBottom: 10,
-  },
-
   bottomSpace: { height: 20 }
 });
 

@@ -25,6 +25,7 @@ const UsersScreen = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [viewMode, setViewMode] = useState('clusters');
   const [exporting, setExporting] = useState(false);
+  const [exportModalVisible, setExportModalVisible] = useState(false);
 
   const roles = ['user', 'admin'];
   const statuses = ['active', 'deactivated'];
@@ -49,6 +50,22 @@ const UsersScreen = () => {
     setRefreshing(true);
     await fetchData();
     setRefreshing(false);
+  };
+
+  const clearAllFilters = () => {
+    setSelectedCluster('all');
+    setSearchQuery('');
+    setCurrentPage(1);
+  };
+
+  const handleClusterSelect = (clusterName) => {
+    if (selectedCluster === clusterName) {
+      setSelectedCluster('all');
+    } else {
+      setSelectedCluster(clusterName);
+    }
+    setViewMode('users');
+    setCurrentPage(1);
   };
 
   const getFilteredUsers = () => {
@@ -155,6 +172,22 @@ const UsersScreen = () => {
   const exportToPDF = useCallback(async () => {
     try {
       setExporting(true);
+      setExportModalVisible(false);
+      
+      if (Platform.OS === 'web') {
+        // Web-specific PDF export
+        const htmlContent = generatePDFHTML();
+        const win = window.open('', '_blank');
+        win.document.write(htmlContent);
+        win.document.close();
+        win.focus();
+        setTimeout(() => {
+          win.print();
+        }, 300);
+        return;
+      }
+
+      // Mobile export logic
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('Permission Denied', 'Permission to access media library is required to save the PDF.');
@@ -191,10 +224,14 @@ const UsersScreen = () => {
     }
   }, [generatePDFHTML]);
 
+  const showExportConfirmation = () => {
+    setExportModalVisible(true);
+  };
+
   const ClusterCard = ({ cluster }) => (
     <TouchableOpacity
       style={[styles.clusterCard, selectedCluster === cluster.cluster && styles.selectedClusterCard]}
-      onPress={() => { setSelectedCluster(cluster.cluster); setViewMode('users'); setCurrentPage(1); }}
+      onPress={() => handleClusterSelect(cluster.cluster)}
     >
       <View style={styles.clusterHeader}>
         <Text style={styles.clusterName}>{cluster.cluster}</Text>
@@ -203,6 +240,12 @@ const UsersScreen = () => {
         </View>
       </View>
       <Text style={styles.clusterPercent}>{((cluster.count / users.length) * 100).toFixed(1)}% of users</Text>
+      {selectedCluster === cluster.cluster && (
+        <View style={styles.selectedIndicator}>
+          <Ionicons name="checkmark-circle" size={16} color="#DC2626" />
+          <Text style={styles.selectedText}>Selected</Text>
+        </View>
+      )}
     </TouchableOpacity>
   );
 
@@ -256,6 +299,7 @@ const UsersScreen = () => {
 
   const { users: paginatedUsers, total } = getFilteredUsers();
   const totalPages = Math.ceil(total / USERS_PER_PAGE);
+  const hasActiveFilters = selectedCluster !== 'all' || searchQuery.trim() !== '';
 
   return (
     <View style={styles.container}>
@@ -263,32 +307,99 @@ const UsersScreen = () => {
         <Text style={styles.headerTitle}>Health Risk Management</Text>
         <Text style={styles.userCount}>{total} users</Text>
         <View style={styles.headerActions}>
-          <TouchableOpacity style={[styles.viewToggle, viewMode === 'clusters' && styles.activeToggle]} onPress={() => setViewMode('clusters')}>
+          <TouchableOpacity 
+            style={[styles.viewToggle, viewMode === 'clusters' && styles.activeToggle]} 
+            onPress={() => setViewMode('clusters')}
+          >
             <Text style={[styles.toggleText, viewMode === 'clusters' && styles.activeToggleText]}>Clusters</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.viewToggle, viewMode === 'users' && styles.activeToggle]} onPress={() => setViewMode('users')}>
+          <TouchableOpacity 
+            style={[styles.viewToggle, viewMode === 'users' && styles.activeToggle]} 
+            onPress={() => setViewMode('users')}
+          >
             <Text style={[styles.toggleText, viewMode === 'users' && styles.activeToggleText]}>Users</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.exportButton, exporting && styles.disabledButton]} onPress={exportToPDF} disabled={exporting}>
-            {exporting ? <ActivityIndicator size={16} color="#FFFFFF" /> : <Ionicons name="document-outline" size={16} color="#FFFFFF" />}
+          
+          {/* Refresh Button */}
+          <TouchableOpacity 
+            style={[styles.refreshButton, refreshing && styles.disabledButton]} 
+            onPress={onRefresh} 
+            disabled={refreshing}
+          >
+            {refreshing ? (
+              <ActivityIndicator size={16} color="#FFFFFF" />
+            ) : (
+              <Ionicons name="refresh" size={16} color="#FFFFFF" />
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.exportButton, exporting && styles.disabledButton]} 
+            onPress={showExportConfirmation} 
+            disabled={exporting}
+          >
+            {exporting ? (
+              <ActivityIndicator size={16} color="#FFFFFF" />
+            ) : (
+              <Ionicons name="document-outline" size={16} color="#FFFFFF" />
+            )}
           </TouchableOpacity>
         </View>
 
         {viewMode === 'users' && (
-          <View style={styles.searchContainer}>
-            <Ionicons name="search" size={20} color="#64748B" style={styles.searchIcon} />
-            <TextInput style={styles.searchInput} placeholder="Search users..." value={searchQuery} onChangeText={setSearchQuery} placeholderTextColor="#94A3B8" />
-            {searchQuery && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Ionicons name="close-circle" size={20} color="#94A3B8" />
-              </TouchableOpacity>
+          <>
+            <View style={styles.searchContainer}>
+              <Ionicons name="search" size={20} color="#64748B" style={styles.searchIcon} />
+              <TextInput 
+                style={styles.searchInput} 
+                placeholder="Search users..." 
+                value={searchQuery} 
+                onChangeText={setSearchQuery} 
+                placeholderTextColor="#94A3B8" 
+              />
+              {searchQuery && (
+                <TouchableOpacity onPress={() => setSearchQuery('')}>
+                  <Ionicons name="close-circle" size={20} color="#94A3B8" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Active filters indicator */}
+            {hasActiveFilters && (
+              <View style={styles.filtersContainer}>
+                <Text style={styles.filtersLabel}>Active filters:</Text>
+                <View style={styles.filtersRow}>
+                  {selectedCluster !== 'all' && (
+                    <View style={styles.filterChip}>
+                      <Text style={styles.filterChipText}>Cluster: {selectedCluster}</Text>
+                      <TouchableOpacity onPress={() => setSelectedCluster('all')}>
+                        <Ionicons name="close" size={14} color="#DC2626" />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                  {searchQuery.trim() !== '' && (
+                    <View style={styles.filterChip}>
+                      <Text style={styles.filterChipText}>Search: "{searchQuery}"</Text>
+                      <TouchableOpacity onPress={() => setSearchQuery('')}>
+                        <Ionicons name="close" size={14} color="#DC2626" />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                  <TouchableOpacity style={styles.clearAllButton} onPress={clearAllFilters}>
+                    <Text style={styles.clearAllText}>Clear all</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             )}
-          </View>
+          </>
         )}
       </View>
 
       {viewMode === 'clusters' ? (
-        <ScrollView style={styles.clustersView} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+        <ScrollView 
+          style={styles.clustersView} 
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        >
           <View style={styles.clustersGrid}>
             {clusters.map(cluster => <ClusterCard key={cluster.cluster} cluster={cluster} />)}
           </View>
@@ -301,16 +412,34 @@ const UsersScreen = () => {
             renderItem={({ item }) => <UserItem item={item} />}
             style={styles.usersList}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-            ListEmptyComponent={<View style={styles.emptyContainer}><Text style={styles.emptyText}>No users found</Text></View>}
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Ionicons name="people-outline" size={48} color="#94A3B8" />
+                <Text style={styles.emptyText}>No users found</Text>
+                {hasActiveFilters && (
+                  <TouchableOpacity style={styles.clearFiltersButton} onPress={clearAllFilters}>
+                    <Text style={styles.clearFiltersText}>Clear filters</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            }
           />
 
           {totalPages > 1 && (
             <View style={styles.pagination}>
-              <TouchableOpacity style={[styles.pageButton, currentPage === 1 && styles.disabledButton]} onPress={() => setCurrentPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1}>
+              <TouchableOpacity 
+                style={[styles.pageButton, currentPage === 1 && styles.disabledButton]} 
+                onPress={() => setCurrentPage(Math.max(1, currentPage - 1))} 
+                disabled={currentPage === 1}
+              >
                 <Ionicons name="chevron-back" size={16} color="#64748B" />
               </TouchableOpacity>
               <Text style={styles.pageInfo}>Page {currentPage} of {totalPages}</Text>
-              <TouchableOpacity style={[styles.pageButton, currentPage === totalPages && styles.disabledButton]} onPress={() => setCurrentPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages}>
+              <TouchableOpacity 
+                style={[styles.pageButton, currentPage === totalPages && styles.disabledButton]} 
+                onPress={() => setCurrentPage(Math.min(totalPages, currentPage + 1))} 
+                disabled={currentPage === totalPages}
+              >
                 <Ionicons name="chevron-forward" size={16} color="#64748B" />
               </TouchableOpacity>
             </View>
@@ -318,6 +447,7 @@ const UsersScreen = () => {
         </>
       )}
 
+      {/* Edit User Modal */}
       <Modal visible={modalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -339,8 +469,14 @@ const UsersScreen = () => {
                   <Text style={styles.selectorLabel}>Role</Text>
                   <View style={styles.optionsContainer}>
                     {roles.map(role => (
-                      <TouchableOpacity key={role} style={[styles.optionButton, newRole === role && styles.selectedOption]} onPress={() => setNewRole(role)}>
-                        <Text style={[styles.optionText, newRole === role && styles.selectedOptionText]}>{role.charAt(0).toUpperCase() + role.slice(1)}</Text>
+                      <TouchableOpacity 
+                        key={role} 
+                        style={[styles.optionButton, newRole === role && styles.selectedOption]} 
+                        onPress={() => setNewRole(role)}
+                      >
+                        <Text style={[styles.optionText, newRole === role && styles.selectedOptionText]}>
+                          {role.charAt(0).toUpperCase() + role.slice(1)}
+                        </Text>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -350,8 +486,14 @@ const UsersScreen = () => {
                   <Text style={styles.selectorLabel}>Status</Text>
                   <View style={styles.optionsContainer}>
                     {statuses.map(status => (
-                      <TouchableOpacity key={status} style={[styles.optionButton, newStatus === status && styles.selectedOption]} onPress={() => setNewStatus(status)}>
-                        <Text style={[styles.optionText, newStatus === status && styles.selectedOptionText]}>{status.charAt(0).toUpperCase() + status.slice(1)}</Text>
+                      <TouchableOpacity 
+                        key={status} 
+                        style={[styles.optionButton, newStatus === status && styles.selectedOption]} 
+                        onPress={() => setNewStatus(status)}
+                      >
+                        <Text style={[styles.optionText, newStatus === status && styles.selectedOptionText]}>
+                          {status.charAt(0).toUpperCase() + status.slice(1)}
+                        </Text>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -361,12 +503,64 @@ const UsersScreen = () => {
                   <TouchableOpacity style={styles.cancelButton} onPress={() => setModalVisible(false)}>
                     <Text style={styles.cancelButtonText}>Cancel</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={[styles.saveButton, updating && styles.disabledButton]} onPress={handleUpdateUser} disabled={updating}>
-                    {updating ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={styles.saveButtonText}>Save</Text>}
+                  <TouchableOpacity 
+                    style={[styles.saveButton, updating && styles.disabledButton]} 
+                    onPress={handleUpdateUser} 
+                    disabled={updating}
+                  >
+                    {updating ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.saveButtonText}>Save</Text>
+                    )}
                   </TouchableOpacity>
                 </View>
               </>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Export Confirmation Modal */}
+      <Modal visible={exportModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Export Users Report</Text>
+              <TouchableOpacity onPress={() => setExportModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.modalBody}>
+              <Ionicons name="document-text-outline" size={48} color="#3B82F6" style={styles.modalIcon} />
+              <Text style={styles.modalText}>
+                This will generate a PDF report containing all user data with the current filters applied.
+              </Text>
+              <Text style={styles.modalSubtext}>
+                {users.length} users will be included in the report.
+              </Text>
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.cancelButton]} 
+                onPress={() => setExportModalVisible(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.confirmButton, exporting && styles.disabledButton]} 
+                onPress={exportToPDF} 
+                disabled={exporting}
+              >
+                {exporting ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.confirmButtonText}>Generate PDF</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -384,11 +578,19 @@ const styles = StyleSheet.create({
   activeToggle: { backgroundColor: '#DC2626' },
   toggleText: { color: '#64748B', fontWeight: '600', fontSize: 14 },
   activeToggleText: { color: '#FFFFFF' },
+  refreshButton: { backgroundColor: '#3B82F6', padding: 8, borderRadius: 8 },
   exportButton: { marginLeft: 'auto', backgroundColor: '#10B981', padding: 8, borderRadius: 8 },
   disabledButton: { opacity: 0.5 },
-  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 8, borderWidth: 1, borderColor: '#E2E8F0', paddingHorizontal: 12, height: 40 },
+  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 8, borderWidth: 1, borderColor: '#E2E8F0', paddingHorizontal: 12, height: 40, marginBottom: 12 },
   searchIcon: { marginRight: 8 },
   searchInput: { flex: 1, fontSize: 14, color: '#1E293B' },
+  filtersContainer: { backgroundColor: '#F8FAFC', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#E2E8F0' },
+  filtersLabel: { fontSize: 12, color: '#64748B', marginBottom: 8, fontWeight: '500' },
+  filtersRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  filterChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF2F2', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: '#FECACA', gap: 4 },
+  filterChipText: { fontSize: 12, color: '#DC2626', fontWeight: '500' },
+  clearAllButton: { backgroundColor: '#DC2626', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  clearAllText: { fontSize: 12, color: '#FFFFFF', fontWeight: '600' },
   clustersView: { flex: 1 },
   clustersGrid: { padding: 16, gap: 12 },
   clusterCard: { backgroundColor: '#FFFFFF', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 8 },
@@ -398,6 +600,8 @@ const styles = StyleSheet.create({
   clusterBadge: { backgroundColor: '#DC2626', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
   clusterCount: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
   clusterPercent: { fontSize: 12, color: '#64748B', marginTop: 4 },
+  selectedIndicator: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 },
+  selectedText: { fontSize: 12, color: '#DC2626', fontWeight: '600' },
   userCount: { fontSize: 13, color: '#64748B', fontWeight: '500' },
   usersList: { flex: 1, padding: 16 },
   userCard: { backgroundColor: '#FFFFFF', padding: 16, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 8, flexDirection: 'row' },
@@ -419,6 +623,10 @@ const styles = StyleSheet.create({
   modalContent: { backgroundColor: '#FFFFFF', borderRadius: 14, width: '90%', maxHeight: '75%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
   modalTitle: { fontSize: 18, fontWeight: '700', color: '#1E293B' },
+  modalBody: { padding: 20, alignItems: 'center' },
+  modalIcon: { marginBottom: 16 },
+  modalText: { fontSize: 15, color: '#334155', textAlign: 'center', marginBottom: 8 },
+  modalSubtext: { fontSize: 13, color: '#64748B', textAlign: 'center' },
   modalUserInfo: { padding: 20, backgroundColor: '#F8FAFC', margin: 20, borderRadius: 8 },
   modalUserName: { fontSize: 16, fontWeight: '600', color: '#1E293B' },
   modalUserEmail: { fontSize: 13, color: '#64748B' },
@@ -430,8 +638,11 @@ const styles = StyleSheet.create({
   optionText: { fontSize: 13, color: '#64748B', fontWeight: '600' },
   selectedOptionText: { color: '#DC2626' },
   modalActions: { flexDirection: 'row', gap: 10, padding: 20 },
-  cancelButton: { flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: 'center', backgroundColor: '#F1F5F9' },
+  modalButton: { flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
+  cancelButton: { backgroundColor: '#F1F5F9' },
   cancelButtonText: { fontSize: 14, color: '#64748B', fontWeight: '600' },
+  confirmButton: { backgroundColor: '#3B82F6' },
+  confirmButtonText: { fontSize: 14, color: '#FFFFFF', fontWeight: '700' },
   saveButton: { flex: 1, paddingVertical: 12, borderRadius: 8, backgroundColor: '#DC2626', alignItems: 'center' },
   saveButtonText: { fontSize: 14, color: '#FFFFFF', fontWeight: '700' },
 });

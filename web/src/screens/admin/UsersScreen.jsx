@@ -24,7 +24,9 @@ const UsersScreen = () => {
   const [selectedCluster, setSelectedCluster] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [viewMode, setViewMode] = useState('clusters');
-  const [exporting, setExporting] = useState(false);
+  const [exportingPDF, setExportingPDF] = useState(false);
+  const [showPDFModal, setShowPDFModal] = useState(false);
+  const [pdfMessage, setPdfMessage] = useState('');
 
   const roles = ['user', 'admin'];
   const statuses = ['active', 'deactivated'];
@@ -51,6 +53,22 @@ const UsersScreen = () => {
     setRefreshing(false);
   };
 
+  const clearAllFilters = () => {
+    setSelectedCluster('all');
+    setSearchQuery('');
+    setCurrentPage(1);
+  };
+
+  const handleClusterSelect = (clusterName) => {
+    if (selectedCluster === clusterName) {
+      setSelectedCluster('all');
+    } else {
+      setSelectedCluster(clusterName);
+    }
+    setViewMode('users');
+    setCurrentPage(1);
+  };
+
   const getFilteredUsers = () => {
     let filtered = users.filter(user =>
       (user.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -60,6 +78,7 @@ const UsersScreen = () => {
     const startIndex = (currentPage - 1) * USERS_PER_PAGE;
     return { users: filtered.slice(startIndex, startIndex + USERS_PER_PAGE), total: filtered.length };
   };
+
 
   const generatePDFHTML = useCallback(() => {
     const currentDate = new Date().toLocaleDateString();
@@ -153,25 +172,82 @@ const UsersScreen = () => {
   }, [users, searchQuery, selectedCluster]);
 
   const exportToPDF = useCallback(async () => {
+    if (users.length === 0) {
+      setPdfMessage('No users data available to export.');
+      setShowPDFModal(true);
+      return;
+    }
+
     try {
-      setExporting(true);
+      setExportingPDF(true);
+      
+      // Web-specific PDF generation
+      if (Platform.OS === 'web') {
+        const htmlContent = generatePDFHTML();
+        
+        // Create a blob from the HTML content
+        const blob = new Blob([htmlContent], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        
+        // Create a temporary iframe to load the HTML
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.src = url;
+        document.body.appendChild(iframe);
+        
+        iframe.onload = () => {
+          // Use html2pdf library for better PDF generation
+          const opt = {
+            margin: 10,
+            filename: `users_report_${new Date().toISOString().slice(0, 10)}.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2 },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+          };
+          
+          // Use html2pdf.js if available, otherwise fallback to print
+          if (window.html2pdf) {
+            html2pdf().from(iframe.contentDocument.body).set(opt).save();
+            setPdfMessage('PDF report is being generated and will download shortly.');
+          } else {
+            iframe.contentWindow.print();
+            setPdfMessage('PDF opened in print view. Use your browser\'s "Save as PDF" option.');
+          }
+          
+          setShowPDFModal(true);
+          // Clean up
+          setTimeout(() => {
+            document.body.removeChild(iframe);
+            URL.revokeObjectURL(url);
+          }, 1000);
+        };
+        
+        return;
+      }
+
+      // Mobile PDF generation
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Permission to access media library is required to save the PDF.');
+        setPdfMessage('Permission to access media library is required to save the PDF.');
+        setShowPDFModal(true);
         return;
       }
 
       const htmlContent = generatePDFHTML();
-      const { uri } = await Print.printToFileAsync({ html: htmlContent, base64: false, width: 612, height: 792 });
+      const { uri } = await Print.printToFileAsync({ html: htmlContent });
+
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
-      const filename = `users-report-${timestamp}.pdf`;
-      const downloadDir = `${FileSystem.documentDirectory}Download/`;
+      const filename = `users_report_${timestamp}.pdf`;
       
+      const downloadDir = `${FileSystem.documentDirectory}Download/`;
       const dirInfo = await FileSystem.getInfoAsync(downloadDir);
-      if (!dirInfo.exists) await FileSystem.makeDirectoryAsync(downloadDir, { intermediates: true });
+      if (!dirInfo.exists) {
+        await FileSystem.makeDirectoryAsync(downloadDir, { intermediates: true });
+      }
       
       const finalUri = `${downloadDir}${filename}`;
       await FileSystem.copyAsync({ from: uri, to: finalUri });
+
       const asset = await MediaLibrary.createAssetAsync(finalUri);
       
       if (Platform.OS === 'android') {
@@ -183,18 +259,22 @@ const UsersScreen = () => {
         }
       }
 
-      Alert.alert('Export Successful', `Users report saved as "${filename}"`, [{ text: 'OK' }]);
+      setPdfMessage(`PDF report has been saved to your device's Downloads folder as "${filename}"`);
+      setShowPDFModal(true);
+
     } catch (error) {
-      Alert.alert('Export Failed', 'Error generating PDF report. Please try again.');
+      console.error('Export error:', error);
+      setPdfMessage('There was an error generating the PDF report. Please try again.');
+      setShowPDFModal(true);
     } finally {
-      setExporting(false);
+      setExportingPDF(false);
     }
-  }, [generatePDFHTML]);
+  }, [generatePDFHTML, users]);
 
   const ClusterCard = ({ cluster }) => (
     <TouchableOpacity
       style={[styles.clusterCard, selectedCluster === cluster.cluster && styles.selectedClusterCard]}
-      onPress={() => { setSelectedCluster(cluster.cluster); setViewMode('users'); setCurrentPage(1); }}
+      onPress={() => handleClusterSelect(cluster.cluster)}
     >
       <View style={styles.clusterHeader}>
         <Text style={styles.clusterName}>{cluster.cluster}</Text>
@@ -203,6 +283,12 @@ const UsersScreen = () => {
         </View>
       </View>
       <Text style={styles.clusterPercent}>{((cluster.count / users.length) * 100).toFixed(1)}% of users</Text>
+      {selectedCluster === cluster.cluster && (
+        <View style={styles.selectedIndicator}>
+          <Ionicons name="checkmark-circle" size={16} color="#DC2626" />
+          <Text style={styles.selectedText}>Selected</Text>
+        </View>
+      )}
     </TouchableOpacity>
   );
 
@@ -256,6 +342,7 @@ const UsersScreen = () => {
 
   const { users: paginatedUsers, total } = getFilteredUsers();
   const totalPages = Math.ceil(total / USERS_PER_PAGE);
+  const hasActiveFilters = selectedCluster !== 'all' || searchQuery.trim() !== '';
 
   return (
     <View style={styles.container}>
@@ -263,32 +350,99 @@ const UsersScreen = () => {
         <Text style={styles.headerTitle}>Health Risk Management</Text>
         <Text style={styles.userCount}>{total} users</Text>
         <View style={styles.headerActions}>
-          <TouchableOpacity style={[styles.viewToggle, viewMode === 'clusters' && styles.activeToggle]} onPress={() => setViewMode('clusters')}>
+          <TouchableOpacity 
+            style={[styles.viewToggle, viewMode === 'clusters' && styles.activeToggle]} 
+            onPress={() => setViewMode('clusters')}
+          >
             <Text style={[styles.toggleText, viewMode === 'clusters' && styles.activeToggleText]}>Clusters</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.viewToggle, viewMode === 'users' && styles.activeToggle]} onPress={() => setViewMode('users')}>
+          <TouchableOpacity 
+            style={[styles.viewToggle, viewMode === 'users' && styles.activeToggle]} 
+            onPress={() => setViewMode('users')}
+          >
             <Text style={[styles.toggleText, viewMode === 'users' && styles.activeToggleText]}>Users</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.exportButton, exporting && styles.disabledButton]} onPress={exportToPDF} disabled={exporting}>
-            {exporting ? <ActivityIndicator size={16} color="#FFFFFF" /> : <Ionicons name="document-outline" size={16} color="#FFFFFF" />}
+          
+          {/* Refresh Button */}
+          <TouchableOpacity 
+            style={[styles.refreshButton, refreshing && styles.disabledButton]} 
+            onPress={onRefresh} 
+            disabled={refreshing}
+          >
+            {refreshing ? (
+              <ActivityIndicator size={16} color="#FFFFFF" />
+            ) : (
+              <Ionicons name="refresh" size={16} color="#FFFFFF" />
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.exportButton, exportingPDF && styles.disabledButton]} 
+            onPress={exportToPDF} 
+            disabled={exportingPDF}
+          >
+            {exportingPDF ? (
+              <ActivityIndicator size={16} color="#FFFFFF" />
+            ) : (
+              <Ionicons name="document-outline" size={16} color="#FFFFFF" />
+            )}
           </TouchableOpacity>
         </View>
 
         {viewMode === 'users' && (
-          <View style={styles.searchContainer}>
-            <Ionicons name="search" size={20} color="#64748B" style={styles.searchIcon} />
-            <TextInput style={styles.searchInput} placeholder="Search users..." value={searchQuery} onChangeText={setSearchQuery} placeholderTextColor="#94A3B8" />
-            {searchQuery && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Ionicons name="close-circle" size={20} color="#94A3B8" />
-              </TouchableOpacity>
+          <>
+            <View style={styles.searchContainer}>
+              <Ionicons name="search" size={20} color="#64748B" style={styles.searchIcon} />
+              <TextInput 
+                style={styles.searchInput} 
+                placeholder="Search users..." 
+                value={searchQuery} 
+                onChangeText={setSearchQuery} 
+                placeholderTextColor="#94A3B8" 
+              />
+              {searchQuery && (
+                <TouchableOpacity onPress={() => setSearchQuery('')}>
+                  <Ionicons name="close-circle" size={20} color="#94A3B8" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Active filters indicator */}
+            {hasActiveFilters && (
+              <View style={styles.filtersContainer}>
+                <Text style={styles.filtersLabel}>Active filters:</Text>
+                <View style={styles.filtersRow}>
+                  {selectedCluster !== 'all' && (
+                    <View style={styles.filterChip}>
+                      <Text style={styles.filterChipText}>Cluster: {selectedCluster}</Text>
+                      <TouchableOpacity onPress={() => setSelectedCluster('all')}>
+                        <Ionicons name="close" size={14} color="#DC2626" />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                  {searchQuery.trim() !== '' && (
+                    <View style={styles.filterChip}>
+                      <Text style={styles.filterChipText}>Search: "{searchQuery}"</Text>
+                      <TouchableOpacity onPress={() => setSearchQuery('')}>
+                        <Ionicons name="close" size={14} color="#DC2626" />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                  <TouchableOpacity style={styles.clearAllButton} onPress={clearAllFilters}>
+                    <Text style={styles.clearAllText}>Clear all</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             )}
-          </View>
+          </>
         )}
       </View>
 
       {viewMode === 'clusters' ? (
-        <ScrollView style={styles.clustersView} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+        <ScrollView 
+          style={styles.clustersView} 
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        >
           <View style={styles.clustersGrid}>
             {clusters.map(cluster => <ClusterCard key={cluster.cluster} cluster={cluster} />)}
           </View>
@@ -301,16 +455,34 @@ const UsersScreen = () => {
             renderItem={({ item }) => <UserItem item={item} />}
             style={styles.usersList}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-            ListEmptyComponent={<View style={styles.emptyContainer}><Text style={styles.emptyText}>No users found</Text></View>}
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Ionicons name="people-outline" size={48} color="#94A3B8" />
+                <Text style={styles.emptyText}>No users found</Text>
+                {hasActiveFilters && (
+                  <TouchableOpacity style={styles.clearFiltersButton} onPress={clearAllFilters}>
+                    <Text style={styles.clearFiltersText}>Clear filters</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            }
           />
 
           {totalPages > 1 && (
             <View style={styles.pagination}>
-              <TouchableOpacity style={[styles.pageButton, currentPage === 1 && styles.disabledButton]} onPress={() => setCurrentPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1}>
+              <TouchableOpacity 
+                style={[styles.pageButton, currentPage === 1 && styles.disabledButton]} 
+                onPress={() => setCurrentPage(Math.max(1, currentPage - 1))} 
+                disabled={currentPage === 1}
+              >
                 <Ionicons name="chevron-back" size={16} color="#64748B" />
               </TouchableOpacity>
               <Text style={styles.pageInfo}>Page {currentPage} of {totalPages}</Text>
-              <TouchableOpacity style={[styles.pageButton, currentPage === totalPages && styles.disabledButton]} onPress={() => setCurrentPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages}>
+              <TouchableOpacity 
+                style={[styles.pageButton, currentPage === totalPages && styles.disabledButton]} 
+                onPress={() => setCurrentPage(Math.min(totalPages, currentPage + 1))} 
+                disabled={currentPage === totalPages}
+              >
                 <Ionicons name="chevron-forward" size={16} color="#64748B" />
               </TouchableOpacity>
             </View>
@@ -339,8 +511,14 @@ const UsersScreen = () => {
                   <Text style={styles.selectorLabel}>Role</Text>
                   <View style={styles.optionsContainer}>
                     {roles.map(role => (
-                      <TouchableOpacity key={role} style={[styles.optionButton, newRole === role && styles.selectedOption]} onPress={() => setNewRole(role)}>
-                        <Text style={[styles.optionText, newRole === role && styles.selectedOptionText]}>{role.charAt(0).toUpperCase() + role.slice(1)}</Text>
+                      <TouchableOpacity 
+                        key={role} 
+                        style={[styles.optionButton, newRole === role && styles.selectedOption]} 
+                        onPress={() => setNewRole(role)}
+                      >
+                        <Text style={[styles.optionText, newRole === role && styles.selectedOptionText]}>
+                          {role.charAt(0).toUpperCase() + role.slice(1)}
+                        </Text>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -350,8 +528,14 @@ const UsersScreen = () => {
                   <Text style={styles.selectorLabel}>Status</Text>
                   <View style={styles.optionsContainer}>
                     {statuses.map(status => (
-                      <TouchableOpacity key={status} style={[styles.optionButton, newStatus === status && styles.selectedOption]} onPress={() => setNewStatus(status)}>
-                        <Text style={[styles.optionText, newStatus === status && styles.selectedOptionText]}>{status.charAt(0).toUpperCase() + status.slice(1)}</Text>
+                      <TouchableOpacity 
+                        key={status} 
+                        style={[styles.optionButton, newStatus === status && styles.selectedOption]} 
+                        onPress={() => setNewStatus(status)}
+                      >
+                        <Text style={[styles.optionText, newStatus === status && styles.selectedOptionText]}>
+                          {status.charAt(0).toUpperCase() + status.slice(1)}
+                        </Text>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -361,12 +545,39 @@ const UsersScreen = () => {
                   <TouchableOpacity style={styles.cancelButton} onPress={() => setModalVisible(false)}>
                     <Text style={styles.cancelButtonText}>Cancel</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={[styles.saveButton, updating && styles.disabledButton]} onPress={handleUpdateUser} disabled={updating}>
-                    {updating ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={styles.saveButtonText}>Save</Text>}
+                  <TouchableOpacity 
+                    style={[styles.saveButton, updating && styles.disabledButton]} 
+                    onPress={handleUpdateUser} 
+                    disabled={updating}
+                  >
+                    {updating ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.saveButtonText}>Save</Text>
+                    )}
                   </TouchableOpacity>
                 </View>
               </>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* PDF Export Modal */}
+      <Modal visible={showPDFModal} transparent animationType="fade">
+        <View style={styles.pdfModalOverlay}>
+          <View style={styles.pdfModalContent}>
+            <View style={styles.pdfModalHeader}>
+              <Ionicons name="document-text" size={24} color="#DC2626" />
+              <Text style={styles.pdfModalTitle}>PDF Export</Text>
+            </View>
+            <Text style={styles.pdfModalMessage}>{pdfMessage}</Text>
+            <TouchableOpacity 
+              style={styles.pdfModalButton} 
+              onPress={() => setShowPDFModal(false)}
+            >
+              <Text style={styles.pdfModalButtonText}>OK</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -384,11 +595,19 @@ const styles = StyleSheet.create({
   activeToggle: { backgroundColor: '#DC2626' },
   toggleText: { color: '#64748B', fontWeight: '600', fontSize: 14 },
   activeToggleText: { color: '#FFFFFF' },
+  refreshButton: { backgroundColor: '#3B82F6', padding: 8, borderRadius: 8 },
   exportButton: { marginLeft: 'auto', backgroundColor: '#10B981', padding: 8, borderRadius: 8 },
   disabledButton: { opacity: 0.5 },
-  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 8, borderWidth: 1, borderColor: '#E2E8F0', paddingHorizontal: 12, height: 40 },
+  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 8, borderWidth: 1, borderColor: '#E2E8F0', paddingHorizontal: 12, height: 40, marginBottom: 12 },
   searchIcon: { marginRight: 8 },
   searchInput: { flex: 1, fontSize: 14, color: '#1E293B' },
+  filtersContainer: { backgroundColor: '#F8FAFC', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#E2E8F0' },
+  filtersLabel: { fontSize: 12, color: '#64748B', marginBottom: 8, fontWeight: '500' },
+  filtersRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  filterChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF2F2', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: '#FECACA', gap: 4 },
+  filterChipText: { fontSize: 12, color: '#DC2626', fontWeight: '500' },
+  clearAllButton: { backgroundColor: '#DC2626', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  clearAllText: { fontSize: 12, color: '#FFFFFF', fontWeight: '600' },
   clustersView: { flex: 1 },
   clustersGrid: { padding: 16, gap: 12 },
   clusterCard: { backgroundColor: '#FFFFFF', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 8 },
@@ -398,6 +617,8 @@ const styles = StyleSheet.create({
   clusterBadge: { backgroundColor: '#DC2626', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
   clusterCount: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
   clusterPercent: { fontSize: 12, color: '#64748B', marginTop: 4 },
+  selectedIndicator: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 },
+  selectedText: { fontSize: 12, color: '#DC2626', fontWeight: '600' },
   userCount: { fontSize: 13, color: '#64748B', fontWeight: '500' },
   usersList: { flex: 1, padding: 16 },
   userCard: { backgroundColor: '#FFFFFF', padding: 16, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 8, flexDirection: 'row' },
@@ -434,6 +655,54 @@ const styles = StyleSheet.create({
   cancelButtonText: { fontSize: 14, color: '#64748B', fontWeight: '600' },
   saveButton: { flex: 1, paddingVertical: 12, borderRadius: 8, backgroundColor: '#DC2626', alignItems: 'center' },
   saveButtonText: { fontSize: 14, color: '#FFFFFF', fontWeight: '700' },
+  // PDF Modal Styles
+  pdfModalOverlay: { 
+    flex: 1, 
+    backgroundColor: 'rgba(0, 0, 0, 0.8)', 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  pdfModalContent: { 
+    backgroundColor: '#FFFFFF', 
+    borderRadius: 20, 
+    padding: 24, 
+    width: '90%', 
+    maxWidth: 400, 
+    alignItems: 'center', 
+    borderColor: '#DC2626', 
+    borderWidth: 1 
+  },
+  pdfModalHeader: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    marginBottom: 16 
+  },
+  pdfModalTitle: { 
+    fontSize: 20, 
+    fontWeight: '700', 
+    color: '#DC2626', 
+    marginLeft: 12 
+  },
+  pdfModalMessage: { 
+    fontSize: 16, 
+    color: '#64748B', 
+    textAlign: 'center', 
+    marginBottom: 24, 
+    lineHeight: 22 
+  },
+  pdfModalButton: { 
+    backgroundColor: '#DC2626', 
+    paddingHorizontal: 32, 
+    paddingVertical: 12, 
+    borderRadius: 24,
+    minWidth: 120,
+    alignItems: 'center'
+  },
+  pdfModalButtonText: { 
+    color: '#FFFFFF', 
+    fontSize: 16, 
+    fontWeight: '700' 
+  },
 });
 
 export default UsersScreen;

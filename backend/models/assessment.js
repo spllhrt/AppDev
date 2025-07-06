@@ -21,7 +21,8 @@ const assessmentSchema = new mongoose.Schema({
     recommendations: [String],
     breakdown: {
         environmental: Number,
-        age: Number,
+        ageRiskScore: Number,
+        actualAge: Number,
         healthConditions: Number,
         lifestyle: Number
     },

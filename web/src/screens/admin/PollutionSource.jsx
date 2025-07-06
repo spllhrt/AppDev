@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, RefreshControl, TouchableOpacity, TextInput, Modal, ScrollView, Platform, Alert, ActivityIndicator, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LineChart } from 'react-native-chart-kit';
@@ -12,13 +12,26 @@ const { width: screenWidth } = Dimensions.get('window');
 
 const AdminPollutionLogsScreen = () => {
   const [state, setState] = useState({
-    logs: [], loading: false, refreshing: false, filterModal: false, detailModal: false,
-    chartModal: false, mapModal: false, selectedLog: null, locationCache: {}, pendingGeocodes: {},
+    logs: [], 
+    loading: false, 
+    refreshing: false, 
+    filterModal: false, 
+    detailModal: false,
+    chartModal: false, 
+    mapModal: false, 
+    selectedLog: null, 
+    locationCache: {}, 
+    pendingGeocodes: {},
     filters: { sourceType: '', city: '', startDate: null, endDate: null },
     tempFilters: { sourceType: '', city: '', startDate: null, endDate: null },
-    viewMode: 'list', // 'list', 'chart', 'map'
-    exporting: false
+    viewMode: 'list',
+    exportingPDF: false,
+    showPDFModal: false,
+    pdfMessage: ''
   });
+
+  const initialLoadRef = useRef(true);
+  const prevFiltersRef = useRef(state.filters);
 
   const sourceTypes = ['Traffic', 'Industrial', 'Residential', 'Construction', 'Natural', 'Unknown'];
   const colors = { Traffic: '#FF6B6B', Industrial: '#4ECDC4', Residential: '#45B7D1', Construction: '#96CEB4', Natural: '#FFEAA7', Unknown: '#DDA0DD' };
@@ -26,12 +39,11 @@ const AdminPollutionLogsScreen = () => {
 
   const updateState = useCallback((updates) => setState(prev => ({ ...prev, ...updates })), []);
 
-  // Optimized geocoding with batching
   const processGeocodes = useCallback(async () => {
     const pending = Object.keys(state.pendingGeocodes);
     if (pending.length === 0) return;
 
-    const batch = pending.slice(0, 5); // Process 5 at a time
+    const batch = pending.slice(0, 5);
     const remaining = pending.slice(5).reduce((acc, key) => ({ ...acc, [key]: state.pendingGeocodes[key] }), {});
     
     updateState({ pendingGeocodes: remaining });
@@ -68,7 +80,10 @@ const AdminPollutionLogsScreen = () => {
     }
   }, [state.pendingGeocodes, state.logs, state.locationCache]);
 
-  useEffect(() => { const timer = setTimeout(processGeocodes, 300); return () => clearTimeout(timer); }, [processGeocodes]);
+  useEffect(() => { 
+    const timer = setTimeout(processGeocodes, 300); 
+    return () => clearTimeout(timer); 
+  }, [processGeocodes]);
 
   const reverseGeocode = useCallback((lat, lon) => {
     const key = `${lat.toFixed(4)},${lon.toFixed(4)}`;
@@ -78,31 +93,51 @@ const AdminPollutionLogsScreen = () => {
   }, [state.locationCache, state.pendingGeocodes]);
 
   const fetchLogs = useCallback(async (showLoading = true) => {
-    try {
-      updateState(showLoading ? { loading: true } : { refreshing: true });
-      const { sourceType, city, startDate, endDate } = state.filters;
-      const params = {
-        ...(sourceType && { sourceType }),
-        ...(startDate && { startDate: startDate.toISOString() }),
-        ...(endDate && { endDate: endDate.toISOString() })
-      };
-      const response = await getPollutionClassificationLogs(params);
-      let logsData = response.data?.map(log => ({ ...log, cityName: reverseGeocode(log.lat, log.lon) })) || [];
+  try {
+    updateState(showLoading ? { loading: true } : { refreshing: true });
+    const { sourceType, city, startDate, endDate } = state.filters;
+    
+    // First fetch all logs with date filters if specified
+    const params = {
+      ...(startDate && { startDate: startDate.toISOString() }),
+      ...(endDate && { endDate: endDate.toISOString() })
+    };
+    
+    const response = await getPollutionClassificationLogs(params);
+    let logsData = response.data?.map(log => ({ 
+      ...log, 
+      cityName: reverseGeocode(log.lat, log.lon) 
+    })) || [];
+    
+    // Apply client-side filters for source type and city
+    logsData = logsData.filter(log => {
+      const matchesSourceType = !sourceType || 
+        (log.classificationResult?.source?.toLowerCase() === sourceType.toLowerCase());
+      const matchesCity = !city || 
+        (log.cityName && log.cityName.toLowerCase().includes(city.toLowerCase()));
       
-      // Filter by city if specified
-      if (city) logsData = logsData.filter(log => log.cityName?.toLowerCase().includes(city.toLowerCase()));
-      
-      updateState({ logs: logsData });
-    } catch (error) {
-      Alert.alert('Error', 'Failed to fetch pollution logs');
-    } finally {
-      updateState({ loading: false, refreshing: false });
+      return matchesSourceType && matchesCity;
+    });
+    
+    updateState({ logs: logsData });
+  } catch (error) {
+    console.error('Fetch error:', error);
+    Alert.alert('Error', 'Failed to fetch pollution logs');
+  } finally {
+    updateState({ loading: false, refreshing: false });
+  }
+}, [state.filters, reverseGeocode]);
+
+  useEffect(() => {
+    const filtersChanged = JSON.stringify(prevFiltersRef.current) !== JSON.stringify(state.filters);
+    
+    if (initialLoadRef.current || filtersChanged) {
+      fetchLogs();
+      prevFiltersRef.current = state.filters;
+      initialLoadRef.current = false;
     }
-  }, [state.filters, reverseGeocode]);
+  }, [state.filters, fetchLogs]);
 
-  useEffect(() => { fetchLogs(); }, [fetchLogs]);
-
-  // Memoized computed values
   const { cities, chartData, mapData } = useMemo(() => {
     const citySet = new Set();
     const sourceCount = {};
@@ -112,7 +147,29 @@ const AdminPollutionLogsScreen = () => {
       if (log.cityName && log.cityName !== 'Loading...') citySet.add(log.cityName);
       const source = log.classificationResult?.source || 'Unknown';
       sourceCount[source] = (sourceCount[source] || 0) + 1;
-      if (log.lat && log.lon) mapPoints.push([log.lat, log.lon, log.classificationResult?.source || 'Unknown']);
+      
+      // Calculate intensity based on pollution levels
+      if (log.lat && log.lon) {
+        const pollutants = log.pollutants || {};
+        const pm25 = pollutants.pm2_5 || 0;
+        const no2 = pollutants.no2 || 0;
+        const so2 = pollutants.so2 || 0;
+        
+        // Normalize and combine pollution levels (0-1 scale)
+        const intensity = Math.min(1, 
+          (pm25 / thresholds.pm2_5.high * 0.4) + 
+          (no2 / thresholds.no2.high * 0.3) + 
+          (so2 / thresholds.so2.high * 0.3)
+        );
+        
+        mapPoints.push({
+          lat: log.lat,
+          lng: log.lon,
+          intensity: intensity,
+          source: source,
+          pollutants: pollutants
+        });
+      }
     });
 
     return {
@@ -138,7 +195,6 @@ const AdminPollutionLogsScreen = () => {
       User: log.user?.name || log.user?.email || 'Unknown'
     }));
 
-    // Calculate summary statistics
     const sourceStats = {};
     const cityStats = {};
     state.logs.forEach(log => {
@@ -381,17 +437,76 @@ const AdminPollutionLogsScreen = () => {
   }, [state.logs, state.filters]);
 
   const exportToPDF = useCallback(async () => {
+    if (state.logs.length === 0) {
+      updateState({ 
+        pdfMessage: 'No pollution logs data available to export.',
+        showPDFModal: true 
+      });
+      return;
+    }
+
     try {
-      updateState({ exporting: true });
+      updateState({ exportingPDF: true });
       
-      // Request media library permissions
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Permission to access media library is required to save the PDF.');
+      // Web-specific PDF generation
+      if (Platform.OS === 'web') {
+        const htmlContent = generatePDFHTML();
+        
+        // Create a blob from the HTML content
+        const blob = new Blob([htmlContent], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        
+        // Create a temporary iframe to load the HTML
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.src = url;
+        document.body.appendChild(iframe);
+        
+        iframe.onload = () => {
+          // Use html2pdf library for better PDF generation
+          const opt = {
+            margin: 10,
+            filename: `pollution_logs_report_${new Date().toISOString().slice(0, 10)}.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2 },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+          };
+          
+          // Use html2pdf.js if available, otherwise fallback to print
+          if (window.html2pdf) {
+            html2pdf().from(iframe.contentDocument.body).set(opt).save();
+            updateState({ 
+              pdfMessage: 'PDF report is being generated and will download shortly.',
+              showPDFModal: true 
+            });
+          } else {
+            iframe.contentWindow.print();
+            updateState({ 
+              pdfMessage: 'PDF opened in print view. Use your browser\'s "Save as PDF" option.',
+              showPDFModal: true 
+            });
+          }
+          
+          // Clean up
+          setTimeout(() => {
+            document.body.removeChild(iframe);
+            URL.revokeObjectURL(url);
+          }, 1000);
+        };
+        
         return;
       }
 
-      // Generate PDF
+      // Mobile PDF generation
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        updateState({ 
+          pdfMessage: 'Permission to access media library is required to save the PDF.',
+          showPDFModal: true 
+        });
+        return;
+      }
+
       const htmlContent = generatePDFHTML();
       const { uri } = await Print.printToFileAsync({
         html: htmlContent,
@@ -400,14 +515,10 @@ const AdminPollutionLogsScreen = () => {
         height: 792,
       });
 
-      // Create filename with timestamp
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
-      const filename = `pollution-logs-${timestamp}.pdf`;
+      const filename = `pollution_logs_report_${timestamp}.pdf`;
       
-      // Copy to downloads directory
       const downloadDir = `${FileSystem.documentDirectory}Download/`;
-      
-      // Ensure Download directory exists
       const dirInfo = await FileSystem.getInfoAsync(downloadDir);
       if (!dirInfo.exists) {
         await FileSystem.makeDirectoryAsync(downloadDir, { intermediates: true });
@@ -416,10 +527,8 @@ const AdminPollutionLogsScreen = () => {
       const finalUri = `${downloadDir}${filename}`;
       await FileSystem.copyAsync({ from: uri, to: finalUri });
 
-      // Save to media library (Downloads folder on Android, Photos on iOS)
       const asset = await MediaLibrary.createAssetAsync(finalUri);
       
-      // On Android, move to Downloads album
       if (Platform.OS === 'android') {
         const album = await MediaLibrary.getAlbumAsync('Download');
         if (album == null) {
@@ -429,19 +538,21 @@ const AdminPollutionLogsScreen = () => {
         }
       }
 
-      Alert.alert(
-        'Export Successful', 
-        `PDF report has been saved to your device's Downloads folder as "${filename}"`,
-        [{ text: 'OK', style: 'default' }]
-      );
+      updateState({ 
+        pdfMessage: `PDF report has been saved to your device's Downloads folder as "${filename}"`,
+        showPDFModal: true 
+      });
 
     } catch (error) {
       console.error('Export error:', error);
-      Alert.alert('Export Failed', 'There was an error generating the PDF report. Please try again.');
+      updateState({ 
+        pdfMessage: 'There was an error generating the PDF report. Please try again.',
+        showPDFModal: true 
+      });
     } finally {
-      updateState({ exporting: false });
+      updateState({ exportingPDF: false });
     }
-  }, [generatePDFHTML]);
+  }, [generatePDFHTML, state.logs]);
 
   const renderLogItem = ({ item }) => (
     <TouchableOpacity style={styles.logCard} onPress={() => updateState({ selectedLog: item, detailModal: true })}>
@@ -464,6 +575,25 @@ const AdminPollutionLogsScreen = () => {
   );
 
   const MapView = () => {
+    // Process heatmap data from logs
+    const heatData = state.logs
+      .filter(log => log.lat && log.lon)
+      .map(log => {
+        const pollutants = log.pollutants || {};
+        const pm25 = pollutants.pm2_5 || 0;
+        const no2 = pollutants.no2 || 0;
+        const so2 = pollutants.so2 || 0;
+        
+        // Calculate intensity based on pollution levels (weighted average)
+        const intensity = Math.min(1, 
+          (pm25 / thresholds.pm2_5.high * 0.4) + 
+          (no2 / thresholds.no2.high * 0.3) + 
+          (so2 / thresholds.so2.high * 0.3)
+        );
+        
+        return [log.lat, log.lon, intensity * 10]; // Multiply by 10 to amplify effect
+      });
+
     const mapHTML = `
       <!DOCTYPE html>
       <html>
@@ -472,34 +602,138 @@ const AdminPollutionLogsScreen = () => {
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
         <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
         <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+        <style>
+          body { margin: 0; padding: 0; }
+          #map { height: 100vh; width: 100%; }
+          .legend {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            font-family: Arial, sans-serif;
+          }
+          .legend-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+            text-align: center;
+          }
+          .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+          }
+          .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 8px;
+            border-radius: 3px;
+          }
+          .legend-label {
+            font-size: 12px;
+          }
+        </style>
       </head>
-      <body style="margin:0; padding:0;">
-        <div id="map" style="height: 100vh; width: 100%;"></div>
+      <body>
+        <div id="map"></div>
+        <div class="legend">
+          <div class="legend-title">Pollution Sources</div>
+          <div class="legend-item">
+            <div class="legend-color" style="background-color: #FF6B6B;"></div>
+            <div class="legend-label">Traffic</div>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background-color: #4ECDC4;"></div>
+            <div class="legend-label">Industrial</div>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background-color: #45B7D1;"></div>
+            <div class="legend-label">Residential</div>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background-color: #96CEB4;"></div>
+            <div class="legend-label">Construction</div>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background-color: #FFEAA7;"></div>
+            <div class="legend-label">Natural</div>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background-color: #DDA0DD;"></div>
+            <div class="legend-label">Unknown</div>
+          </div>
+        </div>
         <script>
           const map = L.map('map').setView([14.5995, 120.9842], 11);
           L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap contributors'
           }).addTo(map);
           
-          const heatData = ${JSON.stringify(mapData)};
+          // Heatmap data
+          const heatData = ${JSON.stringify(heatData)};
+          
           if (heatData.length > 0) {
-            const heat = L.heatLayer(heatData.map(point => [point[0], point[1], 1]), {
+            const heat = L.heatLayer(heatData, {
               radius: 25,
               blur: 15,
               maxZoom: 17,
+              gradient: { 
+                0.1: 'blue',
+                0.3: 'cyan',
+                0.5: 'lime',
+                0.7: 'yellow',
+                0.9: 'red'
+              }
             }).addTo(map);
             
-            const group = new L.featureGroup(heatData.map(point => 
-              L.marker([point[0], point[1]]).bindPopup(\`Source: \${point[2]}\`)
-            ));
-            group.addTo(map);
+            // Add markers with source information
+            const markers = L.layerGroup();
+            ${state.logs
+              .filter(log => log.lat && log.lon)
+              .map(log => {
+                const source = log.classificationResult?.source || 'Unknown';
+                const pollutants = log.pollutants || {};
+                return `
+                  L.circleMarker(
+                    [${log.lat}, ${log.lon}], 
+                    {
+                      radius: 10,
+                      fillColor: '${colors[source] || '#95A5A6'}',
+                      color: '#000',
+                      weight: 1,
+                      opacity: 1,
+                      fillOpacity: 0.8
+                    }
+                  )
+                  .bindPopup('<b>Source:</b> ${source.replace(/'/g, "\\'")}<br>' +
+                            '<b>Location:</b> ${(log.cityName || 'Unknown').replace(/'/g, "\\'")}<br>' +
+                            '<b>PM2.5:</b> ${pollutants.pm2_5 || 'N/A'} μg/m³<br>' +
+                            '<b>NO2:</b> ${pollutants.no2 || 'N/A'} μg/m³<br>' +
+                            '<b>SO2:</b> ${pollutants.so2 || 'N/A'} μg/m³')
+                  .addTo(markers);`;
+              })
+              .join('\n')}
+            
+            markers.addTo(map);
+            
+            // Fit bounds to show all data
+            const group = new L.featureGroup([heat, markers]);
             map.fitBounds(group.getBounds().pad(0.1));
           }
         </script>
       </body>
       </html>
     `;
-    return <WebView source={{ html: mapHTML }} style={{ flex: 1 }} />;
+    
+    return <WebView 
+      source={{ html: mapHTML }} 
+      style={{ flex: 1 }} 
+      javaScriptEnabled={true}
+      domStorageEnabled={true}
+    />;
   };
 
   const renderContent = () => {
@@ -553,15 +787,26 @@ const AdminPollutionLogsScreen = () => {
       <View style={styles.header}>
         <Text style={styles.title}>Pollution Logs</Text>
         <View style={styles.headerButtons}>
+          <TouchableOpacity 
+            style={[styles.refreshButton, state.refreshing && styles.disabledButton]} 
+            onPress={() => fetchLogs(false)} 
+            disabled={state.refreshing}
+          >
+            {state.refreshing ? (
+              <ActivityIndicator size={16} color="#007AFF" />
+            ) : (
+              <Ionicons name="refresh" size={20} color="#007AFF" />
+            )}
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => updateState({ tempFilters: { ...state.filters }, filterModal: true })}>
             <Ionicons name="filter" size={20} color="#007AFF" />
           </TouchableOpacity>
           <TouchableOpacity 
             onPress={exportToPDF} 
-            style={[styles.headerButton, state.exporting && styles.disabledButton]}
-            disabled={state.exporting}
+            style={[styles.headerButton, state.exportingPDF && styles.disabledButton]}
+            disabled={state.exportingPDF}
           >
-            {state.exporting ? (
+            {state.exportingPDF ? (
               <ActivityIndicator size={16} color="#007AFF" />
             ) : (
               <Ionicons name="download" size={20} color="#007AFF" />
@@ -602,7 +847,7 @@ const AdminPollutionLogsScreen = () => {
             <ScrollView style={styles.modalBody}>
               <Text style={styles.filterLabel}>Source Type</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
-                {['', ...sourceTypes].map(type => (
+                {['', ...new Set(state.logs.map(l => l.classificationResult?.source).filter(Boolean))].map(type => (
                   <TouchableOpacity
                     key={type || 'all'}
                     style={[styles.filterChip, state.tempFilters.sourceType === type && styles.filterChipActive]}
@@ -685,6 +930,25 @@ const AdminPollutionLogsScreen = () => {
           </View>
         </View>
       </Modal>
+
+      {/* PDF Export Modal */}
+      <Modal visible={state.showPDFModal} transparent animationType="fade">
+        <View style={styles.pdfModalOverlay}>
+          <View style={styles.pdfModalContent}>
+            <View style={styles.pdfModalHeader}>
+              <Ionicons name="document-text" size={24} color="#007AFF" />
+              <Text style={styles.pdfModalTitle}>PDF Export</Text>
+            </View>
+            <Text style={styles.pdfModalMessage}>{state.pdfMessage}</Text>
+            <TouchableOpacity 
+              style={styles.pdfModalButton} 
+              onPress={() => updateState({ showPDFModal: false })}
+            >
+              <Text style={styles.pdfModalButtonText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -695,6 +959,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 20, fontWeight: '600', color: '#1A1A1A' },
   headerButtons: { flexDirection: 'row', gap: 16 },
   headerButton: { marginLeft: 8 },
+  refreshButton: { marginLeft: 8 },
   tabContainer: { flexDirection: 'row', backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E1E8ED' },
   tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, gap: 4 },
   activeTab: { borderBottomWidth: 2, borderBottomColor: '#007AFF' },
@@ -735,6 +1000,55 @@ const styles = StyleSheet.create({
   applyButtonText: { color: '#FFF', fontWeight: '500' },
   sectionTitle: { fontSize: 14, fontWeight: '600', color: '#333', marginVertical: 8 },
   detailItem: { fontSize: 13, color: '#333', marginBottom: 6 },
+  disabledButton: { opacity: 0.5 },
+  // PDF Modal Styles
+  pdfModalOverlay: { 
+    flex: 1, 
+    backgroundColor: 'rgba(0, 0, 0, 0.5)', 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  pdfModalContent: { 
+    backgroundColor: '#FFF', 
+    borderRadius: 16, 
+    padding: 24, 
+    width: '90%', 
+    maxWidth: 400, 
+    alignItems: 'center',
+    borderColor: '#007AFF',
+    borderWidth: 1
+  },
+  pdfModalHeader: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    marginBottom: 16 
+  },
+  pdfModalTitle: { 
+    fontSize: 20, 
+    fontWeight: '700', 
+    color: '#007AFF', 
+    marginLeft: 12 
+  },
+  pdfModalMessage: { 
+    fontSize: 16, 
+    color: '#333', 
+    textAlign: 'center', 
+    marginBottom: 24, 
+    lineHeight: 22 
+  },
+  pdfModalButton: { 
+    backgroundColor: '#007AFF', 
+    paddingHorizontal: 32, 
+    paddingVertical: 12, 
+    borderRadius: 24,
+    minWidth: 120,
+    alignItems: 'center'
+  },
+  pdfModalButtonText: { 
+    color: '#FFF', 
+    fontSize: 16, 
+    fontWeight: '700' 
+  }
 });
 
 export default AdminPollutionLogsScreen;

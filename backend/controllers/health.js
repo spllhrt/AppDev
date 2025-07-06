@@ -56,7 +56,7 @@ exports.createHealthRiskAssessment = async (req, res, next) => {
 
         const aiAssessment = await generateAIHealthRiskAssessment(user, { aqi, pm25, pm10 });
 
-        // Save full history
+        // Save full history - with both risk score and actual age
         const newAssessment = await Assessment.create({
             user: user._id,
             aqi,
@@ -65,23 +65,37 @@ exports.createHealthRiskAssessment = async (req, res, next) => {
             riskScore: aiAssessment.riskScore,
             riskLevel: aiAssessment.riskLevel,
             recommendations: aiAssessment.recommendations,
-            breakdown: aiAssessment.breakdown,
+            breakdown: {
+                environmental: aiAssessment.breakdown.environmental,
+                ageRiskScore: aiAssessment.breakdown.ageRiskScore, // Risk score (0-20)
+                actualAge: user.age, // Actual user age
+                healthConditions: aiAssessment.breakdown.healthConditions,
+                lifestyle: aiAssessment.breakdown.lifestyle
+            },
             aiInsights: aiAssessment.insights,
             location: location || user.city,
+            assessedAt: new Date(),
             generatedBy: 'Gemini AI'
         });
 
-        // Update latest summary
+        // Update latest summary in user model
         user.lastAssessment = {
-            riskScore: aiAssessment.riskScore,
-            riskLevel: aiAssessment.riskLevel,
-            aqi,
-            pm25,
-            pm10,
-            recommendations: aiAssessment.recommendations,
-            breakdown: aiAssessment.breakdown,
-            aiInsights: aiAssessment.insights,
-            location: location || user.city,
+            _id: newAssessment._id,
+            riskScore: newAssessment.riskScore,
+            riskLevel: newAssessment.riskLevel,
+            aqi: newAssessment.aqi,
+            pm25: newAssessment.pm25,
+            pm10: newAssessment.pm10,
+            recommendations: newAssessment.recommendations,
+            breakdown: {
+                environmental: newAssessment.breakdown.environmental,
+                ageRiskScore: newAssessment.breakdown.ageRiskScore,
+                actualAge: newAssessment.breakdown.actualAge,
+                healthConditions: newAssessment.breakdown.healthConditions,
+                lifestyle: newAssessment.breakdown.lifestyle
+            },
+            aiInsights: newAssessment.aiInsights,
+            location: newAssessment.location,
             assessedAt: newAssessment.assessedAt
         };
 
@@ -90,7 +104,15 @@ exports.createHealthRiskAssessment = async (req, res, next) => {
         return res.status(200).json({
             success: true,
             message: "AI-powered health risk assessment completed successfully",
-            assessment: newAssessment
+            assessment: {
+                ...newAssessment.toObject(),
+                user: {
+                    _id: user._id,
+                    name: user.name,
+                    email: user.email,
+                    age: user.age
+                }
+            }
         });
 
     } catch (error) {
@@ -112,7 +134,13 @@ exports.createHealthRiskAssessment = async (req, res, next) => {
                 riskScore: fallback.totalScore,
                 riskLevel: fallback.riskLevel,
                 recommendations: fallbackRecs,
-                breakdown: fallback.breakdown,
+                breakdown: {
+                    environmental: fallback.breakdown.environmental,
+                    ageRiskScore: fallback.breakdown.age, // Using age score from fallback
+                    actualAge: user.age, // Actual age
+                    healthConditions: fallback.breakdown.healthConditions,
+                    lifestyle: fallback.breakdown.lifestyle
+                },
                 location: location || user.city,
                 generatedBy: 'Rule-based (AI fallback)'
             });
@@ -124,7 +152,13 @@ exports.createHealthRiskAssessment = async (req, res, next) => {
                 pm25,
                 pm10,
                 recommendations: fallbackRecs,
-                breakdown: fallback.breakdown,
+                breakdown: {
+                    environmental: fallback.breakdown.environmental,
+                    ageRiskScore: fallback.breakdown.age,
+                    actualAge: user.age,
+                    healthConditions: fallback.breakdown.healthConditions,
+                    lifestyle: fallback.breakdown.lifestyle
+                },
                 location: fallbackAssessment.location,
                 assessedAt: fallbackAssessment.assessedAt
             };
@@ -157,7 +191,7 @@ async function generateAIHealthRiskAssessment(user, environmentalData) {
 You are a health risk assessment expert. Analyze the following data and provide a comprehensive health risk assessment for air quality exposure.
 
 USER PROFILE:
-- Age: ${user.age}
+- Actual Age: ${user.age} years
 - Gender: ${user.gender}
 - Pregnant: ${user.isPregnant ? 'Yes' : 'No'}
 - Smoker: ${user.isSmoker ? 'Yes' : 'No'}
@@ -178,7 +212,7 @@ TASK: Provide a detailed health risk assessment in the following JSON format:
   "riskLevel": "[low/moderate/high/very_high]",
   "breakdown": {
     "environmental": [0-40 integer],
-    "age": [0-20 integer],
+    "ageRiskScore": [0-20 integer],  // Risk score based on age, NOT actual age
     "healthConditions": [0-25 integer],
     "lifestyle": [0-15 integer]
   },
@@ -194,17 +228,16 @@ TASK: Provide a detailed health risk assessment in the following JSON format:
   ]
 }
 
-GUIDELINES:
-1. Risk Score: 0-24 (low), 25-49 (moderate), 50-74 (high), 75-100 (very_high)
-2. Environmental score should be heavily weighted by AQI and PM values (MAX: 40 points)
-3. Age factor: higher risk for children under 12 and adults over 65 (MAX: 20 points)
-4. Health conditions significantly increase risk (MAX: 25 points)
-5. Lifestyle factors like smoking and outdoor exposure affect risk (MAX: 15 points)
-6. CRITICAL: Each breakdown score MUST NOT exceed its maximum value
-7. Recommendations should be specific, actionable, and personalized
-8. Insights should explain the reasoning behind the risk assessment
-9. Consider cumulative effects of multiple risk factors
-10. Be medically accurate but avoid providing direct medical advice
+CRITICAL INSTRUCTIONS:
+1. For ageRiskScore: 
+   - Children under 12: 15-20 points
+   - Adults over 65: 15-20 points
+   - Young adults: 5-10 points
+   - Middle-aged: 10-15 points
+2. NEVER include the actual age in the breakdown - only the risk score
+3. All breakdown scores MUST stay within their specified ranges
+4. The total riskScore should be the sum of all breakdown scores
+5. Recommendations should consider both the actual age and risk factors
 
 Respond ONLY with the JSON object, no additional text.
 `;
@@ -233,16 +266,16 @@ Respond ONLY with the JSON object, no additional text.
         // Ensure risk score is within bounds
         aiResponse.riskScore = Math.max(0, Math.min(100, parseInt(aiResponse.riskScore)));
 
-        // CRITICAL FIX: Enforce maximum limits for breakdown scores
+        // Enforce maximum limits for breakdown scores
         if (aiResponse.breakdown) {
             aiResponse.breakdown.environmental = Math.max(0, Math.min(40, parseInt(aiResponse.breakdown.environmental || 0)));
-            aiResponse.breakdown.age = Math.max(0, Math.min(20, parseInt(aiResponse.breakdown.age || 0)));
+            aiResponse.breakdown.ageRiskScore = Math.max(0, Math.min(20, parseInt(aiResponse.breakdown.ageRiskScore || 0)));
             aiResponse.breakdown.healthConditions = Math.max(0, Math.min(25, parseInt(aiResponse.breakdown.healthConditions || 0)));
             aiResponse.breakdown.lifestyle = Math.max(0, Math.min(15, parseInt(aiResponse.breakdown.lifestyle || 0)));
             
             // Recalculate total risk score based on capped breakdown scores
             const calculatedScore = aiResponse.breakdown.environmental + 
-                                  aiResponse.breakdown.age + 
+                                  aiResponse.breakdown.ageRiskScore + 
                                   aiResponse.breakdown.healthConditions + 
                                   aiResponse.breakdown.lifestyle;
             
@@ -275,6 +308,7 @@ Respond ONLY with the JSON object, no additional text.
         throw error;
     }
 }
+
 
 exports.updateHealthProfile = async (req, res, next) => {
     try {

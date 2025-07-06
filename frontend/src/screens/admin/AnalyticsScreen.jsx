@@ -1,4 +1,3 @@
-// AdminAnalyticsScreen.js
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -15,7 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle, Rect, Line, Text as SvgText, Path, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { Picker } from '@react-native-picker/picker';
-import { getAssessmentHistory } from '../../api/health';
+import { getAllAssessments } from '../../api/historyApi';
 import { getPollutionClassificationLogs } from '../../api/pollutionSource';
 import { getAllUsers } from '../../api/auth';
 
@@ -27,13 +26,11 @@ const AdminAnalyticsScreen = () => {
   const [dateRange, setDateRange] = useState('last30days');
   const [riskLevelData, setRiskLevelData] = useState([]);
   const [pollutionSourceData, setPollutionSourceData] = useState([]);
-  const [users, setUsers] = useState([]);
   const [analytics, setAnalytics] = useState({
     totalUsers: 0,
     activeUsers: 0,
     deactivatedUsers: 0,
     adminUsers: 0,
-    regularUsers: 0,
     monthlyRegistrations: [],
     userStatusDistribution: [],
   });
@@ -63,7 +60,6 @@ const AdminAnalyticsScreen = () => {
     try {
       const response = await getAllUsers();
       const usersData = response.users || [];
-      setUsers(usersData);
       processAnalyticsData(usersData);
     } catch (error) {
       throw error;
@@ -72,75 +68,97 @@ const AdminAnalyticsScreen = () => {
 
   const fetchRiskLevelData = async () => {
     try {
-      // Calculate date range
-      const { startDate } = getDateRange();
+      const response = await getAllAssessments();
+      const assessments = response.assessments || [];
       
-      // Fetch risk level data
-      const response = await getAssessmentHistory(1000); // Get all assessments
-      const filteredData = response.assessments.filter(assessment => {
-        if (!startDate) return true;
-        const assessedDate = new Date(assessment.assessedAt);
-        return assessedDate >= startDate;
+      const { startDate } = getDateRange();
+      const filteredData = assessments.filter(assessment => {
+        if (!assessment?.riskLevel) return false;
+        if (startDate && new Date(assessment.assessedAt) < startDate) return false;
+        return true;
       });
 
-      // Process risk levels
-      const riskLevelCounts = {
-        low: 0,
-        moderate: 0,
-        high: 0,
-        very_high: 0
-      };
+      const riskLevelCounts = { low: 0, moderate: 0, high: 0, very_high: 0 };
       
       filteredData.forEach(assessment => {
-        const level = assessment.riskLevel;
-        if (riskLevelCounts.hasOwnProperty(level)) {
+        const level = assessment.riskLevel.toLowerCase().replace(/\s+/g, '_');
+        if (level in riskLevelCounts) {
           riskLevelCounts[level]++;
         }
       });
 
       const totalAssessments = filteredData.length;
-      const chartData = Object.keys(riskLevelCounts).map(level => ({
-        name: level.charAt(0).toUpperCase() + level.slice(1).replace('_', ' '),
-        count: riskLevelCounts[level],
-        color: getRiskLevelColor(level),
-        percentage: totalAssessments > 0 ? (riskLevelCounts[level] / totalAssessments) * 100 : 0
-      }));
+      const chartData = [
+        { name: 'Low', count: riskLevelCounts.low, color: '#4CAF50', percentage: totalAssessments > 0 ? (riskLevelCounts.low / totalAssessments) * 100 : 0 },
+        { name: 'Moderate', count: riskLevelCounts.moderate, color: '#FFC107', percentage: totalAssessments > 0 ? (riskLevelCounts.moderate / totalAssessments) * 100 : 0 },
+        { name: 'High', count: riskLevelCounts.high, color: '#FF9800', percentage: totalAssessments > 0 ? (riskLevelCounts.high / totalAssessments) * 100 : 0 },
+        { name: 'Very High', count: riskLevelCounts.very_high, color: '#F44336', percentage: totalAssessments > 0 ? (riskLevelCounts.very_high / totalAssessments) * 100 : 0 }
+      ];
 
       setRiskLevelData(chartData);
     } catch (error) {
-      throw error;
+      console.error('Failed to fetch risk level data:', error);
+      setRiskLevelData([
+        { name: 'Low', count: 0, color: '#4CAF50', percentage: 0 },
+        { name: 'Moderate', count: 0, color: '#FFC107', percentage: 0 },
+        { name: 'High', count: 0, color: '#FF9800', percentage: 0 },
+        { name: 'Very High', count: 0, color: '#F44336', percentage: 0 }
+      ]);
     }
   };
 
   const fetchPollutionSourceData = async () => {
     try {
-      // Calculate date range
       const { startDate, endDate } = getDateRange();
-      
-      // Fetch pollution source data
       const response = await getPollutionClassificationLogs({
         startDate: startDate?.toISOString(),
-        endDate: endDate.toISOString()
+        endDate: endDate?.toISOString()
       });
 
-      // Process pollution sources
+      const logs = Array.isArray(response.data) ? response.data : [];
       const sourceCounts = {};
-      response.data.forEach(item => {
-        const source = item.predicted_source || 'Unknown';
+      let totalCount = 0;
+
+      logs.forEach(item => {
+        const source = item?.classificationResult?.source || 'unknown';
         sourceCounts[source] = (sourceCounts[source] || 0) + 1;
+        totalCount++;
       });
 
-      const totalSources = response.count;
       const chartData = Object.keys(sourceCounts).map(source => ({
-        name: source,
+        name: source.charAt(0).toUpperCase() + source.slice(1),
         count: sourceCounts[source],
         color: getPollutionSourceColor(source),
-        percentage: totalSources > 0 ? (sourceCounts[source] / totalSources) * 100 : 0
+        percentage: totalCount > 0 ? (sourceCounts[source] / totalCount) * 100 : 0
       }));
 
+      chartData.sort((a, b) => b.count - a.count);
       setPollutionSourceData(chartData);
     } catch (error) {
-      throw error;
+      console.error('Failed to fetch pollution source data:', error);
+      setPollutionSourceData([]);
+    }
+  };
+
+  const getPollutionSourceColor = (source) => {
+    const lowerSource = source.toLowerCase();
+    
+    switch(lowerSource) {
+      case 'vehicular':
+        return '#FF5722';
+      case 'industrial':
+        return '#607D8B';
+      case 'construction':
+        return '#795548';
+      case 'wildfire':
+        return '#FF9800';
+      case 'agricultural':
+        return '#4CAF50';
+      case 'residential':
+        return '#9C27B0';
+      case 'unknown':
+      default:
+        return '#9E9E9E';
     }
   };
 
@@ -166,43 +184,10 @@ const AdminAnalyticsScreen = () => {
     return { startDate, endDate };
   };
 
-  const getRiskLevelColor = (level) => {
-    const colors = {
-      'low': '#4CAF50',      // Green
-      'moderate': '#FFC107',  // Amber
-      'high': '#FF9800',      // Orange
-      'very_high': '#F44336'  // Red
-    };
-    return colors[level] || '#9E9E9E';
-  };
-
-  const getPollutionSourceColor = (source) => {
-    const sourceColors = {
-      'vehicular': '#FF5722',
-      'industrial': '#607D8B',
-      'construction': '#795548',
-      'wildfire': '#FF9800',
-      'agricultural': '#4CAF50',
-      'residential': '#9C27B0',
-      'default': '#2196F3'
-    };
-    
-    const lowerSource = source.toLowerCase();
-    if (lowerSource.includes('vehicle')) return sourceColors.vehicular;
-    if (lowerSource.includes('industry')) return sourceColors.industrial;
-    if (lowerSource.includes('construct')) return sourceColors.construction;
-    if (lowerSource.includes('wildfire')) return sourceColors.wildfire;
-    if (lowerSource.includes('agricultur')) return sourceColors.agricultural;
-    if (lowerSource.includes('resident')) return sourceColors.residential;
-    return sourceColors.default;
-  };
-
   const processAnalyticsData = (usersData) => {
     const regularUsersOnly = usersData.filter(user => user.role !== 'admin');
     const totalUsers = regularUsersOnly.length;
-    
     const adminUsers = usersData.filter(user => user.role === 'admin').length;
-    const regularUsers = regularUsersOnly.length;
     
     const activeUsers = regularUsersOnly.filter(user => {
       if (!user.status) return true;
@@ -216,21 +201,11 @@ const AdminAnalyticsScreen = () => {
       return status === 'inactive' || status === 'deactivated' || status === 'suspended' || status === 'disabled';
     }).length;
     
-    const monthlyData = generateRealMonthlyRegistrations(regularUsersOnly);
+    const monthlyData = generateMonthlyRegistrations(regularUsersOnly);
     
     const statusDistribution = [
-      {
-        name: 'Active',
-        count: activeUsers,
-        color: '#10b981',
-        percentage: totalUsers > 0 ? (activeUsers / totalUsers) * 100 : 0,
-      },
-      {
-        name: 'Deactivated',
-        count: deactivatedUsers,
-        color: '#ef4444',
-        percentage: totalUsers > 0 ? (deactivatedUsers / totalUsers) * 100 : 0,
-      }
+      { name: 'Active', count: activeUsers, color: '#10b981', percentage: totalUsers > 0 ? (activeUsers / totalUsers) * 100 : 0 },
+      { name: 'Deactivated', count: deactivatedUsers, color: '#ef4444', percentage: totalUsers > 0 ? (deactivatedUsers / totalUsers) * 100 : 0 }
     ];
 
     setAnalytics({
@@ -238,13 +213,12 @@ const AdminAnalyticsScreen = () => {
       activeUsers,
       deactivatedUsers,
       adminUsers,
-      regularUsers,
       monthlyRegistrations: monthlyData,
       userStatusDistribution: statusDistribution,
     });
   };
 
-  const generateRealMonthlyRegistrations = (usersData) => {
+  const generateMonthlyRegistrations = (usersData) => {
     const currentDate = new Date();
     const monthlyData = [];
     
@@ -260,29 +234,10 @@ const AdminAnalyticsScreen = () => {
         return userDate.getFullYear() === year && userDate.getMonth() === month;
       }).length;
       
-      monthlyData.push({ 
-        month: monthName, 
-        count: registrationsCount,
-        fullDate: date 
-      });
+      monthlyData.push({ month: monthName, count: registrationsCount });
     }
     
     return monthlyData;
-  };
-
-  const calculateTrend = (currentValue, previousValue) => {
-    if (previousValue === 0) return 0;
-    return Math.round(((currentValue - previousValue) / previousValue) * 100);
-  };
-
-  const getTrendData = () => {
-    const currentMonth = analytics.monthlyRegistrations[analytics.monthlyRegistrations.length - 1]?.count || 0;
-    const lastMonth = analytics.monthlyRegistrations[analytics.monthlyRegistrations.length - 2]?.count || 0;
-    
-    return {
-      userRegistrationTrend: calculateTrend(currentMonth, lastMonth),
-      activeUsersTrend: Math.round((analytics.activeUsers / analytics.totalUsers) * 100) - 70,
-    };
   };
 
   const onRefresh = () => {
@@ -290,24 +245,15 @@ const AdminAnalyticsScreen = () => {
     fetchAllData();
   };
 
-  const StatCard = ({ title, value, icon, color = '#6366f1', subtitle, trend }) => (
+  const handleExportPDF = () => {
+    // TODO: Implement PDF export functionality
+    Alert.alert('Export PDF', 'PDF export functionality will be implemented here');
+  };
+
+  const StatCard = ({ title, value, icon, color = '#6366f1', subtitle }) => (
     <View style={[styles.statCard, { borderLeftColor: color }]}>
       <View style={styles.statCardHeader}>
-        <View style={styles.statCardTitleContainer}>
-          <Text style={styles.statCardTitle}>{title}</Text>
-          {trend !== undefined && trend !== 0 && (
-            <View style={[styles.trendBadge, { backgroundColor: trend > 0 ? '#dcfce7' : '#fef2f2' }]}>
-              <Ionicons 
-                name={trend > 0 ? 'trending-up' : 'trending-down'} 
-                size={12} 
-                color={trend > 0 ? '#16a34a' : '#dc2626'} 
-              />
-              <Text style={[styles.trendText, { color: trend > 0 ? '#16a34a' : '#dc2626' }]}>
-                {Math.abs(trend)}%
-              </Text>
-            </View>
-          )}
-        </View>
+        <Text style={styles.statCardTitle}>{title}</Text>
         <View style={[styles.statCardIcon, { backgroundColor: color + '15' }]}>
           <Ionicons name={icon} size={24} color={color} />
         </View>
@@ -322,9 +268,9 @@ const AdminAnalyticsScreen = () => {
     const centerX = size / 2;
     const centerY = size / 2;
     
-    const validData = data.filter(item => item.count > 0 && item.percentage > 0);
-    
-    if (validData.length === 0) {
+    const validData = Array.isArray(data) ? data.filter(item => item && typeof item.count === 'number' && item.count >= 0) : [];
+
+    if (validData.length === 0 || validData.every(item => item.count === 0)) {
       return (
         <View style={styles.pieChartContainer}>
           <View style={[styles.noDataContainer, { width: size, height: size }]}>
@@ -365,14 +311,7 @@ const AdminAnalyticsScreen = () => {
             ))}
           </Defs>
           
-          <Circle
-            cx={centerX}
-            cy={centerY}
-            r={radius}
-            fill="#f1f5f9"
-            stroke="#e2e8f0"
-            strokeWidth="1"
-          />
+          <Circle cx={centerX} cy={centerY} r={radius} fill="#f1f5f9" stroke="#e2e8f0" strokeWidth="1" />
           
           {validData.map((item, index) => {
             const startAngle = cumulativePercentage * 3.6;
@@ -416,15 +355,7 @@ const AdminAnalyticsScreen = () => {
     }
 
     const maxValue = Math.max(...data.map(item => item.count), 1);
-    const minValue = Math.min(...data.map(item => item.count));
     const stepX = (width - 80) / Math.max(data.length - 1, 1);
-    
-    const yAxisSteps = 4;
-    const yAxisLabels = [];
-    for (let i = 0; i <= yAxisSteps; i++) {
-      const value = Math.round(minValue + (maxValue - minValue) * (i / yAxisSteps));
-      yAxisLabels.push(value);
-    }
     
     let pathData = '';
     data.forEach((item, index) => {
@@ -448,39 +379,7 @@ const AdminAnalyticsScreen = () => {
             </LinearGradient>
           </Defs>
           
-          {yAxisLabels.map((label, index) => {
-            const y = height - 40 - ((label / maxValue) * (height - 80));
-            return (
-              <React.Fragment key={`y-${index}`}>
-                <Line
-                  x1={40}
-                  y1={y}
-                  x2={width - 20}
-                  y2={y}
-                  stroke="#e5e7eb"
-                  strokeWidth="1"
-                  strokeDasharray="2,2"
-                />
-                <SvgText
-                  x={30}
-                  y={y + 4}
-                  fontSize="10"
-                  fill="#6b7280"
-                  textAnchor="end"
-                >
-                  {label}
-                </SvgText>
-              </React.Fragment>
-            );
-          })}
-          
-          <Path
-            d={pathData}
-            stroke="url(#lineGrad)"
-            strokeWidth="3"
-            fill="none"
-            strokeLinecap="round"
-          />
+          <Path d={pathData} stroke="url(#lineGrad)" strokeWidth="3" fill="none" strokeLinecap="round" />
           
           {data.map((item, index) => {
             const x = 40 + index * stepX;
@@ -488,21 +387,8 @@ const AdminAnalyticsScreen = () => {
             
             return (
               <React.Fragment key={index}>
-                <Circle
-                  cx={x}
-                  cy={y}
-                  r="4"
-                  fill="#fff"
-                  stroke="#22d3ee"
-                  strokeWidth="2"
-                />
-                <SvgText
-                  x={x}
-                  y={height - 15}
-                  fontSize="12"
-                  fill="#6b7280"
-                  textAnchor="middle"
-                >
+                <Circle cx={x} cy={y} r="4" fill="#fff" stroke="#22d3ee" strokeWidth="2" />
+                <SvgText x={x} y={height - 15} fontSize="12" fill="#6b7280" textAnchor="middle">
                   {item.month}
                 </SvgText>
               </React.Fragment>
@@ -522,58 +408,36 @@ const AdminAnalyticsScreen = () => {
     );
   }
 
-  const trendData = getTrendData();
-
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       
       <ScrollView
         style={styles.scrollView}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#6366f1']} />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#6366f1']} />}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Analytics Dashboard</Text>
-          <Text style={styles.headerSubtitle}>
-            Monitor platform performance and environmental data
-          </Text>
+          <View style={styles.headerTopRow}>
+            <View>
+              <Text style={styles.headerTitle}>Analytics Dashboard</Text>
+              <Text style={styles.headerSubtitle}>Monitor platform performance and environmental data</Text>
+            </View>
+            <TouchableOpacity style={styles.exportButton} onPress={handleExportPDF}>
+              <Ionicons name="download" size={20} color="#6366f1" />
+              <Text style={styles.exportButtonText}>Export PDF</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.statsGrid}>
           <View style={styles.statsRow}>
-            <StatCard
-              title="Total Users"
-              value={analytics.totalUsers.toLocaleString()}
-              icon="people"
-              color="#6366f1"
-              trend={trendData.userRegistrationTrend}
-            />
-            <StatCard
-              title="Active Users"
-              value={analytics.activeUsers.toLocaleString()}
-              icon="checkmark-circle"
-              color="#10b981"
-              subtitle={`${analytics.totalUsers > 0 ? Math.round((analytics.activeUsers / analytics.totalUsers) * 100) : 0}% of total`}
-              trend={trendData.activeUsersTrend}
-            />
+            <StatCard title="Total Users" value={analytics.totalUsers.toLocaleString()} icon="people" color="#6366f1" />
+            <StatCard title="Active Users" value={analytics.activeUsers.toLocaleString()} icon="checkmark-circle" color="#10b981" />
           </View>
           <View style={styles.statsRow}>
-            <StatCard
-              title="Admin Users"
-              value={analytics.adminUsers.toLocaleString()}
-              icon="shield-checkmark"
-              color="#f59e0b"
-            />
-            <StatCard
-              title="Deactivated"
-              value={analytics.deactivatedUsers.toLocaleString()}
-              icon="ban"
-              color="#ef4444"
-              subtitle={`${analytics.totalUsers > 0 ? Math.round((analytics.deactivatedUsers / analytics.totalUsers) * 100) : 0}% of total`}
-            />
+            <StatCard title="Admin Users" value={analytics.adminUsers.toLocaleString()} icon="shield-checkmark" color="#f59e0b" />
+            <StatCard title="Deactivated" value={analytics.deactivatedUsers.toLocaleString()} icon="ban" color="#ef4444" />
           </View>
         </View>
 
@@ -584,7 +448,6 @@ const AdminAnalyticsScreen = () => {
               selectedValue={dateRange}
               onValueChange={(itemValue) => setDateRange(itemValue)}
               style={styles.picker}
-              dropdownIconColor="#64748b"
             >
               <Picker.Item label="Last 7 Days" value="last7days" />
               <Picker.Item label="Last 30 Days" value="last30days" />
@@ -615,254 +478,62 @@ const AdminAnalyticsScreen = () => {
             <LineChart data={analytics.monthlyRegistrations} />
           </View>
         </View>
-
-        <View style={styles.actionsCard}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          <View style={styles.actionButtons}>
-            <TouchableOpacity style={styles.actionButton} onPress={onRefresh}>
-              <Ionicons name="refresh" size={20} color="#6366f1" />
-              <Text style={styles.actionButtonText}>Refresh Data</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.actionButton}>
-              <Ionicons name="download" size={20} color="#6366f1" />
-              <Text style={styles.actionButtonText}>Export Report</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={styles.bottomPadding} />
       </ScrollView>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f8fafc',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: '#64748b',
-    fontWeight: '500',
-  },
-  header: {
-    padding: 24,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#1e293b',
-    letterSpacing: -0.5,
-  },
-  headerSubtitle: {
-    fontSize: 15,
-    color: '#64748b',
-    marginTop: 4,
-    fontWeight: '400',
-  },
-  statsGrid: {
-    padding: 20,
-    gap: 16,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
-    borderLeftWidth: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  statCardHeader: {
+  container: { flex: 1, backgroundColor: '#f8fafc' },
+  scrollView: { flex: 1 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
+  loadingText: { marginTop: 12, fontSize: 16, color: '#64748b', fontWeight: '500' },
+  header: { padding: 24, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+  headerTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
+    alignItems: 'center',
+    marginBottom: 8,
   },
-  statCardTitleContainer: {
-    flex: 1,
-  },
-  statCardTitle: {
-    fontSize: 14,
-    color: '#64748b',
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  trendBadge: {
+  headerTitle: { fontSize: 28, fontWeight: '700', color: '#1e293b' },
+  headerSubtitle: { fontSize: 15, color: '#64748b', marginTop: 4 },
+  exportButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-    gap: 2,
-  },
-  trendText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  statCardIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  statCardValue: {
-    fontSize: 24,
-    fontWeight: '700',
-    letterSpacing: -0.5,
-  },
-  statCardSubtitle: {
-    fontSize: 12,
-    color: '#94a3b8',
-    marginTop: 4,
-    fontWeight: '500',
-  },
-  filterContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingBottom: 10,
-  },
-  filterLabel: {
-    fontSize: 14,
-    color: '#64748b',
-    fontWeight: '500',
-    marginRight: 10,
-  },
-  pickerContainer: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    overflow: 'hidden',
-  },
-  picker: {
-    width: '100%',
-    height: 50,
-    color: '#1e293b',
-  },
-  chartsSection: {
-    padding: 20,
-    gap: 20,
-  },
-  chartCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  chartTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1e293b',
-    marginBottom: 20,
-    letterSpacing: -0.3,
-  },
-  pieChartContainer: {
-    alignItems: 'center',
-  },
-  pieChartLegend: {
-    marginTop: 20,
-    alignItems: 'flex-start',
-    gap: 8,
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  legendDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginRight: 10,
-  },
-  legendText: {
-    fontSize: 14,
-    color: '#475569',
-    fontWeight: '500',
-  },
-  lineChartContainer: {
-    alignItems: 'center',
-  },
-  noDataText: {
-    fontSize: 14,
-    color: '#94a3b8',
-    fontStyle: 'italic',
-  },
-  noDataContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-  },
-  actionsCard: {
-    margin: 20,
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1e293b',
-    marginBottom: 16,
-    letterSpacing: -0.3,
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  actionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
     backgroundColor: '#f1f5f9',
-    borderRadius: 12,
-    gap: 8,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    gap: 6,
   },
-  actionButtonText: {
+  exportButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#475569',
+    color: '#6366f1',
   },
-  bottomPadding: {
-    height: 20,
-  },
+  statsGrid: { padding: 20, gap: 16 },
+  statsRow: { flexDirection: 'row', gap: 16 },
+  statCard: { flex: 1, backgroundColor: '#fff', borderRadius: 16, padding: 20, borderLeftWidth: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
+  statCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
+  statCardTitle: { fontSize: 14, color: '#64748b', fontWeight: '600' },
+  statCardIcon: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  statCardValue: { fontSize: 24, fontWeight: '700' },
+  statCardSubtitle: { fontSize: 12, color: '#94a3b8', marginTop: 4 },
+  filterContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 10 },
+  filterLabel: { fontSize: 14, color: '#64748b', fontWeight: '500', marginRight: 10 },
+  pickerContainer: { flex: 1, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0' },
+  picker: { height: 50 },
+  chartsSection: { padding: 20, gap: 20 },
+  chartCard: { backgroundColor: '#fff', borderRadius: 16, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
+  chartTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b', marginBottom: 20 },
+  pieChartContainer: { alignItems: 'center' },
+  pieChartLegend: { marginTop: 20, alignItems: 'flex-start', gap: 8 },
+  legendItem: { flexDirection: 'row', alignItems: 'center' },
+  legendDot: { width: 10, height: 10, borderRadius: 5, marginRight: 10 },
+  legendText: { fontSize: 14, color: '#475569', fontWeight: '500' },
+  lineChartContainer: { alignItems: 'center' },
+  noDataText: { fontSize: 14, color: '#94a3b8', fontStyle: 'italic' },
+  noDataContainer: { justifyContent: 'center', alignItems: 'center', gap: 8 },
 });
 
 export default AdminAnalyticsScreen;

@@ -1,3 +1,5 @@
+import '@expo/metro-runtime'; // 👈 Must be first!
+
 import React from "react";
 import { Platform } from "react-native";
 import { Provider } from "react-redux";
