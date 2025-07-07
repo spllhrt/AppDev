@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   Dimensions,
   StatusBar,
+  Linking
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -91,6 +92,28 @@ const LoginScreen = ({ navigation }) => {
       const response = await loginUser(loginData);
       console.log('Login response received:', response);
 
+      // Check if user is deactivated
+      if (response.user?.status === 'deactivated' || response.data?.user?.status === 'deactivated') {
+        Alert.alert(
+          'Account Deactivated',
+          'Your account has been deactivated. Please contact our support team to reactivate your account.',
+          [
+            {
+              text: 'Contact Support',
+              onPress: () => {
+                Linking.openURL('mailto:support@yourapp.com?subject=Account Reactivation Request');
+              }
+            },
+            {
+              text: 'OK',
+              style: 'cancel'
+            }
+          ],
+          { cancelable: false }
+        );
+        return;
+      }
+
       dispatch(setUser({
         user: response.user || response.data?.user,
         token: response.token || response.data?.token
@@ -100,10 +123,33 @@ const LoginScreen = ({ navigation }) => {
       
     } catch (error) {
       console.error('Login error:', error);
-      Alert.alert(
-        'Login Failed',
-        error.message || error.response?.data?.message || 'An error occurred during login'
-      );
+      
+      // Check if the error is specifically about deactivated account
+      if (error.response?.data?.message?.toLowerCase().includes('deactivated') || 
+          error.message?.toLowerCase().includes('deactivated')) {
+        Alert.alert(
+          'Account Deactivated',
+          'Your account has been deactivated. Please contact our support team to reactivate your account.',
+          [
+            {
+              text: 'Contact Support',
+              onPress: () => {
+                Linking.openURL('mailto:support@yourapp.com?subject=Account Reactivation Request');
+              }
+            },
+            {
+              text: 'OK',
+              style: 'cancel'
+            }
+          ],
+          { cancelable: false }
+        );
+      } else {
+        Alert.alert(
+          'Login Failed',
+          error.message || error.response?.data?.message || 'An error occurred during login'
+        );
+      }
     } finally {
       console.log('Login process completed, setting loading to false');
       setLoading(false);
@@ -112,7 +158,7 @@ const LoginScreen = ({ navigation }) => {
 
   const handleForgotPassword = () => {
     console.log('Forgot password pressed');
-    Alert.alert('Forgot Password', 'Forgot password functionality will be implemented soon.');
+    Alert.alert('Forgot Password', 'Please check your email for password reset instructions.');
   };
 
   const handleGoToRegister = () => {
@@ -132,7 +178,6 @@ const LoginScreen = ({ navigation }) => {
       colors={['#1a1a2e', '#16213e', '#0f3460']}
       style={styles.container}
     >
-      {/* Set StatusBar style */}
       <StatusBar 
         barStyle="light-content" 
         backgroundColor="transparent" 
@@ -286,7 +331,7 @@ const LoginScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0, // Add this line
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   safeArea: {
     flex: 1,

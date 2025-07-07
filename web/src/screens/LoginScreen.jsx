@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView,
-  Alert, ScrollView, ActivityIndicator, Dimensions, StatusBar, Modal
+  Alert, ScrollView, ActivityIndicator, Dimensions, StatusBar, Modal, Linking
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -47,12 +47,39 @@ const LoginScreen = ({ navigation }) => {
     setShowErrorModal(true);
   };
 
+  const handleDeactivatedAccount = () => {
+    Alert.alert(
+      'Account Deactivated',
+      'Your account has been deactivated. Please contact support for assistance.',
+      [
+        {
+          text: 'Contact Support',
+          onPress: () => {
+            Linking.openURL('mailto:support@airnetai.com?subject=Account Reactivation Request');
+          }
+        },
+        {
+          text: 'OK',
+          style: 'cancel'
+        }
+      ],
+      { cancelable: false }
+    );
+  };
+
   const handleLogin = useCallback(async () => {
     if (loading || !validateForm()) return;
 
     setLoading(true);
     try {
       const response = await loginUser(formData);
+      
+      // Check for deactivated account
+      if (response.user?.status === 'deactivated' || response.data?.user?.status === 'deactivated') {
+        handleDeactivatedAccount();
+        return;
+      }
+
       dispatch(setUser({
         user: response.user || response.data?.user,
         token: response.token || response.data?.token
@@ -60,7 +87,13 @@ const LoginScreen = ({ navigation }) => {
       Alert.alert('Success', 'Login successful!');
     } catch (error) {
       const message = error.message || error.response?.data?.message || 'Invalid credentials. Please try again.';
-      showError(message);
+      
+      // Check if error is about deactivated account
+      if (message.toLowerCase().includes('deactivated')) {
+        handleDeactivatedAccount();
+      } else {
+        showError(message);
+      }
     } finally {
       setLoading(false);
     }

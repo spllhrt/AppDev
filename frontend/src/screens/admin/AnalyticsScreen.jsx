@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   StatusBar,
+  Modal,
+  Platform
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle, Rect, Line, Text as SvgText, Path, Defs, LinearGradient, Stop } from 'react-native-svg';
@@ -17,6 +19,9 @@ import { Picker } from '@react-native-picker/picker';
 import { getAllAssessments } from '../../api/historyApi';
 import { getPollutionClassificationLogs } from '../../api/pollutionSource';
 import { getAllUsers } from '../../api/auth';
+import * as FileSystem from 'expo-file-system';
+import * as MediaLibrary from 'expo-media-library';
+import * as Print from 'expo-print';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -34,6 +39,8 @@ const AdminAnalyticsScreen = () => {
     monthlyRegistrations: [],
     userStatusDistribution: [],
   });
+  const [exporting, setExporting] = useState(false);
+  const [exportModalVisible, setExportModalVisible] = useState(false);
 
   useEffect(() => {
     fetchAllData();
@@ -184,6 +191,20 @@ const AdminAnalyticsScreen = () => {
     return { startDate, endDate };
   };
 
+  const getDateRangeText = () => {
+    switch(dateRange) {
+      case 'last7days':
+        return 'Last 7 Days';
+      case 'last30days':
+        return 'Last 30 Days';
+      case 'last90days':
+        return 'Last 90 Days';
+      case 'alltime':
+      default:
+        return 'All Time';
+    }
+  };
+
   const processAnalyticsData = (usersData) => {
     const regularUsersOnly = usersData.filter(user => user.role !== 'admin');
     const totalUsers = regularUsersOnly.length;
@@ -245,10 +266,181 @@ const AdminAnalyticsScreen = () => {
     fetchAllData();
   };
 
-  const handleExportPDF = () => {
-    // TODO: Implement PDF export functionality
-    Alert.alert('Export PDF', 'PDF export functionality will be implemented here');
+  const showExportConfirmation = () => {
+    setExportModalVisible(true);
   };
+
+  const generatePDFHTML = useCallback(() => {
+    const currentDate = new Date().toLocaleDateString();
+    const dateRangeText = getDateRangeText();
+    
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Analytics Report</title><style>
+      body { font-family: Arial, sans-serif; margin: 20px; color: #333; line-height: 1.4; }
+      .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #6366F1; padding-bottom: 15px; }
+      .header h1 { color: #6366F1; margin: 0; font-size: 28px; }
+      .header p { margin: 5px 0; color: #666; font-size: 14px; }
+      .summary { display: flex; justify-content: space-between; margin-bottom: 30px; flex-wrap: wrap; gap: 10px; }
+      .summary-card { background: #f8f9fa; border-radius: 8px; padding: 15px; border-left: 4px solid #6366F1; flex: 1; min-width: 200px; }
+      .summary-card h3 { margin: 0 0 10px 0; color: #6366F1; font-size: 16px; }
+      .chart-section { margin-bottom: 30px; }
+      .chart-title { color: #333; border-bottom: 1px solid #ddd; padding-bottom: 8px; margin-bottom: 15px; font-size: 16px; font-weight: 600; }
+      .chart-container { display: flex; justify-content: space-between; margin-bottom: 20px; }
+      .chart-row { display: flex; justify-content: space-between; margin-bottom: 20px; }
+      .chart-box { flex: 1; min-width: 45%; background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 0 5px; }
+      .legend-item { display: flex; align-items: center; margin-bottom: 5px; }
+      .legend-color { width: 12px; height: 12px; border-radius: 3px; margin-right: 8px; }
+      .legend-text { font-size: 12px; }
+      .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-bottom: 20px; }
+      .stats-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dotted #ddd; font-size: 13px; }
+      .footer { margin-top: 30px; text-align: center; font-size: 10px; color: #666; border-top: 1px solid #ddd; padding-top: 15px; }
+      .badge { display: inline-block; padding: 3px 8px; border-radius: 12px; color: white; font-size: 10px; font-weight: bold; }
+      .badge-primary { background: #6366F1; }
+      .badge-success { background: #10B981; }
+      .badge-warning { background: #F59E0B; }
+      .badge-danger { background: #EF4444; }
+    </style></head><body>
+      <div class="header">
+        <h1>Analytics Dashboard Report</h1>
+        <p>Generated on: ${currentDate}</p>
+        <p>Date Range: ${dateRangeText}</p>
+      </div>
+
+      <div class="summary">
+        <div class="summary-card">
+          <h3>Total Users</h3>
+          <div style="font-size: 24px; font-weight: bold; color: #6366F1;">${analytics.totalUsers}</div>
+        </div>
+        <div class="summary-card">
+          <h3>Active Users</h3>
+          <div style="font-size: 24px; font-weight: bold; color: #10B981;">${analytics.activeUsers}</div>
+        </div>
+        <div class="summary-card">
+          <h3>Admin Users</h3>
+          <div style="font-size: 24px; font-weight: bold; color: #F59E0B;">${analytics.adminUsers}</div>
+        </div>
+        <div class="summary-card">
+          <h3>Deactivated Users</h3>
+          <div style="font-size: 24px; font-weight: bold; color: #EF4444;">${analytics.deactivatedUsers}</div>
+        </div>
+      </div>
+
+      <div class="chart-section">
+        <div class="chart-title">User Status Distribution</div>
+        <div class="chart-container">
+          <div class="chart-box">
+            ${analytics.userStatusDistribution.map(item => `
+              <div class="legend-item">
+                <div class="legend-color" style="background-color: ${item.color};"></div>
+                <div class="legend-text">${item.name}: ${item.count} (${item.percentage.toFixed(1)}%)</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+
+      <div class="chart-section">
+        <div class="chart-title">Health Risk Levels</div>
+        <div class="chart-container">
+          <div class="chart-box">
+            ${riskLevelData.map(item => `
+              <div class="legend-item">
+                <div class="legend-color" style="background-color: ${item.color};"></div>
+                <div class="legend-text">${item.name}: ${item.count} (${item.percentage.toFixed(1)}%)</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+
+      <div class="chart-section">
+        <div class="chart-title">Pollution Sources</div>
+        <div class="chart-container">
+          <div class="chart-box">
+            ${pollutionSourceData.map(item => `
+              <div class="legend-item">
+                <div class="legend-color" style="background-color: ${item.color};"></div>
+                <div class="legend-text">${item.name}: ${item.count} (${item.percentage.toFixed(1)}%)</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+
+      <div class="chart-section">
+        <div class="chart-title">Monthly Registrations</div>
+        <div class="chart-container">
+          <div class="chart-box">
+            ${analytics.monthlyRegistrations.map(item => `
+              <div class="stats-item">
+                <span>${item.month}</span>
+                <span><strong>${item.count}</strong> users</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <p>This report was automatically generated by the Health Risk Management System</p>
+      </div>
+    </body></html>`;
+  }, [analytics, riskLevelData, pollutionSourceData, dateRange]);
+
+  const exportToPDF = useCallback(async () => {
+    try {
+      setExporting(true);
+      setExportModalVisible(false);
+      
+      if (Platform.OS === 'web') {
+        // Web-specific PDF export
+        const htmlContent = generatePDFHTML();
+        const win = window.open('', '_blank');
+        win.document.write(htmlContent);
+        win.document.close();
+        win.focus();
+        setTimeout(() => {
+          win.print();
+        }, 300);
+        return;
+      }
+
+      // Mobile export logic
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Permission to access media library is required to save the PDF.');
+        return;
+      }
+
+      const htmlContent = generatePDFHTML();
+      const { uri } = await Print.printToFileAsync({ html: htmlContent, base64: false, width: 612, height: 792 });
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
+      const filename = `analytics-report-${timestamp}.pdf`;
+      const downloadDir = `${FileSystem.documentDirectory}Download/`;
+      
+      const dirInfo = await FileSystem.getInfoAsync(downloadDir);
+      if (!dirInfo.exists) await FileSystem.makeDirectoryAsync(downloadDir, { intermediates: true });
+      
+      const finalUri = `${downloadDir}${filename}`;
+      await FileSystem.copyAsync({ from: uri, to: finalUri });
+      const asset = await MediaLibrary.createAssetAsync(finalUri);
+      
+      if (Platform.OS === 'android') {
+        const album = await MediaLibrary.getAlbumAsync('Download');
+        if (album == null) {
+          await MediaLibrary.createAlbumAsync('Download', asset, false);
+        } else {
+          await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
+        }
+      }
+
+      Alert.alert('Export Successful', `Analytics report saved as "${filename}"`, [{ text: 'OK' }]);
+    } catch (error) {
+      console.error('Export failed:', error);
+      Alert.alert('Export Failed', 'Error generating PDF report. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  }, [generatePDFHTML]);
 
   const StatCard = ({ title, value, icon, color = '#6366f1', subtitle }) => (
     <View style={[styles.statCard, { borderLeftColor: color }]}>
@@ -423,11 +615,21 @@ const AdminAnalyticsScreen = () => {
               <Text style={styles.headerTitle}>Analytics Dashboard</Text>
               <Text style={styles.headerSubtitle}>Monitor platform performance and environmental data</Text>
             </View>
-            <TouchableOpacity style={styles.exportButton} onPress={handleExportPDF}>
-              <Ionicons name="download" size={20} color="#6366f1" />
-              <Text style={styles.exportButtonText}>Export PDF</Text>
-            </TouchableOpacity>
           </View>
+            <TouchableOpacity 
+              style={styles.exportButton} 
+              onPress={showExportConfirmation}
+              disabled={exporting}
+            >
+              {exporting ? (
+                <ActivityIndicator size="small" color="#6366f1" />
+              ) : (
+                <>
+                  <Ionicons name="download" size={20} color="#6366f1" />
+                  <Text style={styles.exportButtonText}>Export PDF</Text>
+                </>
+              )}
+            </TouchableOpacity>
         </View>
 
         <View style={styles.statsGrid}>
@@ -499,6 +701,50 @@ const AdminAnalyticsScreen = () => {
           </View>
         </View>
       </ScrollView>
+
+      {/* Export Confirmation Modal */}
+      <Modal visible={exportModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Export Analytics Report</Text>
+              <TouchableOpacity onPress={() => setExportModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.modalBody}>
+              <Ionicons name="document-text-outline" size={48} color="#6366F1" style={styles.modalIcon} />
+              <Text style={styles.modalText}>
+                This will generate a PDF report containing all analytics data with the current filters applied.
+              </Text>
+              <Text style={styles.modalSubtext}>
+                Current date range: {getDateRangeText()}
+              </Text>
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.cancelButton]} 
+                onPress={() => setExportModalVisible(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.confirmButton, exporting && styles.disabledButton]} 
+                onPress={exportToPDF} 
+                disabled={exporting}
+              >
+                {exporting ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.confirmButtonText}>Generate PDF</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -687,6 +933,77 @@ const styles = StyleSheet.create({
     justifyContent: 'center', 
     alignItems: 'center', 
     gap: 8 
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    width: '90%',
+    maxWidth: 400,
+    padding: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1e293b',
+  },
+  modalBody: {
+    marginBottom: 24,
+    alignItems: 'center',
+  },
+  modalIcon: {
+    marginBottom: 16,
+  },
+  modalText: {
+    fontSize: 14,
+    color: '#475569',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  modalSubtext: {
+    fontSize: 12,
+    color: '#94a3b8',
+    textAlign: 'center',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#f1f5f9',
+  },
+  cancelButtonText: {
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  confirmButton: {
+    backgroundColor: '#6366f1',
+  },
+  confirmButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
 });
 

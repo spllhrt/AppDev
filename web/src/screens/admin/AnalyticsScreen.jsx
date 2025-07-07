@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   StatusBar,
+  Modal,
+  Platform
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle, Rect, Line, Text as SvgText, Path, Defs, LinearGradient, Stop } from 'react-native-svg';
@@ -17,6 +19,9 @@ import { Picker } from '@react-native-picker/picker';
 import { getAllAssessments } from '../../api/historyApi';
 import { getPollutionClassificationLogs } from '../../api/pollutionSource';
 import { getAllUsers } from '../../api/auth';
+import * as Print from 'expo-print';
+import * as FileSystem from 'expo-file-system';
+import * as MediaLibrary from 'expo-media-library';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -34,6 +39,8 @@ const AdminAnalyticsScreen = () => {
     monthlyRegistrations: [],
     userStatusDistribution: [],
   });
+  const [exporting, setExporting] = useState(false);
+  const [exportModalVisible, setExportModalVisible] = useState(false);
 
   useEffect(() => {
     fetchAllData();
@@ -107,61 +114,53 @@ const AdminAnalyticsScreen = () => {
     }
   };
 
-  // Add this debug code in your fetchPollutionSourceData function
-const fetchPollutionSourceData = async () => {
-  try {
-    const { startDate, endDate } = getDateRange();
-    const response = await getPollutionClassificationLogs({
-      startDate: startDate?.toISOString(),
-      endDate: endDate?.toISOString()
-    });
+  const fetchPollutionSourceData = async () => {
+    try {
+      const { startDate, endDate } = getDateRange();
+      const response = await getPollutionClassificationLogs({
+        startDate: startDate?.toISOString(),
+        endDate: endDate?.toISOString()
+      });
 
-    const logs = Array.isArray(response.data) ? response.data : [];
-    const sourceCounts = {};
-    let totalCount = 0;
+      const logs = Array.isArray(response.data) ? response.data : [];
+      const sourceCounts = {};
+      let totalCount = 0;
 
-    logs.forEach(item => {
-      const source = item?.classificationResult?.source || 'unknown';
-      sourceCounts[source] = (sourceCounts[source] || 0) + 1;
-      totalCount++;
-    });
+      logs.forEach(item => {
+        const source = item?.classificationResult?.source || 'unknown';
+        sourceCounts[source] = (sourceCounts[source] || 0) + 1;
+        totalCount++;
+      });
 
-    const chartData = Object.keys(sourceCounts).map(source => {
-      const lowerSource = source.toLowerCase();
-      const color = getPollutionSourceColor(lowerSource);
-      
-      // Debug log to see what's happening
-      console.log(`Source: ${source}, Color: ${color}`);
-      
-      return {
+      const chartData = Object.keys(sourceCounts).map(source => ({
         name: source.charAt(0).toUpperCase() + source.slice(1),
         count: sourceCounts[source],
-        color: color,
+        color: getPollutionSourceColor(source),
         percentage: totalCount > 0 ? (sourceCounts[source] / totalCount) * 100 : 0
-      };
-    });
+      }));
 
-    chartData.sort((a, b) => b.count - a.count);
+      chartData.sort((a, b) => b.count - a.count);
+      setPollutionSourceData(chartData);
+    } catch (error) {
+      console.error('Failed to fetch pollution source data:', error);
+      setPollutionSourceData([]);
+    }
+  };
+
+  const getPollutionSourceColor = (source) => {
+    const lowerSource = source.toLowerCase();
     
-    // Debug the final chart data
-    console.log('Final chart data:', chartData);
-    
-    setPollutionSourceData(chartData);
-  } catch (error) {
-    console.error('Failed to fetch pollution source data:', error);
-    setPollutionSourceData([]);
-  }
-};
-
-const getPollutionSourceColor = (source) => {
-  const normalizedSource = String(source).toLowerCase().trim();
-  console.log("Normalized source:", normalizedSource); // Debug log
-
-  if (normalizedSource === "residential") return "#9C27B0";
-  if (normalizedSource === "industrial") return "#607D8B";
-  if (normalizedSource === "traffic" || normalizedSource === "road") return "#9E9E9E";
-  return "#FF5722"; // Default
-};
+    switch(lowerSource) {
+      case 'vehicular': return '#FF5722';
+      case 'industrial': return '#607D8B';
+      case 'construction': return '#795548';
+      case 'wildfire': return '#FF9800';
+      case 'agricultural': return '#4CAF50';
+      case 'residential': return '#9C27B0';
+      case 'unknown':
+      default: return '#9E9E9E';
+    }
+  };
 
   const getDateRange = () => {
     const endDate = new Date();
@@ -183,6 +182,16 @@ const getPollutionSourceColor = (source) => {
     }
     
     return { startDate, endDate };
+  };
+
+  const getDateRangeText = () => {
+    switch(dateRange) {
+      case 'last7days': return 'Last 7 Days';
+      case 'last30days': return 'Last 30 Days';
+      case 'last90days': return 'Last 90 Days';
+      case 'alltime': return 'All Time';
+      default: return 'Custom Range';
+    }
   };
 
   const processAnalyticsData = (usersData) => {
@@ -246,6 +255,185 @@ const getPollutionSourceColor = (source) => {
     fetchAllData();
   };
 
+  const generatePDFHTML = useCallback(() => {
+    const currentDate = new Date().toLocaleDateString();
+    const dateRangeText = getDateRangeText();
+    
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Analytics Dashboard Report</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; color: #333; line-height: 1.6; }
+          .header { text-align: center; margin-bottom: 30px; padding-bottom: 15px; border-bottom: 2px solid #6366f1; }
+          .header h1 { color: #6366f1; margin: 0; font-size: 28px; }
+          .header p { margin: 5px 0; color: #666; font-size: 14px; }
+          .summary { display: flex; justify-content: space-between; margin-bottom: 30px; flex-wrap: wrap; gap: 15px; }
+          .summary-card { flex: 1; min-width: 200px; background: #f8fafc; border-radius: 12px; padding: 15px; border-left: 4px solid #6366f1; }
+          .summary-card h3 { margin: 0 0 10px 0; color: #6366f1; font-size: 16px; }
+          .summary-value { font-size: 24px; font-weight: bold; }
+          .chart-section { margin-bottom: 30px; }
+          .chart-title { color: #1e293b; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 15px; font-size: 18px; font-weight: bold; }
+          .chart-container { display: flex; flex-wrap: wrap; gap: 20px; }
+          .chart-box { flex: 1; min-width: 300px; background: #f8fafc; padding: 15px; border-radius: 12px; }
+          .legend-item { display: flex; align-items: center; margin-bottom: 8px; }
+          .legend-color { width: 12px; height: 12px; border-radius: 6px; margin-right: 8px; }
+          .legend-text { font-size: 14px; }
+          .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 15px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>Analytics Dashboard Report</h1>
+          <p>Generated on: ${currentDate}</p>
+          <p>Date Range: ${dateRangeText}</p>
+        </div>
+
+        <div class="summary">
+          <div class="summary-card">
+            <h3>Total Users</h3>
+            <div class="summary-value" style="color: #6366f1;">${analytics.totalUsers.toLocaleString()}</div>
+          </div>
+          <div class="summary-card">
+            <h3>Active Users</h3>
+            <div class="summary-value" style="color: #10b981;">${analytics.activeUsers.toLocaleString()}</div>
+          </div>
+          <div class="summary-card">
+            <h3>Admin Users</h3>
+            <div class="summary-value" style="color: #f59e0b;">${analytics.adminUsers.toLocaleString()}</div>
+          </div>
+          <div class="summary-card">
+            <h3>Deactivated Users</h3>
+            <div class="summary-value" style="color: #ef4444;">${analytics.deactivatedUsers.toLocaleString()}</div>
+          </div>
+        </div>
+
+        <div class="chart-section">
+          <div class="chart-title">User Status Distribution</div>
+          <div class="chart-container">
+            <div class="chart-box">
+              ${analytics.userStatusDistribution.map(item => `
+                <div class="legend-item">
+                  <div class="legend-color" style="background-color: ${item.color};"></div>
+                  <div class="legend-text">${item.name}: ${item.count} (${item.percentage.toFixed(1)}%)</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+
+        <div class="chart-section">
+          <div class="chart-title">Health Risk Levels</div>
+          <div class="chart-container">
+            <div class="chart-box">
+              ${riskLevelData.map(item => `
+                <div class="legend-item">
+                  <div class="legend-color" style="background-color: ${item.color};"></div>
+                  <div class="legend-text">${item.name}: ${item.count} (${item.percentage.toFixed(1)}%)</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+
+        <div class="chart-section">
+          <div class="chart-title">Pollution Sources</div>
+          <div class="chart-container">
+            <div class="chart-box">
+              ${pollutionSourceData.map(item => `
+                <div class="legend-item">
+                  <div class="legend-color" style="background-color: ${item.color};"></div>
+                  <div class="legend-text">${item.name}: ${item.count} (${item.percentage.toFixed(1)}%)</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+
+        <div class="chart-section">
+          <div class="chart-title">Monthly Registrations</div>
+          <div class="chart-container">
+            <div class="chart-box">
+              ${analytics.monthlyRegistrations.map(item => `
+                <div class="legend-item">
+                  <div style="width: 120px;">${item.month}</div>
+                  <div>${item.count} users</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+
+        <div class="footer">
+          <p>This report was automatically generated by the Analytics Dashboard</p>
+        </div>
+      </body>
+      </html>
+    `;
+  }, [analytics, riskLevelData, pollutionSourceData, dateRange]);
+
+  const exportToPDF = async () => {
+    try {
+      setExporting(true);
+      setExportModalVisible(false);
+      
+      if (Platform.OS === 'web') {
+        const html = generatePDFHTML();
+        const win = window.open('', '_blank');
+        win.document.write(html);
+        win.document.close();
+        win.focus();
+        setTimeout(() => {
+          win.print();
+        }, 300);
+        return;
+      }
+
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please allow media library access to save the PDF');
+        return;
+      }
+
+      const html = generatePDFHTML();
+      const { uri } = await Print.printToFileAsync({ html });
+      
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `analytics-report-${timestamp}.pdf`;
+      const downloadsDir = `${FileSystem.documentDirectory}Downloads/`;
+      
+      await FileSystem.makeDirectoryAsync(downloadsDir, { intermediates: true });
+      
+      const newUri = `${downloadsDir}${filename}`;
+      await FileSystem.copyAsync({ from: uri, to: newUri });
+      
+      const asset = await MediaLibrary.createAssetAsync(newUri);
+      const album = await MediaLibrary.getAlbumAsync('Downloads');
+      if (album) {
+        await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
+      } else {
+        await MediaLibrary.createAlbumAsync('Downloads', asset, false);
+      }
+
+      Alert.alert(
+        'Export Successful',
+        `PDF report saved to Downloads folder as ${filename}`,
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      console.error('Export failed:', error);
+      Alert.alert('Export Failed', 'An error occurred while generating the PDF report');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportPDF = () => {
+    setExportModalVisible(true);
+  };
+
   const StatCard = ({ title, value, icon, color = '#6366f1', subtitle }) => (
     <View style={[styles.statCard, { borderLeftColor: color }]}>
       <View style={styles.statCardHeader}>
@@ -261,92 +449,92 @@ const getPollutionSourceColor = (source) => {
     </View>
   );
 
-const PieChart = ({ data, size = 160 }) => {
-  const radius = size / 2 - 20;
-  const centerX = size / 2;
-  const centerY = size / 2;
-  
-  const validData = Array.isArray(data) ? data.filter(item => item && typeof item.count === 'number' && item.count >= 0) : [];
+  const PieChart = ({ data, size = 160 }) => {
+    const radius = size / 2 - 20;
+    const centerX = size / 2;
+    const centerY = size / 2;
+    
+    const validData = Array.isArray(data) ? data.filter(item => item && typeof item.count === 'number' && item.count >= 0) : [];
 
-  if (validData.length === 0 || validData.every(item => item.count === 0)) {
+    if (validData.length === 0 || validData.every(item => item.count === 0)) {
+      return (
+        <View style={styles.pieChartContainer}>
+          <View style={[styles.noDataContainer, { width: size, height: size }]}>
+            <Ionicons name="pie-chart-outline" size={48} color="#cbd5e1" />
+            <Text style={styles.noDataText}>No data available</Text>
+          </View>
+        </View>
+      );
+    }
+    
+    let cumulativePercentage = 0;
+    
+    const createArcPath = (startAngle, endAngle, radius, centerX, centerY) => {
+      const start = polarToCartesian(centerX, centerY, radius, startAngle);
+      const end = polarToCartesian(centerX, centerY, radius, endAngle);
+      const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
+      
+      return `M ${centerX} ${centerY} L ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${end.x} ${end.y} Z`;
+    };
+    
+    const polarToCartesian = (centerX, centerY, radius, angleInDegrees) => {
+      const angleInRadians = (angleInDegrees - 90) * Math.PI / 180.0;
+      return {
+        x: centerX + (radius * Math.cos(angleInRadians)),
+        y: centerY + (radius * Math.sin(angleInRadians))
+      };
+    };
+
     return (
       <View style={styles.pieChartContainer}>
-        <View style={[styles.noDataContainer, { width: size, height: size }]}>
-          <Ionicons name="pie-chart-outline" size={48} color="#cbd5e1" />
-          <Text style={styles.noDataText}>No data available</Text>
+        <Svg width={size} height={size}>
+          <Defs>
+            {validData.map((item, index) => {
+              const gradientId = `gradient-${item.name.toLowerCase().replace(/\s+/g, '-')}-${index}`;
+              return (
+                <LinearGradient key={gradientId} id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
+                  <Stop offset="0%" stopColor={item.color} stopOpacity="1" />
+                  <Stop offset="100%" stopColor={item.color} stopOpacity="0.8" />
+                </LinearGradient>
+              );
+            })}
+          </Defs>
+          
+          <Circle cx={centerX} cy={centerY} r={radius} fill="#f8fafc" stroke="#e2e8f0" strokeWidth="2" />
+          
+          {validData.map((item, index) => {
+            const startAngle = cumulativePercentage * 3.6;
+            const endAngle = (cumulativePercentage + item.percentage) * 3.6;
+            cumulativePercentage += item.percentage;
+            
+            if (endAngle - startAngle < 1) return null;
+            
+            const gradientId = `gradient-${item.name.toLowerCase().replace(/\s+/g, '-')}-${index}`;
+            
+            return (
+              <Path
+                key={`path-${item.name}-${index}`}
+                d={createArcPath(startAngle, endAngle, radius, centerX, centerY)}
+                fill={`url(#${gradientId})`}
+                stroke="#fff"
+                strokeWidth="3"
+              />
+            );
+          })}
+        </Svg>
+        <View style={styles.pieChartLegend}>
+          {validData.map((item, index) => (
+            <View key={index} style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: item.color }]} />
+              <Text style={styles.legendText}>
+                {item.name}: {item.count} ({item.percentage.toFixed(1)}%)
+              </Text>
+            </View>
+          ))}
         </View>
       </View>
     );
-  }
-  
-  let cumulativePercentage = 0;
-  
-  const createArcPath = (startAngle, endAngle, radius, centerX, centerY) => {
-    const start = polarToCartesian(centerX, centerY, radius, startAngle);
-    const end = polarToCartesian(centerX, centerY, radius, endAngle);
-    const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
-    
-    return `M ${centerX} ${centerY} L ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${end.x} ${end.y} Z`;
   };
-  
-  const polarToCartesian = (centerX, centerY, radius, angleInDegrees) => {
-    const angleInRadians = (angleInDegrees - 90) * Math.PI / 180.0;
-    return {
-      x: centerX + (radius * Math.cos(angleInRadians)),
-      y: centerY + (radius * Math.sin(angleInRadians))
-    };
-  };
-
-  return (
-    <View style={styles.pieChartContainer}>
-      <Svg width={size} height={size}>
-        <Defs>
-          {validData.map((item, index) => {
-            const gradientId = `gradient-${item.name.toLowerCase().replace(/\s+/g, '-')}-${index}`;
-            return (
-              <LinearGradient key={gradientId} id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
-                <Stop offset="0%" stopColor={item.color} stopOpacity="1" />
-                <Stop offset="100%" stopColor={item.color} stopOpacity="0.8" />
-              </LinearGradient>
-            );
-          })}
-        </Defs>
-        
-        <Circle cx={centerX} cy={centerY} r={radius} fill="#f8fafc" stroke="#e2e8f0" strokeWidth="2" />
-        
-        {validData.map((item, index) => {
-          const startAngle = cumulativePercentage * 3.6;
-          const endAngle = (cumulativePercentage + item.percentage) * 3.6;
-          cumulativePercentage += item.percentage;
-          
-          if (endAngle - startAngle < 1) return null;
-          
-          const gradientId = `gradient-${item.name.toLowerCase().replace(/\s+/g, '-')}-${index}`;
-          
-          return (
-            <Path
-              key={`path-${item.name}-${index}`}
-              d={createArcPath(startAngle, endAngle, radius, centerX, centerY)}
-              fill={`url(#${gradientId})`}
-              stroke="#fff"
-              strokeWidth="3"
-            />
-          );
-        })}
-      </Svg>
-      <View style={styles.pieChartLegend}>
-        {validData.map((item, index) => (
-          <View key={index} style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-            <Text style={styles.legendText}>
-              {item.name}: {item.count} ({item.percentage.toFixed(1)}%)
-            </Text>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-};
 
   const LineChart = ({ data, width = Math.min(screenWidth - 80, 600), height = 200 }) => {
     if (!data || data.length === 0) {
@@ -447,6 +635,16 @@ const PieChart = ({ data, size = 160 }) => {
                 <Ionicons name="refresh" size={20} color="#6366f1" />
                 <Text style={styles.refreshButtonText}>Refresh</Text>
               </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.exportButton, exporting && styles.disabledButton]} 
+                onPress={handleExportPDF}
+                disabled={exporting}
+              >
+                <Ionicons name="download" size={20} color="#6366f1" />
+                <Text style={styles.exportButtonText}>
+                  {exporting ? 'Exporting...' : 'Export PDF'}
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -484,6 +682,49 @@ const PieChart = ({ data, size = 160 }) => {
           </View>
         </View>
       </ScrollView>
+
+      <Modal visible={exportModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Export Analytics Report</Text>
+              <TouchableOpacity onPress={() => setExportModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.modalBody}>
+              <Ionicons name="document-text-outline" size={48} color="#6366f1" style={styles.modalIcon} />
+              <Text style={styles.modalText}>
+                This will generate a PDF report containing all analytics data with the current filters applied.
+              </Text>
+              <Text style={styles.modalSubtext}>
+                Current date range: {getDateRangeText()}
+              </Text>
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.cancelButton]} 
+                onPress={() => setExportModalVisible(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.confirmButton, exporting && styles.disabledButton]} 
+                onPress={exportToPDF} 
+                disabled={exporting}
+              >
+                {exporting ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.confirmButtonText}>Generate PDF</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -587,6 +828,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#64748b',
+  },
+  exportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    gap: 8,
+  },
+  exportButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6366f1',
+  },
+  disabledButton: {
+    opacity: 0.5,
   },
   statsGrid: { 
     flexDirection: 'row',
@@ -719,12 +979,73 @@ const styles = StyleSheet.create({
     alignItems: 'center', 
     gap: 12 
   },
-  sectionTitle: { 
-    fontSize: 22, 
-    fontWeight: '800', 
-    color: '#1e293b', 
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 400,
+    padding: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1e293b',
+  },
+  modalBody: {
     marginBottom: 24,
+  },
+  modalIcon: {
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  modalText: {
+    fontSize: 16,
+    color: '#475569',
     textAlign: 'center',
+    marginBottom: 8,
+  },
+  modalSubtext: {
+    fontSize: 14,
+    color: '#94a3b8',
+    textAlign: 'center',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#f1f5f9',
+  },
+  cancelButtonText: {
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  confirmButton: {
+    backgroundColor: '#6366f1',
+  },
+  confirmButtonText: {
+    color: '#fff',
+    fontWeight: '600',
   },
 });
 

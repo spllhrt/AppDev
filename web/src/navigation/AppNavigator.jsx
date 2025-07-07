@@ -3,7 +3,6 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
 import { useSelector } from "react-redux";
 
-
 import WelcomeScreen from "../screens/WelcomeScreen";
 import LoginScreen from "../screens/LoginScreen";
 import RegisterScreen from "../screens/RegisterScreen";
@@ -36,6 +35,9 @@ const AppNavigator = () => {
     };
   }, []);
 
+  // Check if user is authenticated AND not deactivated
+  const isActiveUser = isAuthenticated && user?.status !== "deactivated";
+
   return (
     <NavigationContainer 
       ref={navigationRef}
@@ -43,9 +45,8 @@ const AppNavigator = () => {
         console.log("🔹 Navigation container is ready");
       }}
     >
-      
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {isAuthenticated ? (
+        {isActiveUser ? (
           user?.role === "admin" ? (
             <Stack.Screen name="Admin" component={AdminNavigator} />
           ) : (
