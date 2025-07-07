@@ -72,6 +72,7 @@ const MapScreen = ({ navigation }) => {
   const webViewRef = useRef(null);
   const lastNominatimRequest = useRef(0);
   const NOMINATIM_RATE_LIMIT = 1000;
+  const blurTimeoutRef = useRef(null);
   
   const updateState = (updates) => setState(prev => ({ ...prev, ...updates }));
 
@@ -182,18 +183,6 @@ const MapScreen = ({ navigation }) => {
     updateState({ aqiData });
   }, [state.cities]);
 
-  const getDistance = (lat1, lon1, lat2, lon2) => {
-    const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = 
-      Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-      Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c;
-  };
-
   const searchLocations = async (query) => {
     const now = Date.now();
     const timeSinceLastRequest = now - lastNominatimRequest.current;
@@ -214,9 +203,7 @@ const MapScreen = ({ navigation }) => {
       });
       return;
     }
-    
-    console.log('🔍 Searching for:', query);
-    
+        
     try {
       const boundedUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=10&bounded=1&viewbox=120.85,14.3,121.15,14.8&countrycodes=ph`;
       
@@ -228,17 +215,17 @@ const MapScreen = ({ navigation }) => {
       let filteredResults = [];
       
       if (results && results.length > 0) {
-        console.log('✅ Using bounded results');
         filteredResults = results.map(item => ({
+          id: item.place_id.toString(),
           name: item.display_name.split(',')[0],
           lat: parseFloat(item.lat),
           lon: parseFloat(item.lon),
           address: item.display_name,
           importance: item.importance || 0,
-          type: item.type || item.class || 'location'
+          type: item.type || item.class || 'location',
+          icon: getLocationIcon(item.type, item.class)
         }));
       } else {
-        console.log('❌ No bounded results, trying fallback search');
         const fallbackUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ', Metro Manila')}&limit=10&countrycodes=ph`;
         
         const phResponse = await fetch(fallbackUrl, {
@@ -253,12 +240,14 @@ const MapScreen = ({ navigation }) => {
             return lat > 14.3 && lat < 14.8 && lon > 120.85 && lon < 121.15;
           })
           .map(item => ({
+            id: item.place_id.toString(),
             name: item.display_name.split(',')[0],
             lat: parseFloat(item.lat),
             lon: parseFloat(item.lon),
             address: item.display_name,
             importance: item.importance || 0,
-            type: item.type || item.class || 'location'
+            type: item.type || item.class || 'location',
+            icon: getLocationIcon(item.type, item.class)
           }));
       }
 
@@ -270,8 +259,6 @@ const MapScreen = ({ navigation }) => {
       });
 
       filteredResults = filteredResults.slice(0, 5);
-      
-      console.log('📊 Final results count:', filteredResults.length);
       
       updateState({
         searchResults: filteredResults,
@@ -293,15 +280,24 @@ const MapScreen = ({ navigation }) => {
     }
   };
 
+  const getLocationIcon = (type, className) => {
+    if (type === 'city' || type === 'town') return 'business';
+    if (type === 'school' || className === 'amenity') return 'school';
+    if (type === 'hospital') return 'medical';
+    if (type === 'mall' || type === 'shopping') return 'storefront';
+    if (type === 'restaurant') return 'restaurant';
+    if (type === 'gas_station') return 'car';
+    if (className === 'building') return 'business';
+    return 'location';
+  };
+
   const debouncedSearch = useRef(
     _.debounce((query) => {
       searchLocations(query);
     }, 300)
   ).current;
 
-  const handleSearchChange = (text) => {
-    console.log('🔍 Search text changed:', text);
-    
+  const handleSearchChange = (text) => {    
     updateState({
       searchQuery: text
     });
@@ -310,14 +306,12 @@ const MapScreen = ({ navigation }) => {
       const cacheKey = text.toLowerCase();
       
       if (state.searchCache[cacheKey]) {
-        console.log('🎯 Found cached results');
         updateState({
           searchResults: state.searchCache[cacheKey],
           showSearchResults: true,
           isSearching: false
         });
       } else {
-        console.log('🔄 Starting search');
         updateState({
           showSearchResults: true,
           isSearching: true,
@@ -335,6 +329,21 @@ const MapScreen = ({ navigation }) => {
       });
       removeSearchMarker();
     }
+  };
+
+  const handleSearchFocus = () => {
+    if (blurTimeoutRef.current) {
+      clearTimeout(blurTimeoutRef.current);
+    }
+    if (state.searchQuery.length > 0 && state.searchResults.length > 0) {
+      updateState({ showSearchResults: true });
+    }
+  };
+
+  const handleSearchBlur = () => {
+    blurTimeoutRef.current = setTimeout(() => {
+      updateState({ showSearchResults: false });
+    }, 150);
   };
 
   const removeSearchMarker = () => {
@@ -424,11 +433,8 @@ const MapScreen = ({ navigation }) => {
       popupContent += '</div>';
 
       const jsCode = `
-        try {
-          console.log('🔧 Adding search marker for: ${location.name}');
-          
+        try {          
           if (window.searchMarker) {
-            console.log('🗑️ Removing existing search marker');
             map.removeLayer(window.searchMarker);
             window.searchMarker = null;
           }
@@ -472,9 +478,7 @@ const MapScreen = ({ navigation }) => {
             icon: customIcon,
             zIndexOffset: 1000 
           }).addTo(map);
-          
-          console.log('✅ Search marker added successfully');
-          
+                    
           window.searchMarker.bindPopup(\`${popupContent.replace(/`/g, '\\`')}\`, { 
             maxWidth: 280, 
             className: 'custom-popup' 
@@ -494,8 +498,6 @@ const MapScreen = ({ navigation }) => {
         
         true;
       `;
-
-      console.log('🚀 Injecting search marker JavaScript');
       webViewRef.current.injectJavaScript(jsCode);
     }
   };
@@ -941,11 +943,7 @@ const MapScreen = ({ navigation }) => {
       activeOpacity={0.7}
     >
       <View style={styles.searchResultIconContainer}>
-        {item.type === 'city' || item.type === 'town' ? (
-          <Ionicons name="business" size={18} color="#00E676" />
-        ) : (
-          <Ionicons name="location" size={18} color="#00E676" />
-        )}
+        <Ionicons name={item.icon} size={18} color="#00E676" />
       </View>
       <View style={styles.searchResultTextContainer}>
         <Text style={styles.searchResultTitle} numberOfLines={1}>
@@ -992,7 +990,8 @@ const MapScreen = ({ navigation }) => {
                 placeholderTextColor="rgba(255,255,255,0.6)"
                 value={state.searchQuery}
                 onChangeText={handleSearchChange}
-                onFocus={() => updateState({ showSearchResults: state.searchResults.length > 0 })}
+                onFocus={handleSearchFocus}
+                onBlur={handleSearchBlur}
               />
               {state.isSearching && (
                 <ActivityIndicator size="small" color="#00E676" style={styles.searchLoading} />
@@ -1006,7 +1005,7 @@ const MapScreen = ({ navigation }) => {
         </LinearGradient>
       </SafeAreaView>
 
-      {(state.showSearchResults && state.searchQuery.length > 2) && (
+      {state.showSearchResults && (
         <View style={styles.searchResultsContainer}>
           {state.isSearching ? (
             <View style={styles.searchLoadingContainer}>
@@ -1022,19 +1021,19 @@ const MapScreen = ({ navigation }) => {
                   onPress={handleLocationSelect} 
                 />
               )}
-              keyExtractor={(item, index) => `${item.name}-${item.lat}-${item.lon}-${index}`}
+              keyExtractor={(item) => item.id}
               keyboardShouldPersistTaps="always"
               showsVerticalScrollIndicator={false}
               style={styles.searchResultsList}
               contentContainerStyle={styles.searchResultsContent}
             />
-          ) : (
+          ) : state.searchQuery.length > 2 ? (
             <View style={styles.noResultsContainer}>
               <Ionicons name="search" size={24} color="rgba(255,255,255,0.4)" />
               <Text style={styles.noResultsText}>No locations found</Text>
               <Text style={styles.noResultsSubtext}>Try a different search term</Text>
             </View>
-          )}
+          ) : null}
         </View>
       )}
 
