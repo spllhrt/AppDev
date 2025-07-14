@@ -23,7 +23,9 @@ import SettingsScreen from '../screens/SettingsScreen';
 import MapScreen from '../screens/user/MapScreen';
 import HealthAssessmentScreen from '../screens/user/HealthAssessmentScreen';
 import HistoryScreen from '../screens/user/HistoryScreen';
-import ChatbotScreen from '../screens/user/ChatbotScreen'; // Added ChatbotScreen import
+import BulletinDetails from '../screens/user/BulletinDetails';
+import ChatbotScreen from '../screens/user/ChatbotScreen';
+import BulletinScreen from '../screens/user/BulletinScreen'; // Added BulletinScreen import
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -88,12 +90,14 @@ const CustomTabBar = ({ state, descriptors, navigation }) => {
           let iconName;
           if (route.name === 'Home') {
             iconName = isFocused ? 'home' : 'home-outline';
-          } else if (route.name === 'Settings') {
-            iconName = isFocused ? 'settings' : 'settings-outline';
-          }  else if (route.name === 'Map') {
+          } else if (route.name === 'Bulletin') {
+            iconName = isFocused ? 'notifications' : 'notifications-outline';
+          } else if (route.name === 'Map') {
             iconName = isFocused ? 'map' : 'map-outline';
           } else if (route.name === 'HealthAssessment') {
             iconName = isFocused ? 'heart' : 'heart-outline';
+          } else if (route.name === 'Settings') {
+            iconName = isFocused ? 'settings' : 'settings-outline';
           }
           return (
             <TouchableOpacity
@@ -159,6 +163,14 @@ const MainTabNavigator = () => {
         options={{
           title: 'Home',
           tabBarLabel: 'Home',
+        }}
+      />
+      <Tab.Screen 
+        name="Bulletin" 
+        component={BulletinScreen}
+        options={{
+          title: 'Bulletin',
+          tabBarLabel: 'Bulletin',
         }}
       />
       <Tab.Screen 
@@ -241,6 +253,13 @@ const UserNavigator = () => {
         component={ChatbotScreen}
         options={{
           title: 'AI Assistant',
+        }}
+      />
+      <Stack.Screen 
+        name="BulletinDetail" 
+        component={BulletinDetails}
+        options={{
+          title: 'Bulletin',
         }}
       />
       

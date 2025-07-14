@@ -51,14 +51,21 @@ const HomeScreen = () => {
     const cities = [
       { name: 'Manila', lat: 14.5995, lon: 120.9842 },
       { name: 'Quezon City', lat: 14.6760, lon: 121.0437 },
+      { name: 'Caloocan', lat: 14.6507, lon: 120.9676 },
+      { name: 'Las Piñas', lat: 14.4649, lon: 120.9779 },
       { name: 'Makati', lat: 14.5547, lon: 121.0244 },
-      { name: 'Cebu', lat: 10.3157, lon: 123.8854 },
-      { name: 'Davao', lat: 7.1907, lon: 125.4553 },
-      { name: 'Baguio', lat: 16.4023, lon: 120.5960 },
-      { name: 'Cagayan de Oro', lat: 8.4542, lon: 124.6319 },
-      { name: 'Iloilo', lat: 10.7202, lon: 122.5621 },
-      { name: 'Bacolod', lat: 10.6407, lon: 122.9687 },
-      { name: 'Zamboanga', lat: 6.9214, lon: 122.0790 }
+      { name: 'Malabon', lat: 14.6619, lon: 120.9569 },
+      { name: 'Mandaluyong', lat: 14.5794, lon: 121.0359 },
+      { name: 'Marikina', lat: 14.6507, lon: 121.1029 },
+      { name: 'Muntinlupa', lat: 14.3832, lon: 121.0409 },
+      { name: 'Navotas', lat: 14.6691, lon: 120.9469 },
+      { name: 'Parañaque', lat: 14.4793, lon: 121.0198 },
+      { name: 'Pasay', lat: 14.5378, lon: 120.9896 },
+      { name: 'Pasig', lat: 14.5764, lon: 121.0851 },
+      { name: 'San Juan', lat: 14.6019, lon: 121.0355 },
+      { name: 'Taguig', lat: 14.5176, lon: 121.0509 },
+      { name: 'Valenzuela', lat: 14.7000, lon: 120.9820 },
+      { name: 'Pateros', lat: 14.5443, lon: 121.0699 },
     ];
 
     try {
@@ -510,9 +517,9 @@ Format your response as a JSON object with a single 'text' property containing t
   const aqiInfo = getAQICategory(currentAQI.aqi);
   const pollutants = getCurrentPollutants();
 
-  // Get top 3 best and worst cities
-  const bestCities = philippineCitiesAqi.slice(0, 3);
-  const worstCities = [...philippineCitiesAqi].reverse().slice(0, 3);
+  // Get top 5 best and worst cities
+  const bestCities = philippineCitiesAqi.slice(0, 5);
+  const worstCities = [...philippineCitiesAqi].reverse().slice(0, 5);
 
   return (
     <View style={styles.container}>
@@ -618,7 +625,7 @@ Format your response as a JSON object with a single 'text' property containing t
             {/* Cities AQI Bulletin */}
             {philippineCitiesAqi.length > 0 && (
               <View style={styles.bulletinSection}>
-                <Text style={styles.sectionTitle}>Philippines Air Quality Bulletin</Text>
+                <Text style={styles.sectionTitle}>Metro Manila Air Quality Bulletin</Text>
                 
                 <View style={styles.bulletinRow}>
                   {/* Best Cities */}

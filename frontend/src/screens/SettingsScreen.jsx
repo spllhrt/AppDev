@@ -304,23 +304,6 @@ const SettingsScreen = ({ navigation }) => {
   };
 
   const settingsGroups = [
-    // {
-    //   title: 'Preferences',
-    //   items: [
-    //     { id: 1, title: 'Push Notifications', icon: 'notifications-outline', type: 'switch', value: notifications, onValueChange: setNotifications, color: '#00E676' },
-    //     { id: 2, title: 'Dark Mode', icon: 'moon-outline', type: 'switch', value: darkMode, onValueChange: setDarkMode, color: '#00E676' },
-    //     { id: 3, title: 'Biometric Login', icon: 'finger-print-outline', type: 'switch', value: biometric, onValueChange: setBiometric, color: '#00E676' },
-    //     { id: 4, title: 'Auto Sync', icon: 'sync-outline', type: 'switch', value: autoSync, onValueChange: setAutoSync, color: '#00E676' },
-    //   ],
-    // },
-    // {
-    //   title: 'Support',
-    //   items: [
-    //     { id: 5, title: 'Help Center', icon: 'help-circle-outline', type: 'button', onPress: () => showAlert('Help Center', 'Help center coming soon!', [{ text: 'OK' }]), color: '#00E676' },
-    //     { id: 6, title: 'Contact Support', icon: 'mail-outline', type: 'button', onPress: () => showAlert('Contact Support', 'Support contact coming soon!', [{ text: 'OK' }]), color: '#00E676' },
-    //     { id: 7, title: 'Report a Bug', icon: 'bug-outline', type: 'button', onPress: () => showAlert('Report Bug', 'Bug reporting coming soon!', [{ text: 'OK' }]), color: '#00E676' },
-    //   ],
-    // },
     {
       title: 'About',
       items: [

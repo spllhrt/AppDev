@@ -9,7 +9,7 @@ import {
   StyleSheet, 
   View, 
   Text, 
-  Pressable, // Changed from TouchableOpacity to Pressable
+  Pressable,
   Animated,
   ScrollView,
   StatusBar
@@ -108,12 +108,13 @@ const CustomDrawerContent = ({ state, descriptors, navigation }) => {
   const insets = useSafeAreaInsets();
   const [activeRoute, setActiveRoute] = useState(state.routeNames[state.index]);
   
-  // Define drawer items with their icons and labels
-  const drawerItems = [
+  // Define visible drawer items with their icons and labels
+  const visibleDrawerItems = [
     { name: 'Home', icon: 'home', label: 'Home' },
     { name: 'Map', icon: 'map', label: 'Map' },
+    { name: 'Weather', icon: 'partly-sunny', label: 'Weather' },
+    { name: 'Aqi', icon: 'cloud', label: 'Air Quality' },
     { name: 'HealthAssessment', icon: 'heart', label: 'Health Assessment' },
-    { name: 'History', icon: 'time', label: 'History' },
     { name: 'Chatbot', icon: 'chatbubbles', label: 'AI Assistant' },
     { name: 'Settings', icon: 'settings', label: 'Settings' },
   ];
@@ -151,7 +152,7 @@ const CustomDrawerContent = ({ state, descriptors, navigation }) => {
       
       {/* Drawer Items */}
       <ScrollView style={styles.drawerContent} showsVerticalScrollIndicator={false}>
-        {drawerItems.map((item, index) => {
+        {visibleDrawerItems.map((item, index) => {
           const isActive = activeRoute === item.name;
           
           return (
@@ -225,7 +226,7 @@ const MainDrawerNavigator = () => {
         ),
         drawerType: 'slide',
         drawerStyle: {
-          width: screenWidth * 0.20, 
+          width: 300, // Fixed width of 300 pixels
           backgroundColor: 'transparent',
         },
         overlayColor: 'rgba(0, 0, 0, 0.6)',
@@ -252,19 +253,27 @@ const MainDrawerNavigator = () => {
         }}
       />
       <Drawer.Screen 
+        name="Weather" 
+        component={WeatherScreen}
+        options={{
+          headerShown: false,
+          title: 'Weather',
+        }}
+      />
+      <Drawer.Screen 
+        name="Aqi" 
+        component={AqiScreen}
+        options={{
+          headerShown: false,
+          title: 'Air Quality',
+        }}
+      />
+      <Drawer.Screen 
         name="HealthAssessment" 
         component={HealthAssessmentScreen}
         options={{
           headerShown: false,
           title: 'Health Assessment',
-        }}
-      />
-      <Drawer.Screen 
-        name="History" 
-        component={HistoryScreen}
-        options={{
-          headerShown: false,
-          title: 'History',
         }}
       />
       <Drawer.Screen 
@@ -280,6 +289,25 @@ const MainDrawerNavigator = () => {
         component={SettingsScreen}
         options={{
           title: 'Settings',
+        }}
+      />
+      {/* Hidden screens - not shown in drawer but available for navigation */}
+      <Drawer.Screen 
+        name="History" 
+        component={HistoryScreen}
+        options={{
+          drawerItemStyle: { display: 'none' }, // Hide from drawer
+          headerShown: false,
+          title: 'History',
+        }}
+      />
+      <Drawer.Screen 
+        name="Profile" 
+        component={ProfileScreen}
+        options={{
+          drawerItemStyle: { display: 'none' }, // Hide from drawer
+          headerShown: false,
+          title: 'Profile',
         }}
       />
     </Drawer.Navigator>
@@ -321,33 +349,6 @@ const UserNavigator = () => {
         options={{
           gestureEnabled: false,
         }}
-      />
-      
-      <Stack.Screen 
-        name="Profile" 
-        component={ProfileScreen}
-        options={({ navigation }) => ({
-          headerShown: false,
-          header: () => <CustomHeader navigation={navigation} title="Profile" showToggle={false} />,
-        })}
-      />
-      
-      <Stack.Screen 
-        name="Weather" 
-        component={WeatherScreen}
-        options={({ navigation }) => ({
-          headerShown: false,
-          header: () => <CustomHeader navigation={navigation} title="Weather" showToggle={false} />,
-        })}
-      />
-      
-      <Stack.Screen 
-        name="Aqi" 
-        component={AqiScreen}
-        options={({ navigation }) => ({
-          headerShown: false,
-          header: () => <CustomHeader navigation={navigation} title="Air Quality" showToggle={false} />,
-        })}
       />
     </Stack.Navigator>
   );

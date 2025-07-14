@@ -19,7 +19,9 @@ import AdminProfileScreen from '../screens/admin/ProfileScreen';
 import AdminAnalyticsScreen from '../screens/admin/AnalyticsScreen';
 import AdminUsersScreen from '../screens/admin/UsersScreen';
 import AdminHistoryScreen from '../screens/admin/HistoryScreen';
-import AdminPollutionSourcesScreen from '../screens/admin/PollutionSource'; // New import
+import ReportsScreen from '../screens/admin/ReportsScreen';
+import AdminPollutionSourcesScreen from '../screens/admin/PollutionSource';
+import BulletinManagement from '../screens/admin/BulletinManagement'; 
 
 const Tab = createBottomTabNavigator();
 const Drawer = createDrawerNavigator();
@@ -155,10 +157,22 @@ const CustomDrawerContent = ({ navigation }) => {
       iconOutline: 'warning-outline'
     },
     {
+      name: 'BulletinManagement',
+      title: 'Bulletin Management',
+      icon: 'newspaper',
+      iconOutline: 'newspaper-outline'
+    },
+    {
       name: 'History',
       title: 'Health Risk Records',
       icon: 'time',
       iconOutline: 'time-outline'
+    },
+    {
+      name: 'Reports',
+      title: 'Incident Reports',
+      icon: 'list',
+      iconOutline: 'list-outline'
     }
   ];
 
@@ -167,15 +181,7 @@ const CustomDrawerContent = ({ navigation }) => {
       <View style={styles.drawerHeader}>
         <Ionicons name="shield-checkmark" size={40} color="#3b82f6" />
         <Text style={styles.drawerHeaderTitle}>Admin Panel</Text>
-        <Text style={styles.drawerHeaderSubtitle}>Environmental Management</Text>
-        {user && (
-          <View style={styles.userInfo}>
-            <Text style={styles.userNameText}>
-              {user.name || user.email?.split('@')[0] || 'Admin'}
-            </Text>
-            <Text style={styles.userRoleText}>Administrator</Text>
-          </View>
-        )}
+        <Text style={styles.drawerHeaderSubtitle}>AirNet AI Management</Text>
       </View>
       
       <View style={styles.drawerContent}>
@@ -332,12 +338,33 @@ const AdminNavigator = () => {
       />
       
       <Drawer.Screen
+        name="BulletinManagement"
+        component={BulletinManagement}
+        options={{
+          title: 'Bulletin Management',
+          drawerIcon: ({ color, size }) => (
+            <Ionicons name="newspaper-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      
+      <Drawer.Screen
         name="History"
         component={AdminHistoryScreen}
         options={{
           title: 'Health Risk Records',
           drawerIcon: ({ color, size }) => (
             <Ionicons name="time-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Drawer.Screen
+        name="Reports"
+        component={ReportsScreen}
+        options={{
+          title: 'Incident Reports',
+          drawerIcon: ({ color, size }) => (
+            <Ionicons name="list-outline" size={size} color={color} />
           ),
         }}
       />
