@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, Platform, TouchableOpacity, Dimensions, StatusBar, RefreshControl, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, ScrollView,ActivityIndicator , Platform, TouchableOpacity, Dimensions, StatusBar, RefreshControl, Alert, Modal } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -281,6 +281,49 @@ const geocodeCity = async (city) => {
   return "Health emergency: everyone is at risk. Stay indoors.";
 };
 
+const renderMap = () => {
+  const mapHTML = getMapHTML(location, showMap); // Use your existing `getMapHTML`
+
+  if (Platform.OS === 'web') {
+    return (
+      <iframe
+        srcDoc={mapHTML}
+        style={{
+          width: '100%',
+          height: showMap ? '100vh' : 300,
+          border: 'none',
+          borderRadius: 12,
+          overflow: 'hidden',
+        }}
+        title="AQI Map"
+      />
+    );
+  }
+
+  return (
+    <WebView
+      originWhitelist={['*']}
+      source={{ html: mapHTML }}
+      style={{
+        width: '100%',
+        height: showMap ? '100%' : 300,
+        borderRadius: 12,
+        overflow: 'hidden',
+      }}
+      onMessage={(event) => {
+        try {
+          const message = JSON.parse(event.nativeEvent.data);
+          if (message.action === 'openFullMap') {
+            setShowMap(true);
+          }
+        } catch (err) {
+          console.log('Invalid message from WebView:', err);
+        }
+      }}
+    />
+  );
+};
+
   const getMapHTML = (location, fullScreen = false) => {
     const lat = location?.latitude || 14.5995;
     const lon = location?.longitude || 120.9842;
@@ -336,7 +379,7 @@ const geocodeCity = async (city) => {
         </div>
     </div>
     <script>
-        const map = L.map('map', {${controls}}).setView([${lat}, ${lon}], ${fullScreen ? 9 : 11});
+        const map = L.map('map', {${controls}}).setView([${lat}, ${lon}], ${fullScreen ? 11.5 : 11});
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution: '© OpenStreetMap'}).addTo(map);
         let loadingCount = 0;
         const updateLoadingStatus = () => { if (--loadingCount <= 0) document.getElementById('loading').style.display = 'none'; };
@@ -455,438 +498,879 @@ const getCurrentPollutants = () => {
 const handleChartPress = (data) => {
   if (data && data.index !== undefined) {
     const hourlyData = getHourlyData(selectedDay);
-    const filteredData = hourlyData.filter((_, i) => i % 3 === 0);
-    const selectedData = filteredData[data.index];
+    const selectedData = hourlyData[data.index];
     if (selectedData) {
       setSelectedHourData(selectedData);
       setShowHourlyModal(true);
     }
   }
 };
-
-
-  const renderChart = () => {
+const renderChart = () => {
   const hourlyData = getHourlyData(selectedDay);
   if (hourlyData.length === 0) return <Text style={styles.noDataText}>No data available</Text>;
+
+  // Generate labels for 24 hours (0-23)
+  const labels = Array.from({ length: 24 }, (_, i) => `${i}`);
   
-  const filteredData = hourlyData.filter((_, i) => i % 3 === 0);
-  const labels = filteredData.map(d => `${d.hour}h`);
   const chartConfigs = {
-    aqi: { data: filteredData.map(d => d.aqi), color: '#00E676' },
-    pm25: { data: filteredData.map(d => d.pm25), color: '#2196F3' },
-    pm10: { data: filteredData.map(d => d.pm10), color: '#FF9800' },
-    co: { data: filteredData.map(d => d.co), color: '#9C27B0' },
-    no2: { data: filteredData.map(d => d.no2), color: '#F44336' },
-    ozone: { data: filteredData.map(d => d.ozone), color: '#FFC107' }
+    aqi: { data: hourlyData.map(d => d.aqi), color: '#00E676' },
+    pm25: { data: hourlyData.map(d => d.pm25), color: '#2196F3' },
+    pm10: { data: hourlyData.map(d => d.pm10), color: '#FF9800' },
+    co: { data: hourlyData.map(d => d.co), color: '#9C27B0' },
+    no2: { data: hourlyData.map(d => d.no2), color: '#F44336' },
+    ozone: { data: hourlyData.map(d => d.ozone), color: '#FFC107' }
   };
   const config = chartConfigs[activeChart];
   
-  if (!config.data.length || config.data.every(val => val === 0)) return <Text style={styles.noDataText}>No data available</Text>;
+  if (!config.data.length || config.data.every(val => val === 0)) {
+    return <Text style={styles.noDataText}>No data available</Text>;
+  }
+
+  const maxValue = Math.max(...config.data);
+  const minValue = Math.min(...config.data.filter(val => val !== null && val !== undefined));
+  const range = maxValue - minValue;
   
+  const yAxisMax = Math.ceil(maxValue / 50) * 50;
+  const yAxisMin = Math.max(0, Math.floor(minValue / 50) * 50);
+  
+  const baseHeight = 400;
+  const heightAdjustment = Math.min(2, 1 + (range / 200)); 
+  const chartHeight = Math.floor(baseHeight * heightAdjustment);
+
   return (
-    <LineChart
-      data={{ labels, datasets: [{ data: config.data, color: () => config.color, strokeWidth: 3 }] }}
-      width={width - 60}
-      height={220}
-      chartConfig={{
-        backgroundColor: 'transparent',
-        backgroundGradientFrom: 'rgba(0,0,0,0.1)',
-        backgroundGradientTo: 'rgba(0,0,0,0.1)',
-        decimalPlaces: 1,
-        color: () => config.color,
-        labelColor: () => 'rgba(255,255,255,0.9)',
-        style: { borderRadius: 16 },
-        propsForDots: { r: '4', strokeWidth: '2', stroke: config.color, fill: config.color }
-      }}
-      bezier
-      style={styles.chart}
-      withInnerLines={false}
-      withOuterLines={false}
-      withVerticalLines={false}
-      withHorizontalLines={true}
-      onDataPointClick={handleChartPress}
-    />
+    <View style={styles.chartContainer}>
+      <LineChart
+        data={{ 
+          labels, 
+          datasets: [{ 
+            data: config.data, 
+            color: () => config.color, 
+            strokeWidth: 3,
+            withDots: true
+          }] 
+        }}
+        width={Dimensions.get('window').width - 40}
+        height={chartHeight}
+        chartConfig={{
+          backgroundColor: 'transparent',
+          backgroundGradientFrom: 'rgba(15,15,35,0.8)',
+          backgroundGradientTo: 'rgba(26,26,46,0.8)',
+          decimalPlaces: 1,
+          color: () => config.color,
+          labelColor: () => 'rgba(255,255,255,0.9)',
+          style: { borderRadius: 20 },
+          propsForDots: { 
+            r: 5, 
+            strokeWidth: 2, 
+            stroke: config.color, 
+            fill: config.color 
+          },
+          propsForLabels: {
+            fontSize: 10
+          }
+        }}
+        fromZero={false}
+        yAxisInterval={20}
+        segments={5} 
+        yAxisLabel=""
+        yAxisSuffix=""
+        xAxisLabel="Hour"
+        yAxisMinimum={yAxisMin}
+        yAxisMaximum={yAxisMax}
+        bezier
+        style={styles.chart}
+        withInnerLines={true}
+        withOuterLines={false}
+        withVerticalLines={false}
+        withHorizontalLines={true}
+        onDataPointClick={handleChartPress}
+        withCustomYAxis={true}
+        formatYLabel={(value) => Math.round(value)}
+        getDotColor={(dataPoint, index) => config.color}
+      />
+    </View>
   );
 };
-  const formatDate = (dateStr, index) => {
-    if (index === 0) return 'Today';
-    if (index === 1) return 'Tomorrow';
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' });
-  };
+const formatDate = (dateStr, index) => {
+  if (index === 0) return 'Today';
+  if (index === 1) return 'Tomorrow';
+  const date = new Date(dateStr);
+  return date.toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' });
+};
 
-  if (loading) {
-    return (
-      <View style={styles.container}>
-        <LinearGradient colors={['#0F0F23', '#1A1A2E', '#16213E']} style={styles.gradient}>
-          <SafeAreaView style={styles.safeArea}>
-            <View style={styles.loadingContainer}>
-              <Ionicons name="leaf" size={60} color="#00E676" />
-              <Text style={styles.loadingText}>Loading Air Quality...</Text>
-            </View>
-          </SafeAreaView>
-        </LinearGradient>
-      </View>
-    );
-  }
-
-  if (!aqiData?.daily?.length) {
-    return (
-      <View style={styles.container}>
-        <LinearGradient colors={['#0F0F23', '#1A1A2E', '#16213E']} style={styles.gradient}>
-          <SafeAreaView style={styles.safeArea}>
-            <View style={styles.loadingContainer}>
-              <Ionicons name="alert-circle" size={60} color="#F44336" />
-              <Text style={styles.loadingText}>No Data Available</Text>
-              <TouchableOpacity style={styles.retryButton} onPress={initializeAQI}>
-                <Text style={styles.retryButtonText}>Retry</Text>
-              </TouchableOpacity>
-            </View>
-          </SafeAreaView>
-        </LinearGradient>
-      </View>
-    );
-  }
-
-  const currentAQI = aqiData.daily[selectedDay];
-  const category = getAQICategory(currentAQI?.aqi || 0);
-  const pollutants = getCurrentPollutants();
-
+if (loading) {
   return (
     <View style={styles.container}>
       <LinearGradient colors={['#0F0F23', '#1A1A2E', '#16213E']} style={styles.gradient}>
-        <StatusBar barStyle="light-content" backgroundColor="#0F0F23" translucent={false} />
         <SafeAreaView style={styles.safeArea}>
-          {/* Header */}
-          <View style={styles.stickyHeader}>
-            <LinearGradient colors={['#0F0F23', '#1A1A2E']} style={styles.stickyHeaderGradient}>
-               <View style={styles.headerTop}>
-                  <View style={styles.headerContent}>
-                    <Text style={styles.headerTitle}>Air Quality</Text>
-                    <Text style={styles.headerSubtitle}>{getLocationDisplayText()}</Text>
-                  </View>
-                  {!isParameterLocation && (
-                    <TouchableOpacity style={styles.locationButton} onPress={() => setUseGPS(!useGPS)}>
-                      <Ionicons name={useGPS ? "location" : "location-outline"} size={24} color="#00E676" />
-                    </TouchableOpacity>
-                  )}
-                </View>
-            </LinearGradient>
+          <View style={styles.loadingContainer}>
+            <Ionicons name="leaf" size={80} color="#00E676" />
+            <Text style={styles.loadingText}>Loading Air Quality...</Text>
+            <View style={styles.loadingSpinner}>
+              <ActivityIndicator size="large" color="#00E676" />
+            </View>
           </View>
-
-          <ScrollView 
-            style={styles.scrollView} 
-            contentContainerStyle={styles.scrollContent} 
-            refreshControl={<RefreshControl refreshing={loading} onRefresh={initializeAQI} tintColor="#00E676" colors={['#00E676']} />} 
-            showsVerticalScrollIndicator={false}
-          >
-            {/* Main AQI Card */}
-            <View style={[styles.mainCard, { borderColor: category.color }]}>
-              <View style={styles.aqiSection}>
-                <Text style={styles.aqiValue}>{currentAQI?.aqi || 0}</Text>
-                <Text style={[styles.aqiCategory, { color: category.color }]}>{category.text}</Text>
-                  {pollutionSource && (
-                  <View style={styles.sourceCard}>
-                    <Ionicons name="analytics-outline" size={24} color="#00E676" />
-                    <View style={styles.sourceInfo}>
-                      <Text style={styles.sourceLabel}>Likely Main Pollution Source</Text>
-                      <Text style={styles.sourceValue}>{pollutionSource}</Text>
-                    </View>
-                  </View>
-                )}
-              </View>
-            </View>
-
-            {/* Pollutants Grid */}
-            <View style={styles.pollutantsSection}>
-              <Text style={styles.sectionTitle}>Current Pollutant Levels</Text>
-              <View style={styles.pollutantsGrid}>
-                {[
-                  { key: 'pm25', label: 'PM2.5', value: pollutants.pm25, unit: 'μg/m³', color: '#2196F3' },
-                  { key: 'pm10', label: 'PM10', value: pollutants.pm10, unit: 'μg/m³', color: '#FF9800' },
-                  { key: 'co', label: 'CO', value: pollutants.co, unit: 'μg/m³', color: '#9C27B0' },
-                  { key: 'no2', label: 'NO₂', value: pollutants.no2, unit: 'μg/m³', color: '#F44336' },
-                  { key: 'so2', label: 'SO₂', value: pollutants.so2, unit: 'μg/m³', color: '#795548' },
-                  { key: 'ozone', label: 'O₃', value: pollutants.ozone, unit: 'μg/m³', color: '#FFC107' }
-                ].map((pollutant) => (
-                  <View key={pollutant.key} style={[styles.pollutantCard, { borderLeftColor: pollutant.color }]}>
-                    <Text style={styles.pollutantLabel}>{pollutant.label}</Text>
-                    <Text style={[styles.pollutantValue, { color: pollutant.color }]}>
-                      {pollutant.value.toFixed(1)} {pollutant.unit}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-
-            {/* Map Section */}
-            <View style={styles.mapSection}>
-              <View style={styles.mapHeader}>
-                <Text style={styles.sectionTitle}>Location Overview</Text>
-                <TouchableOpacity style={styles.fullMapButton} onPress={() => setShowMap(true)}>
-                  <Text style={styles.fullMapButtonText}>View Full Map</Text>
-                  <Ionicons name="expand-outline" size={16} color="#00E676" />
-                </TouchableOpacity>
-              </View>
-              <View style={styles.mapContainer}>
-                <WebView source={{ html: getMapHTML(location) }} style={styles.mapWebView} scrollEnabled={false} />
-              </View>
-            </View>
-
-            {/* 5-Day Forecast */}
-            <View style={styles.forecastSection}>
-              <Text style={styles.sectionTitle}>5-Day Forecast</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {aqiData.daily.map((day, index) => {
-                  const dayCategory = getAQICategory(day.aqi);
-                  const isSelected = selectedDay === index;
-                  return (
-                    <TouchableOpacity 
-                      key={index} 
-                      style={[styles.forecastCard, isSelected && styles.forecastCardSelected, { borderColor: dayCategory.color }]} 
-                      onPress={() => setSelectedDay(index)}
-                    >
-                      <Text style={styles.forecastDay}>{formatDate(day.date, index)}</Text>
-                      <Text style={[styles.forecastAqi, { color: dayCategory.color }]}>{day.aqi}</Text>
-                      <Text style={styles.forecastCategory}>{dayCategory.text}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            </View>
-
-            {/* Hourly Chart */}
-            <View style={styles.chartSection}>
-              <Text style={styles.sectionTitle}>Hourly Data - {formatDate(aqiData.daily[selectedDay]?.date, selectedDay)}</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chartTabs}>
-                {['aqi', 'pm25', 'pm10', 'co', 'no2', 'ozone'].map((type) => (
-                  <TouchableOpacity 
-                    key={type} 
-                    style={[styles.chartTab, activeChart === type && styles.chartTabActive]} 
-                    onPress={() => setActiveChart(type)}
-                  >
-                    <Text style={[styles.chartTabText, activeChart === type && styles.chartTabTextActive]}>
-                      {type.toUpperCase()}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-              <View style={styles.chartContainer}>
-                {renderChart()}
-              </View>
-            </View>
-
-            <View style={styles.bottomPadding} />
-          </ScrollView>
-
-          {/* Full Map Modal */}
-          <Modal visible={showMap} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setShowMap(false)}>
-            <View style={styles.fullMapContainer}>
-              <View style={styles.fullMapHeader}>
-                <TouchableOpacity style={styles.closeMapButton} onPress={() => setShowMap(false)}>
-                  <Ionicons name="close" size={24} color="#fff" />
-                </TouchableOpacity>
-                <Text style={styles.fullMapTitle}>Air Quality Map</Text>
-                <View style={styles.fullMapHeaderSpacer} />
-              </View>
-              <WebView source={{ html: getMapHTML(location, true) }} style={styles.fullMapWebView} />
-            </View>
-          </Modal>
-
-          <Modal 
-            visible={showHourlyModal} 
-            animationType="slide" 
-            transparent={true}
-            onRequestClose={() => setShowHourlyModal(false)}
-          >
-            <View style={styles.modalOverlay}>
-              <View style={styles.hourlyModalContainer}>
-                <View style={styles.hourlyModalHeader}>
-                  <Text style={styles.hourlyModalTitle}>
-                    Hourly Details - {selectedHourData?.actualHour || 0}:00
-                  </Text>
-                  <TouchableOpacity 
-                    style={styles.closeModalButton} 
-                    onPress={() => setShowHourlyModal(false)}
-                  >
-                    <Ionicons name="close" size={24} color="#fff" />
-                  </TouchableOpacity>
-                </View>
-                
-                {selectedHourData && (
-                  <View style={styles.hourlyModalContent}>
-                    <View style={styles.hourlyAqiSection}>
-                      <Text style={styles.hourlyAqiValue}>{selectedHourData.aqi}</Text>
-                      <Text style={[styles.hourlyAqiCategory, { color: getAQICategory(selectedHourData.aqi).color }]}>
-                        {getAQICategory(selectedHourData.aqi).text}
-                      </Text>
-                    </View>
-                    
-                    <View style={styles.hourlyPollutantsGrid}>
-                      {[
-                        { key: 'pm25', label: 'PM2.5', value: selectedHourData.pm25, unit: 'μg/m³', color: '#2196F3' },
-                        { key: 'pm10', label: 'PM10', value: selectedHourData.pm10, unit: 'μg/m³', color: '#FF9800' },
-                        { key: 'co', label: 'CO', value: selectedHourData.co, unit: 'μg/m³', color: '#9C27B0' },
-                        { key: 'no2', label: 'NO₂', value: selectedHourData.no2, unit: 'μg/m³', color: '#F44336' },
-                        { key: 'so2', label: 'SO₂', value: selectedHourData.so2, unit: 'μg/m³', color: '#795548' },
-                        { key: 'ozone', label: 'O₃', value: selectedHourData.ozone, unit: 'μg/m³', color: '#FFC107' }
-                      ].map((pollutant) => (
-                        <View key={pollutant.key} style={[styles.hourlyPollutantCard, { borderLeftColor: pollutant.color }]}>
-                          <Text style={styles.hourlyPollutantLabel}>{pollutant.label}</Text>
-                          <Text style={[styles.hourlyPollutantValue, { color: pollutant.color }]}>
-                            {pollutant.value.toFixed(1)} {pollutant.unit}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                )}
-              </View>
-            </View>
-          </Modal>
         </SafeAreaView>
       </LinearGradient>
     </View>
   );
+}
+
+if (!aqiData?.daily?.length) {
+  return (
+    <View style={styles.container}>
+      <LinearGradient colors={['#0F0F23', '#1A1A2E', '#16213E']} style={styles.gradient}>
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.loadingContainer}>
+            <Ionicons name="alert-circle" size={80} color="#F44336" />
+            <Text style={styles.loadingText}>No Data Available</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={initializeAQI}>
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
+    </View>
+  );
+}
+
+const currentAQI = aqiData.daily[selectedDay];
+const category = getAQICategory(currentAQI?.aqi || 0);
+const pollutants = getCurrentPollutants();
+
+return (
+  <View style={styles.container}>
+    <LinearGradient colors={['#0F0F23', '#1A1A2E', '#16213E']} style={styles.gradient}>
+      <StatusBar barStyle="light-content" backgroundColor="#0F0F23" translucent={false} />
+      <SafeAreaView style={styles.safeArea}>
+        
+        <View style={styles.webHeader}>
+          <LinearGradient colors={['#0F0F23', '#1A1A2E']} style={styles.headerGradient}>
+            <View style={styles.headerContainer}>
+              <TouchableOpacity style={styles.backButton} onPress={() => navigation?.goBack?.() || console.log('Back pressed')}>
+                <Ionicons name="arrow-back" size={24} color="#00E676" />
+                <Text style={styles.backButtonText}>Back</Text>
+              </TouchableOpacity>
+              
+              <View style={styles.headerCenter}>
+                <Text style={styles.webHeaderTitle}>Air Quality Monitor</Text>
+                <Text style={styles.webHeaderSubtitle}>{getLocationDisplayText()}</Text>
+              </View>
+              
+              <View style={styles.headerActions}>
+                {!isParameterLocation && (
+                  <TouchableOpacity style={styles.locationToggle} onPress={() => setUseGPS(!useGPS)}>
+                    <Ionicons name={useGPS ? "location" : "location-outline"} size={20} color="#00E676" />
+                    <Text style={styles.locationToggleText}>
+                      {useGPS ? 'GPS Active' : 'Manual Location'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          </LinearGradient>
+        </View>
+
+        <ScrollView 
+          style={styles.webScrollView} 
+          contentContainerStyle={styles.webScrollContent} 
+          refreshControl={<RefreshControl refreshing={loading} onRefresh={initializeAQI} tintColor="#00E676" colors={['#00E676']} />} 
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.webMainGrid}>
+            
+            <View style={styles.webLeftColumn}>
+              
+              <View style={[styles.webMainCard, { borderColor: category.color, shadowColor: category.color }]}>
+                <View style={styles.webAqiHeader}>
+                  <Text style={styles.webCardTitle}>Current Air Quality Index</Text>
+                  <View style={[styles.webStatusBadge, { backgroundColor: category.color }]}>
+                    <Text style={styles.webStatusText}>{category.text}</Text>
+                  </View>
+                </View>
+                
+                <View style={styles.webAqiContent}>
+                  <Text style={[styles.webAqiValue, { color: category.color }]}>{currentAQI?.aqi || 0}</Text>
+                  <Text style={styles.webAqiLabel}>AQI Level</Text>
+                </View>
+
+                {pollutionSource && (
+                  <View style={styles.webSourceCard}>
+                    <Ionicons name="analytics-outline" size={28} color="#00E676" />
+                    <View style={styles.webSourceInfo}>
+                      <Text style={styles.webSourceLabel}>Primary Pollution Source</Text>
+                      <Text style={styles.webSourceValue}>{pollutionSource}</Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.webPollutantsCard}>
+                <Text style={styles.webCardTitle}>Real-time Pollutant Levels</Text>
+                <View style={styles.webPollutantsGrid}>
+                  {[
+                    { key: 'pm25', label: 'PM2.5', value: pollutants.pm25, unit: 'μg/m³', color: '#2196F3', icon: 'ellipse' },
+                    { key: 'pm10', label: 'PM10', value: pollutants.pm10, unit: 'μg/m³', color: '#FF9800', icon: 'ellipse' },
+                    { key: 'co', label: 'CO', value: pollutants.co, unit: 'μg/m³', color: '#9C27B0', icon: 'cloud' },
+                    { key: 'no2', label: 'NO₂', value: pollutants.no2, unit: 'μg/m³', color: '#F44336', icon: 'flame' },
+                    { key: 'so2', label: 'SO₂', value: pollutants.so2, unit: 'μg/m³', color: '#795548', icon: 'warning' },
+                    { key: 'ozone', label: 'O₃', value: pollutants.ozone, unit: 'μg/m³', color: '#FFC107', icon: 'sunny' }
+                  ].map((pollutant) => (
+                    <View key={pollutant.key} style={[styles.webPollutantCard, { borderLeftColor: pollutant.color }]}>
+                      <View style={styles.webPollutantHeader}>
+                        <Ionicons name={pollutant.icon} size={16} color={pollutant.color} />
+                        <Text style={styles.webPollutantLabel}>{pollutant.label}</Text>
+                      </View>
+                      <Text style={[styles.webPollutantValue, { color: pollutant.color }]}>
+                        {pollutant.value.toFixed(1)}
+                      </Text>
+                      <Text style={styles.webPollutantUnit}>{pollutant.unit}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.webRightColumn}>
+              
+              <View style={styles.webMapCard}>
+                <View style={styles.webMapHeader}>
+                  <Text style={styles.webCardTitle}>Location Overview</Text>
+                  <TouchableOpacity style={styles.webFullMapButton} onPress={() => setShowMap(true)}>
+                    <Ionicons name="expand-outline" size={18} color="#00E676" />
+                    <Text style={styles.webFullMapButtonText}>Expand Map</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.webMapContainer}>
+                  {renderMap(location, false)}
+                </View>
+              </View>
+
+              {/* 5-Day Forecast */}
+              <View style={styles.webForecastCard}>
+                <Text style={styles.webCardTitle}>5-Day Air Quality Forecast</Text>
+                <View style={styles.webForecastGrid}>
+                  {aqiData.daily.map((day, index) => {
+                    const dayCategory = getAQICategory(day.aqi);
+                    const isSelected = selectedDay === index;
+                    return (
+                      <TouchableOpacity 
+                        key={index} 
+                        style={[
+                          styles.webForecastItem, 
+                          isSelected && styles.webForecastItemSelected,
+                          { borderColor: dayCategory.color }
+                        ]} 
+                        onPress={() => setSelectedDay(index)}
+                      >
+                        <Text style={styles.webForecastDay}>{formatDate(day.date, index)}</Text>
+                        <Text style={[styles.webForecastAqi, { color: dayCategory.color }]}>{day.aqi}</Text>
+                        <Text style={styles.webForecastCategory}>{dayCategory.text}</Text>
+                        <View style={[styles.webForecastIndicator, { backgroundColor: dayCategory.color }]} />
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            </View>
+          </View>
+
+          {/* Full-width Chart Section */}
+          <View style={styles.webChartSection}>
+            <View style={styles.webChartHeader}>
+              <Text style={styles.webCardTitle}>
+                Hourly Analysis - {formatDate(aqiData.daily[selectedDay]?.date, selectedDay)}
+              </Text>
+              <View style={styles.webChartTabs}>
+                {['aqi', 'pm25', 'pm10', 'co', 'no2', 'ozone'].map((type) => (
+                  <TouchableOpacity 
+                    key={type} 
+                    style={[styles.webChartTab, activeChart === type && styles.webChartTabActive]} 
+                    onPress={() => setActiveChart(type)}
+                  >
+                    <Text style={[styles.webChartTabText, activeChart === type && styles.webChartTabTextActive]}>
+                      {type.toUpperCase()}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+            
+            <View style={styles.webChartContainer}>
+              {renderChart()}
+            </View>
+          </View>
+        </ScrollView>
+
+        {/* Full Map Modal */}
+        <Modal visible={showMap} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setShowMap(false)}>
+          <View style={styles.fullMapContainer}>
+            <View style={styles.fullMapHeader}>
+              <TouchableOpacity style={styles.closeMapButton} onPress={() => setShowMap(false)}>
+                <Ionicons name="close" size={24} color="#fff" />
+              </TouchableOpacity>
+              <Text style={styles.fullMapTitle}>Air Quality Map</Text>
+              <View style={styles.fullMapHeaderSpacer} />
+            </View>
+            {renderMap(location, true)}
+          </View>
+        </Modal>
+
+        <Modal 
+          visible={showHourlyModal} 
+          animationType="slide" 
+          transparent={true}
+          onRequestClose={() => setShowHourlyModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.hourlyModalContainer}>
+              <View style={styles.hourlyModalHeader}>
+                <Text style={styles.hourlyModalTitle}>
+                  Hourly Details - {selectedHourData?.actualHour || 0}:00
+                </Text>
+                <TouchableOpacity 
+                  style={styles.closeModalButton} 
+                  onPress={() => setShowHourlyModal(false)}
+                >
+                  <Ionicons name="close" size={24} color="#fff" />
+                </TouchableOpacity>
+              </View>
+              
+              {selectedHourData && (
+                <View style={styles.hourlyModalContent}>
+                  <View style={styles.hourlyAqiSection}>
+                    <Text style={styles.hourlyAqiValue}>{selectedHourData.aqi}</Text>
+                    <Text style={[styles.hourlyAqiCategory, { color: getAQICategory(selectedHourData.aqi).color }]}>
+                      {getAQICategory(selectedHourData.aqi).text}
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.hourlyPollutantsGrid}>
+                    {[
+                      { key: 'pm25', label: 'PM2.5', value: selectedHourData.pm25, unit: 'μg/m³', color: '#2196F3' },
+                      { key: 'pm10', label: 'PM10', value: selectedHourData.pm10, unit: 'μg/m³', color: '#FF9800' },
+                      { key: 'co', label: 'CO', value: selectedHourData.co, unit: 'μg/m³', color: '#9C27B0' },
+                      { key: 'no2', label: 'NO₂', value: selectedHourData.no2, unit: 'μg/m³', color: '#F44336' },
+                      { key: 'so2', label: 'SO₂', value: selectedHourData.so2, unit: 'μg/m³', color: '#795548' },
+                      { key: 'ozone', label: 'O₃', value: selectedHourData.ozone, unit: 'μg/m³', color: '#FFC107' }
+                    ].map((pollutant) => (
+                      <View key={pollutant.key} style={[styles.hourlyPollutantCard, { borderLeftColor: pollutant.color }]}>
+                        <Text style={styles.hourlyPollutantLabel}>{pollutant.label}</Text>
+                        <Text style={[styles.hourlyPollutantValue, { color: pollutant.color }]}>
+                          {pollutant.value.toFixed(1)} {pollutant.unit}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+            </View>
+          </View>
+        </Modal>
+      </SafeAreaView>
+    </LinearGradient>
+  </View>
+);
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
   gradient: { flex: 1 },
   safeArea: { flex: 1 },
-  scrollView: { flex: 1 },
-  scrollContent: { paddingHorizontal: 20, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 20) + 90 : 90 },
   
   // Loading States
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { fontSize: 16, color: '#FFFFFF', marginTop: 20, fontWeight: '600' },
-  retryButton: { backgroundColor: '#00E676', paddingHorizontal: 30, paddingVertical: 12, borderRadius: 25, marginTop: 30 },
-  retryButtonText: { color: '#000', fontSize: 16, fontWeight: 'bold' },
+  loadingContainer: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    padding: 40
+  },
+  loadingText: { 
+    fontSize: 20, 
+    color: '#FFFFFF', 
+    marginTop: 30, 
+    fontWeight: '600',
+    textAlign: 'center'
+  },
+  loadingSpinner: {
+    marginTop: 20
+  },
+  retryButton: { 
+    backgroundColor: '#00E676', 
+    paddingHorizontal: 40, 
+    paddingVertical: 15, 
+    borderRadius: 30, 
+    marginTop: 40,
+    shadowColor: '#00E676',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8
+  },
+  retryButtonText: { 
+    color: '#000', 
+    fontSize: 16, 
+    fontWeight: 'bold' 
+  },
   
-  // Header
-  stickyHeader: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1000 },
-  stickyHeaderGradient: { paddingBottom: 15, paddingHorizontal: 20, paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 20 },
-  headerContent: { flex: 1 },
-  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  headerTitle: { fontSize: 16, fontWeight: 'bold', color: '#FFFFFF' },
-  headerSubtitle: { color: 'rgba(255,255,255,0.7)', fontSize: 10, marginTop: 4 },
-  locationButton: { padding: 12, backgroundColor: 'rgba(0,230,118,0.1)', borderRadius: 12, borderWidth: 1, borderColor: 'rgba(0,230,118,0.3)' },
+  // Web-style Header
+  webHeader: { 
+    backgroundColor: 'transparent',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)'
+  },
+  headerGradient: { 
+    paddingVertical: 20, 
+    paddingHorizontal: 30
+  },
+  headerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,230,118,0.1)',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: 'rgba(0,230,118,0.3)'
+  },
+  backButtonText: {
+    color: '#00E676',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center'
+  },
+  webHeaderTitle: { 
+    fontSize: 24, 
+    fontWeight: 'bold', 
+    color: '#FFFFFF',
+    marginBottom: 4
+  },
+  webHeaderSubtitle: { 
+    color: 'rgba(255,255,255,0.7)', 
+    fontSize: 14
+  },
+  headerActions: {
+    minWidth: 120,
+    alignItems: 'flex-end'
+  },
+  locationToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,230,118,0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(0,230,118,0.3)'
+  },
+  locationToggleText: {
+    color: '#00E676',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 6
+  },
   
-  // Main AQI Card
-  mainCard: { borderRadius: 20, marginBottom: 25, borderWidth: 2, backgroundColor: 'rgba(255,255,255,0.05)', overflow: 'hidden' },
-  aqiSection: { padding: 30, alignItems: 'center' },
-  aqiValue: { color: '#fff', fontSize: 64, fontWeight: 'bold', marginBottom: 8 },
-  sourceCard: { 
+  // Web-style Scroll Content
+  webScrollView: { flex: 1 },
+  webScrollContent: { 
+    padding: 30,
+    paddingTop: 20
+  },
+  
+  // Web-style Main Grid Layout
+  webMainGrid: {
+    flexDirection: width > 1000 ? 'row' : 'column',
+    gap: 30,
+    marginBottom: 30
+  },
+  webLeftColumn: {
+    flex: width > 1000 ? 2 : 1,
+    gap: 25
+  },
+  webRightColumn: {
+    flex: width > 1000 ? 1 : 1,
+    gap: 25
+  },
+  
+  // Web-style Cards
+  webMainCard: { 
+    borderRadius: 25, 
+    borderWidth: 2, 
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    padding: 35,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 12
+  },
+  webAqiHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 25
+  },
+  webCardTitle: { 
+    color: '#fff', 
+    fontSize: 20, 
+    fontWeight: 'bold'
+  },
+  webStatusBadge: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20
+  },
+  webStatusText: {
+    color: '#000',
+    fontSize: 14,
+    fontWeight: 'bold'
+  },
+  webAqiContent: {
+    alignItems: 'center',
+    marginBottom: 25
+  },
+  webAqiValue: { 
+    fontSize: 84, 
+    fontWeight: 'bold', 
+    marginBottom: 8,
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4
+  },
+  webAqiLabel: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 16,
+    fontWeight: '600'
+  },
+  webSourceCard: { 
     flexDirection: 'row', 
     alignItems: 'center', 
-    backgroundColor: 'rgba(255,255,255,0.1)', 
-    borderRadius: 16, 
-    padding: 20, 
-    marginBottom: 20 
+    backgroundColor: 'rgba(0,230,118,0.1)', 
+    borderRadius: 20, 
+    padding: 25,
+    borderWidth: 1,
+    borderColor: 'rgba(0,230,118,0.2)'
   },
-  sourceInfo: { 
-    marginLeft: 12, 
+  webSourceInfo: { 
+    marginLeft: 15, 
     flex: 1 
   },
-  sourceLabel: { 
-    color: 'rgba(255,255,255,0.7)', 
-    fontSize: 14 
+  webSourceLabel: { 
+    color: 'rgba(255,255,255,0.8)', 
+    fontSize: 14,
+    marginBottom: 4
   },
-  sourceValue: { 
+  webSourceValue: { 
     color: '#00E676', 
     fontSize: 18, 
     fontWeight: 'bold' 
   },
   
-  // Pollutants Section
-  pollutantsSection: { marginBottom: 25 },
-  sectionTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold', marginBottom: 15 },
-  pollutantsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  pollutantCard: { width: '48%', backgroundColor: 'rgba(255,255,255,0.05)', padding: 15, borderRadius: 12, marginBottom: 12, borderLeftWidth: 4 },
-  pollutantLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', marginBottom: 4 },
-  pollutantValue: { fontSize: 16, fontWeight: 'bold' },
+  // Web Pollutants Section
+  webPollutantsCard: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 25,
+    padding: 30,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)'
+  },
+  webPollutantsGrid: { 
+    flexDirection: 'row', 
+    flexWrap: 'wrap', 
+    gap: 15,
+    marginTop: 20
+  },
+  webPollutantCard: { 
+    width: width > 1000 ? '30%' : '47%',
+    backgroundColor: 'rgba(255,255,255,0.08)', 
+    padding: 20, 
+    borderRadius: 16,
+    borderLeftWidth: 4,
+    minHeight: 90,
+    justifyContent: 'space-between'
+  },
+  webPollutantHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8
+  },
+  webPollutantLabel: { 
+    color: 'rgba(255,255,255,0.9)', 
+    fontSize: 14, 
+    fontWeight: '600',
+    marginLeft: 8
+  },
+  webPollutantValue: { 
+    fontSize: 24, 
+    fontWeight: 'bold',
+    marginBottom: 4
+  },
+  webPollutantUnit: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 12,
+    fontWeight: '500'
+  },
   
-  // Map Section
-  mapSection: { marginBottom: 25 },
-  mapHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-  fullMapButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,230,118,0.1)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(0,230,118,0.3)' },
-  fullMapButtonText: { color: '#00E676', fontSize: 14, fontWeight: '600', marginRight: 4 },
-  mapContainer: { height: 200, borderRadius: 15, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.1)' },
-  mapWebView: { flex: 1, backgroundColor: 'transparent' },
+  // Web Map Section
+  webMapCard: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 25,
+    padding: 25,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)'
+  },
+  webMapHeader: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    marginBottom: 20
+  },
+  webFullMapButton: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: 'rgba(0,230,118,0.1)', 
+    paddingHorizontal: 16, 
+    paddingVertical: 10, 
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(0,230,118,0.3)'
+  },
+  webFullMapButtonText: { 
+    color: '#00E676', 
+    fontSize: 14, 
+    fontWeight: '600', 
+    marginLeft: 6
+  },
+  webMapContainer: { 
+    height: 250, 
+    borderRadius: 18, 
+    overflow: 'hidden', 
+    backgroundColor: 'rgba(255,255,255,0.1)'
+  },
   
-  // Forecast Section
-  forecastSection: { marginBottom: 25 },
-  forecastCard: { backgroundColor: 'rgba(255,255,255,0.05)', padding: 15, borderRadius: 12, marginRight: 12, minWidth: 100, alignItems: 'center', borderWidth: 1 },
-  forecastCardSelected: { backgroundColor: 'rgba(0,230,118,0.1)', borderColor: '#00E676' },
-  forecastDay: { color: '#fff', fontSize: 12, fontWeight: '600', marginBottom: 8 },
-  forecastAqi: { fontSize: 24, fontWeight: 'bold', marginBottom: 4 },
-  forecastCategory: { color: 'rgba(255,255,255,0.7)', fontSize: 10, textAlign: 'center' },
+  // Web Forecast Section
+  webForecastCard: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 25,
+    padding: 25,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)'
+  },
+  webForecastGrid: {
+    gap: 12,
+    marginTop: 20
+  },
+  webForecastItem: { 
+    backgroundColor: 'rgba(255,255,255,0.08)', 
+    padding: 20, 
+    borderRadius: 16,
+    borderWidth: 1,
+    borderLeftWidth: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    position: 'relative'
+  },
+  webForecastItemSelected: { 
+    backgroundColor: 'rgba(0,230,118,0.15)', 
+    borderColor: '#00E676',
+    shadowColor: '#00E676',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8
+  },
+  webForecastDay: { 
+    color: '#fff', 
+    fontSize: 14, 
+    fontWeight: '600',
+    flex: 1
+  },
+  webForecastAqi: { 
+    fontSize: 20, 
+    fontWeight: 'bold',
+    marginHorizontal: 15
+  },
+  webForecastCategory: { 
+    color: 'rgba(255,255,255,0.7)', 
+    fontSize: 12,
+    flex: 1,
+    textAlign: 'right'
+  },
+  webForecastIndicator: {
+    position: 'absolute',
+    right: 8,
+    top: 8,
+    width: 8,
+    height: 8,
+    borderRadius: 4
+  },
   
-  // Chart Section
-  chartSection: { marginBottom: 20 },
-  chartTabs: { marginBottom: 15 },
-  chartTab: { backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 10 },
-  chartTabActive: { backgroundColor: '#00E676' },
-  chartTabText: { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600' },
-  chartTabTextActive: { color: '#000' },
-  chartContainer: { alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 16, padding: 15 },
-  chart: { borderRadius: 16 },
-  noDataText: { color: 'rgba(255,255,255,0.7)', fontSize: 16, textAlign: 'center', padding: 40 },
-  bottomPadding: { height: 100 },
+  // Web Chart Section
+  webChartSection: { 
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 25,
+    padding: 30,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    marginBottom: 20
+  },
+  webChartHeader: {
+    flexDirection: width > 800 ? 'row' : 'column',
+    justifyContent: 'space-between',
+    alignItems: width > 800 ? 'center' : 'flex-start',
+    marginBottom: 25,
+    gap: width > 800 ? 0 : 15
+  },
+  webChartTabs: { 
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap'
+  },
+  webChartTab: { 
+    backgroundColor: 'rgba(255,255,255,0.1)', 
+    paddingHorizontal: 20, 
+    paddingVertical: 12, 
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)'
+  },
+  webChartTabActive: { 
+    backgroundColor: '#00E676',
+    borderColor: '#00E676',
+    shadowColor: '#00E676',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4
+  },
+  webChartTabText: { 
+    color: 'rgba(255,255,255,0.8)', 
+    fontSize: 13, 
+    fontWeight: '600'
+  },
+  webChartTabTextActive: { 
+    color: '#000',
+    fontWeight: 'bold'
+  },
+  webChartContainer: { 
+    alignItems: 'center', 
+    backgroundColor: 'rgba(255,255,255,0.03)', 
+    borderRadius: 20, 
+    padding: 25,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    minHeight: 350
+  },
+  chart: { 
+    borderRadius: 20,
+    backgroundColor: 'rgba(13, 18, 34, 0.82)', 
+    shadowColor: 'rgba(0,0,0,0.3)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8
+  },
+  noDataText: { 
+    color: 'rgba(255,255,255,0.6)', 
+    fontSize: 18, 
+    textAlign: 'center', 
+    padding: 60,
+    fontWeight: '500'
+  },
+  webBottomPadding: { height: 50 },
   
-  // Full Map Modal
+  // Modal Styles (keeping original)
   fullMapContainer: { flex: 1, backgroundColor: '#000' },
-  fullMapHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'rgba(0,0,0,0.8)', paddingTop: Platform.OS === 'ios' ? 50 : 30, paddingBottom: 15, paddingHorizontal: 20 },
-  closeMapButton: { padding: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20 },
-  fullMapTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  fullMapHeaderSpacer: { width: 40 },
-  fullMapWebView: { flex: 1 },
+  fullMapHeader: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    backgroundColor: 'rgba(0,0,0,0.9)', 
+    paddingTop: Platform.OS === 'ios' ? 50 : 30, 
+    paddingBottom: 15, 
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)'
+  },
+  closeMapButton: { 
+    padding: 12, 
+    backgroundColor: 'rgba(255,255,255,0.1)', 
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)'
+  },
+  fullMapTitle: { 
+    color: '#fff', 
+    fontSize: 20, 
+    fontWeight: 'bold' 
+  },
+  fullMapHeaderSpacer: { width: 48 },
 
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    backgroundColor: 'rgba(0,0,0,0.85)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20
   },
   hourlyModalContainer: {
     backgroundColor: '#1A1A2E',
-    borderRadius: 20,
+    borderRadius: 25,
     width: '100%',
-    maxHeight: '80%',
-    borderWidth: 1,
-    borderColor: 'rgba(0,230,118,0.3)'
+    maxWidth: 500,
+    maxHeight: '100%',
+    borderWidth: 2,
+    borderColor: 'rgba(0,230,118,0.3)',
+    shadowColor: '#00E676',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 20
   },
   hourlyModalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    padding: 25,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.1)'
   },
   hourlyModalTitle: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold'
   },
   closeModalButton: {
-    padding: 8,
+    padding: 10,
     backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 20
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)'
   },
   hourlyModalContent: {
-    padding: 20
+    padding: 25
   },
   hourlyAqiSection: {
     alignItems: 'center',
-    marginBottom: 25
+    marginBottom: 30,
+    padding: 20,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 20
   },
   hourlyAqiValue: {
     color: '#fff',
-    fontSize: 48,
+    fontSize: 56,
     fontWeight: 'bold',
-    marginBottom: 8
+    marginBottom: 8,
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4
   },
   hourlyAqiCategory: {
     fontSize: 18,
@@ -896,38 +1380,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    marginBottom: 20
+    gap: 12
   },
   hourlyPollutantCard: {
-    width: '48%',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    padding: 15,
-    borderRadius: 12,
-    marginBottom: 12,
-    borderLeftWidth: 4
+    width: '47%',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    padding: 18,
+    borderRadius: 16,
+    borderLeftWidth: 4,
+    minHeight: 80,
+    justifyContent: 'space-between'
   },
   hourlyPollutantLabel: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 12,
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 13,
     fontWeight: '600',
-    marginBottom: 4
+    marginBottom: 6
   },
   hourlyPollutantValue: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold'
-  },
-  hourlyDescription: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    padding: 15,
-    borderRadius: 12,
-    marginTop: 10
-  },
-  hourlyDescriptionText: {
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: 'center'
   }
 });
-
 export default AqiScreen;

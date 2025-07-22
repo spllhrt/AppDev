@@ -347,7 +347,7 @@ const UserNavigator = () => {
         name="MainDrawer" 
         component={MainDrawerNavigator}
         options={{
-          gestureEnabled: false,
+          gestureEnabled: true,
         }}
       />
     </Stack.Navigator>

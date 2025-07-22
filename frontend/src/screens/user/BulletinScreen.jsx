@@ -82,46 +82,57 @@ const BulletinFeed = ({ navigation }) => {
   const renderPhotoLayout = (photos) => {
     if (!photos || photos.length === 0) return null;
 
-    if (photos.length === 1) {
-      return (
-        <View style={styles.photoContainer}>
-          <Image source={{ uri: photos[0].url }} style={styles.singlePhoto} />
-        </View>
-      );
-    }
-
-    if (photos.length === 2) {
-      return (
-        <View style={styles.photoContainer}>
-          <Image source={{ uri: photos[0].url }} style={styles.verticalPhoto} />
-          <Image source={{ uri: photos[1].url }} style={styles.verticalPhoto} />
-        </View>
-      );
-    }
-
-    return (
-      <View style={styles.photoContainer}>
-        <View style={styles.photoGrid}>
-          <View style={styles.photoRow}>
-            <Image source={{ uri: photos[0].url }} style={styles.gridPhoto} />
-            <Image source={{ uri: photos[1].url }} style={styles.gridPhoto} />
+    switch (photos.length) {
+      case 1:
+        return (
+          <View style={styles.photoContainer}>
+            <Image source={{ uri: photos[0].url }} style={styles.singlePhoto} />
           </View>
-          <View style={styles.photoRow}>
-            <Image source={{ uri: photos[2].url }} style={styles.gridPhoto} />
-            {photos.length > 3 ? (
+        );
+      case 2:
+        return (
+          <View style={styles.photoContainer}>
+            <View style={styles.photoRow}>
+              <Image source={{ uri: photos[0].url }} style={styles.halfPhoto} />
+              <Image source={{ uri: photos[1].url }} style={styles.halfPhoto} />
+            </View>
+          </View>
+        );
+      case 3:
+        return (
+          <View style={styles.photoContainer}>
+            <Image source={{ uri: photos[0].url }} style={styles.mainPhoto} />
+            <View style={styles.photoRow}>
+              <Image source={{ uri: photos[1].url }} style={styles.halfPhoto} />
+              <Image source={{ uri: photos[2].url }} style={styles.halfPhoto} />
+            </View>
+          </View>
+        );
+      default:
+        return (
+          <View style={styles.photoContainer}>
+            <View style={styles.photoRow}>
+              <Image source={{ uri: photos[0].url }} style={styles.halfPhoto} />
+              <Image source={{ uri: photos[1].url }} style={styles.halfPhoto} />
+            </View>
+            <View style={styles.photoRow}>
+              <Image source={{ uri: photos[2].url }} style={styles.halfPhoto} />
               <View style={styles.morePhotosContainer}>
-                <Image source={{ uri: photos[3].url }} style={[styles.gridPhoto, styles.blurredPhoto]} blurRadius={2} />
-                <View style={styles.morePhotosOverlay}>
-                  <Text style={styles.morePhotosText}>+{photos.length - 3}</Text>
-                </View>
+                <Image 
+                  source={{ uri: photos[3].url }} 
+                  style={[styles.halfPhoto, photos.length > 4 && styles.blurredPhoto]} 
+                  blurRadius={photos.length > 4 ? 2 : 0} 
+                />
+                {photos.length > 4 && (
+                  <View style={styles.morePhotosOverlay}>
+                    <Text style={styles.morePhotosText}>+{photos.length - 4}</Text>
+                  </View>
+                )}
               </View>
-            ) : (
-              <Image source={{ uri: photos[3]?.url || photos[0].url }} style={styles.gridPhoto} />
-            )}
+            </View>
           </View>
-        </View>
-      </View>
-    );
+        );
+    }
   };
 
   const renderBulletin = ({ item }) => (
@@ -294,14 +305,13 @@ const styles = StyleSheet.create({
   
   bulletinMessage: { fontSize: 14, color: 'rgba(255,255,255,0.8)', lineHeight: 20, marginBottom: 12 },
   
-  photoContainer: { marginBottom: 12 },
-  singlePhoto: { width: '100%', height: 200, borderRadius: 12, resizeMode: 'cover' },
-  verticalPhoto: { width: '100%', height: 150, borderRadius: 8, marginBottom: 4, resizeMode: 'cover' },
-  photoGrid: { width: '100%', gap: 3, aspectRatio: 1, borderRadius: 12, overflow: 'hidden' },
-  photoRow: { flex: 1, flexDirection: 'row', gap: 3 },
-  gridPhoto: { flex: 1, height: '100%', resizeMode: 'cover' },
+  photoContainer: { marginBottom: 12, borderRadius: 8, overflow: 'hidden' },
+  singlePhoto: { width: '100%', height: 200, resizeMode: 'cover' },
+  mainPhoto: { width: '100%', height: 160, resizeMode: 'cover', marginBottom: 2 },
+  photoRow: { flexDirection: 'row', gap: 2 },
+  halfPhoto: { flex: 1, height: 120, resizeMode: 'cover' },
   morePhotosContainer: { flex: 1, position: 'relative' },
-  blurredPhoto: { width: '100%', height: '100%' },
+  blurredPhoto: { position: 'relative' },
   morePhotosOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
   morePhotosText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
   

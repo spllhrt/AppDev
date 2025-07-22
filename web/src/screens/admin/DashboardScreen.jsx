@@ -298,77 +298,110 @@ const AdminDashboard = ({ navigation }) => {
     </View>
   );
 
+  // Updated renderPhotoLayout function (add this to AdminDashboard component)
+const renderPhotoLayout = (photos) => {
+  if (!photos || photos.length === 0) return null;
+
+  switch (photos.length) {
+    case 1:
+      return (
+        <View style={styles.photoContainer}>
+          <Image source={{ uri: photos[0].url }} style={styles.singlePhoto} />
+        </View>
+      );
+    case 2:
+      return (
+        <View style={styles.photoContainer}>
+          <View style={styles.photoRow}>
+            <Image source={{ uri: photos[0].url }} style={styles.halfPhoto} />
+            <Image source={{ uri: photos[1].url }} style={styles.halfPhoto} />
+          </View>
+        </View>
+      );
+    case 3:
+      return (
+        <View style={styles.photoContainer}>
+          <Image source={{ uri: photos[0].url }} style={styles.mainPhoto} />
+          <View style={styles.photoRow}>
+            <Image source={{ uri: photos[1].url }} style={styles.halfPhoto} />
+            <Image source={{ uri: photos[2].url }} style={styles.halfPhoto} />
+          </View>
+        </View>
+      );
+    default:
+      return (
+        <View style={styles.photoContainer}>
+          <View style={styles.photoRow}>
+            <Image source={{ uri: photos[0].url }} style={styles.halfPhoto} />
+            <Image source={{ uri: photos[1].url }} style={styles.halfPhoto} />
+          </View>
+          <View style={styles.photoRow}>
+            <Image source={{ uri: photos[2].url }} style={styles.halfPhoto} />
+            <View style={styles.morePhotosContainer}>
+              <Image 
+                source={{ uri: photos[3].url }} 
+                style={[styles.halfPhoto, photos.length > 4 && styles.blurredPhoto]} 
+                blurRadius={photos.length > 4 ? 2 : 0} 
+              />
+              {photos.length > 4 && (
+                <View style={styles.morePhotosOverlay}>
+                  <Text style={styles.morePhotosText}>+{photos.length - 4}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        </View>
+      );
+  }
+};
+
   const renderBulletinFeed = () => (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <Text style={styles.listTitle}>Latest Bulletins</Text>
-        <TouchableOpacity onPress={() => navigation.navigate('BulletinManagement')}>
-          <Text style={styles.viewAllLink}>View All →</Text>
-        </TouchableOpacity>
-      </View>
-      {recentBulletins.length > 0 ? recentBulletins.map((bulletin, index) => (
-        <View key={index} style={styles.bulletinPost}>
-          <View style={styles.bulletinHeader}>
-            <View style={styles.bulletinIcon}>
-              <Text style={styles.bulletinIconText}>{getCategoryIcon(bulletin.category)}</Text>
-            </View>
-            <View style={styles.bulletinInfo}>
-              <Text style={styles.bulletinTitle}>{bulletin.title}</Text>
-              <Text style={styles.bulletinCategory}>{bulletin.category}</Text>
-              <Text style={styles.bulletinTime}>{formatTimeAgo(bulletin.createdAt)}</Text>
-            </View>
-          </View>
-          
-          <Text style={styles.bulletinMessage}>{bulletin.message}</Text>
-          
-          {bulletin.photos && bulletin.photos.length > 0 && (
-            <View style={styles.bulletinImages}>
-              {bulletin.photos.slice(0, 4).map((photo, photoIndex) => {
-                if (photoIndex === 3 && bulletin.photos.length > 4) {
-                  return (
-                    <View key={photoIndex} style={styles.moreImagesContainer}>
-                      <Image 
-                        source={{ uri: photo.url }} 
-                        style={[styles.bulletinImage, styles.blurredImage]} 
-                        blurRadius={3}
-                      />
-                      <View style={styles.moreImagesOverlay}>
-                        <Text style={styles.moreImagesText}>+{bulletin.photos.length - 3}</Text>
-                      </View>
-                    </View>
-                  );
-                }
-                return (
-                  <Image 
-                    key={photoIndex} 
-                    source={{ uri: photo.url }} 
-                    style={styles.bulletinImage} 
-                  />
-                );
-              })}
-            </View>
-          )}
-          <View style={styles.bulletinFooter}>
-            <View style={styles.bulletinReactions}>
-              <View style={styles.reactionButton}>
-                <Ionicons name="thumbs-up-outline" size={16} color="#10B981" style={styles.reactionIcon} />
-                <Text style={styles.reactionText}>{bulletin.reactions?.filter(r => r.type === 'upvote').length || 0}</Text>
-              </View>
-              <View style={styles.reactionButton}>
-                <Ionicons name="thumbs-down-outline" size={16} color="#EF4444" style={styles.reactionIcon} />
-                <Text style={styles.reactionText}>{bulletin.reactions?.filter(r => r.type === 'downvote').length || 0}</Text>
-              </View>
-            </View>
-            <Text style={styles.commentCount}>💬 {bulletin.comments?.length || 0} comments</Text>
-          </View>
-        </View>
-      )) : (
-        <View style={styles.noDataContainer}>
-          <Text style={styles.noDataText}>No recent bulletins found</Text>
-        </View>
-      )}
+  <View style={styles.card}>
+    <View style={styles.cardHeader}>
+      <Text style={styles.listTitle}>Latest Bulletins</Text>
+      <TouchableOpacity onPress={() => navigation.navigate('BulletinManagement')}>
+        <Text style={styles.viewAllLink}>View All →</Text>
+      </TouchableOpacity>
     </View>
-  );
+    {recentBulletins.length > 0 ? recentBulletins.map((bulletin, index) => (
+      <View key={index} style={styles.bulletinPost}>
+        <View style={styles.bulletinHeader}>
+          <View style={styles.bulletinIcon}>
+            <Text style={styles.bulletinIconText}>{getCategoryIcon(bulletin.category)}</Text>
+          </View>
+          <View style={styles.bulletinInfo}>
+            <Text style={styles.bulletinTitle}>{bulletin.title}</Text>
+            <Text style={styles.bulletinCategory}>{bulletin.category}</Text>
+            <Text style={styles.bulletinTime}>{formatTimeAgo(bulletin.createdAt)}</Text>
+          </View>
+        </View>
+        
+        <Text style={styles.bulletinMessage}>{bulletin.message}</Text>
+        
+        {renderPhotoLayout(bulletin.photos)}
+        
+        <View style={styles.bulletinFooter}>
+          <View style={styles.bulletinReactions}>
+            <View style={styles.reactionButton}>
+              <Ionicons name="thumbs-up-outline" size={16} color="#10B981" style={styles.reactionIcon} />
+              <Text style={styles.reactionText}>{bulletin.reactions?.filter(r => r.type === 'upvote').length || 0}</Text>
+            </View>
+            <View style={styles.reactionButton}>
+              <Ionicons name="thumbs-down-outline" size={16} color="#EF4444" style={styles.reactionIcon} />
+              <Text style={styles.reactionText}>{bulletin.reactions?.filter(r => r.type === 'downvote').length || 0}</Text>
+            </View>
+          </View>
+          <Text style={styles.commentCount}>💬 {bulletin.comments?.length || 0} comments</Text>
+        </View>
+      </View>
+    )) : (
+      <View style={styles.noDataContainer}>
+        <Text style={styles.noDataText}>No recent bulletins found</Text>
+      </View>
+    )}
+  </View>
+);
+
 
   const renderAQICard = (title, cities, isBest = false) => (
     <View style={styles.card}>
@@ -483,7 +516,6 @@ const AdminDashboard = ({ navigation }) => {
     </View>
   );
 };
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f1f5f9' },
   scrollView: { flex: 1 },
@@ -618,33 +650,23 @@ const styles = StyleSheet.create({
   bulletinIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#3b82f6', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
   bulletinIconText: { fontSize: 20, color: '#ffffff' },
   bulletinInfo: { flex: 1 },
-  bulletinTitle: { fontSize: 18, fontWeight: '600', color: '#1e293b',
-    marginBottom: 4,
-    lineHeight: 24,
-  },
-  bulletinCategory: {
-    fontSize: 14,
-    color: '#64748b',
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  bulletinTime: {
-    fontSize: 12,
-    color: '#94a3b8',
-    fontWeight: '400',
-  },
-  bulletinMessage: {
-    fontSize: 16,
-    color: '#1e293b',
-    lineHeight: 24,
-    marginBottom: 16,
-  },
- bulletinImages: { flexDirection: 'row', gap: 10, marginBottom: 12, flexWrap: 'wrap' },
-  bulletinImage: { width: (width + 350) / 5, height: 280, backgroundColor: '#f0f2f5', resizeMode: 'cover', borderRadius: 8 },
-  moreImagesContainer: { position: 'relative', width: (width + 350) / 5, height: 280, borderRadius: 8, overflow: 'hidden' },
-  blurredImage: { width: '100%', height: '100%' },
-  moreImagesOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center', borderRadius: 8 },
-  moreImagesText: { color: '#ffffff', fontSize: 18, fontWeight: '700', textAlign: 'center' },
+  bulletinTitle: { fontSize: 18, fontWeight: '600', color: '#1e293b', marginBottom: 4, lineHeight: 24 },
+  bulletinCategory: { fontSize: 14, color: '#64748b', fontWeight: '500', marginBottom: 4 },
+  bulletinTime: { fontSize: 12, color: '#94a3b8', fontWeight: '400' },
+  bulletinMessage: { fontSize: 16, color: '#1e293b', lineHeight: 24, marginBottom: 16 },
+  
+  // New photo layout styles matching bulletin feed
+photoContainer: { marginBottom: 20, borderRadius: 16, overflow: 'hidden' },
+singlePhoto: { width: '100%', height: 320, resizeMode: 'cover' },
+mainPhoto: { width: '100%', height: 280, resizeMode: 'cover', marginBottom: 4 },
+photoRow: { flexDirection: 'row', gap: 4 },
+halfPhoto: { flex: 1, height: 200, resizeMode: 'cover' },
+morePhotosContainer: { flex: 1, position: 'relative' },
+blurredPhoto: { position: 'relative' },
+morePhotosOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+morePhotosText: { color: '#ffffff', fontSize: 22, fontWeight: '700' },
+  
+  // Remove old bulletin image styles and replace with new ones
   bulletinFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -749,5 +771,4 @@ const styles = StyleSheet.create({
     height: 40,
   },
 });
-
 export default AdminDashboard;

@@ -104,6 +104,49 @@ import React, { useState, useEffect } from 'react';
       
       setWeatherData(data);
     };
+const renderMap = (isFullscreen = false) => {
+  if (!location || !weatherData) {
+    return (
+      <View style={isFullscreen ? styles.webViewLoading : styles.mapOverviewLoading}>
+        <Ionicons name="map" size={isFullscreen ? 40 : 30} color="#00E676" />
+        <Text style={isFullscreen ? styles.loadingText : styles.mapLoadingText}>Loading Map...</Text>
+      </View>
+    );
+  }
+
+  if (Platform.OS === 'web') {
+    // Use iframe for web
+    return (
+      <iframe
+        title="Windy Map"
+        srcDoc={getWindyMapHTML(isFullscreen)}
+        style={isFullscreen ? styles.iframeFullScreen : styles.iframeOverview}
+        sandbox="allow-scripts allow-same-origin allow-popups"
+        frameBorder="0"
+        scrolling={isFullscreen ? "yes" : "no"}
+      />
+    );
+  } else {
+    // Use WebView for native platforms
+    return (
+      <WebView
+        source={{ html: getWindyMapHTML(isFullscreen) }}
+        style={isFullscreen ? styles.webView : styles.mapOverview}
+        javaScriptEnabled={true}
+        domStorageEnabled={true}
+        scrollEnabled={isFullscreen}
+        startInLoadingState={true}
+        renderLoading={() => (
+          <View style={isFullscreen ? styles.webViewLoading : styles.mapOverviewLoading}>
+            <Ionicons name="map" size={isFullscreen ? 40 : 30} color="#00E676" />
+            <Text style={isFullscreen ? styles.loadingText : styles.mapLoadingText}>Loading Map...</Text>
+          </View>
+        )}
+      />
+    );
+  }
+};
+
   const getWindyMapHTML = (isFullscreen = false) => {
     const lat = location?.latitude || 14.5995;
     const lon = location?.longitude || 120.9842;
@@ -493,234 +536,201 @@ import React, { useState, useEffect } from 'react';
   </body>
   </html>`;
   };
-    const getWeatherIcon = (code) => {
-      const iconMap = {
-        0: 'sunny', 1: 'partly-sunny', 2: 'cloudy', 3: 'cloudy', 45: 'cloudy', 48: 'cloudy',
-        51: 'rainy', 53: 'rainy', 55: 'rainy', 61: 'rainy', 63: 'rainy', 65: 'rainy',
-        71: 'snow', 73: 'snow', 75: 'snow', 95: 'thunderstorm',
-      };
-      return iconMap[code] || 'cloudy';
-    };
+const getWeatherIcon = (code) => {
+  const iconMap = {
+    0: 'sunny', 1: 'partly-sunny', 2: 'cloudy', 3: 'cloudy', 45: 'cloudy', 48: 'cloudy',
+    51: 'rainy', 53: 'rainy', 55: 'rainy', 61: 'rainy', 63: 'rainy', 65: 'rainy',
+    71: 'snow', 73: 'snow', 75: 'snow', 95: 'thunderstorm',
+  };
+  return iconMap[code] || 'cloudy';
+};
 
-    const formatDate = (dateStr, index) => {
-      const date = new Date(dateStr);
-      if (index === 0) return 'Today';
-      if (index === 1) return 'Tomorrow';
-      return date.toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' });
-    };
+const formatDate = (dateStr, index) => {
+  const date = new Date(dateStr);
+  if (index === 0) return 'Today';
+  if (index === 1) return 'Tomorrow';
+  return date.toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' });
+};
 
-    const getAdvisories = () => {
-      if (!weatherData) return [];
-      const advisories = [];
-      const today = weatherData.daily;
-      
-      if (today.precipitation_sum[0] > 10) {
-        advisories.push({ type: 'rain', text: 'Heavy rain expected', icon: 'rainy', color: '#2196F3' });
+const getAdvisories = () => {
+  if (!weatherData) return [];
+  const advisories = [];
+  const today = weatherData.daily;
+  
+  if (today.precipitation_sum[0] > 10) advisories.push({ type: 'rain', text: 'Heavy rain expected', icon: 'rainy', color: '#2196F3' });
+  if (today.windspeed_10m_max[0] > 25) advisories.push({ type: 'wind', text: 'Strong winds expected', icon: 'leaf', color: '#FF9800' });
+  if (today.temperature_2m_max[0] > 35) advisories.push({ type: 'heat', text: 'High temperature warning', icon: 'thermometer', color: '#FF5722' });
+  if (today.uv_index_max[0] > 7) advisories.push({ type: 'uv', text: 'High UV index', icon: 'sunny', color: '#FFC107' });
+  
+  return advisories;
+};
+
+const getHourlyData = (dayIndex) => {
+  if (!weatherData) return [];
+  const startHour = dayIndex * 24;
+  return Array.from({ length: 24 }, (_, i) => ({
+    hour: i,
+    temp: weatherData.hourly.temperature_2m[startHour + i] || 0,
+    precipitation: weatherData.hourly.precipitation[startHour + i] || 0,
+    humidity: weatherData.hourly.relative_humidity_2m[startHour + i] || 0,
+    windspeed: weatherData.hourly.windspeed_10m[startHour + i] || 0,
+    pressure: weatherData.hourly.pressure_msl[startHour + i] || 0,
+    uv: weatherData.hourly.uv_index[startHour + i] || 0,
+  }));
+};
+
+const handleChartDataPointClick = (data) => {
+  const hourlyData = getHourlyData(selectedDay);
+  const pointData = hourlyData[data.index];
+  
+  if (pointData) {
+    setChartDataModal({
+      visible: true,
+      data: {
+        hour: pointData.hour, temp: pointData.temp, precipitation: pointData.precipitation,
+        humidity: pointData.humidity, windspeed: pointData.windspeed, pressure: pointData.pressure, uv: pointData.uv,
       }
-      if (today.windspeed_10m_max[0] > 25) {
-        advisories.push({ type: 'wind', text: 'Strong winds expected', icon: 'leaf', color: '#FF9800' });
-      }
-      if (today.temperature_2m_max[0] > 35) {
-        advisories.push({ type: 'heat', text: 'High temperature warning', icon: 'thermometer', color: '#FF5722' });
-      }
-      if (today.uv_index_max[0] > 7) {
-        advisories.push({ type: 'uv', text: 'High UV index', icon: 'sunny', color: '#FFC107' });
-      }
-      
-      return advisories;
-    };
+    });
+  }
+};
 
-    const getHourlyData = (dayIndex) => {
-      if (!weatherData) return [];
-      const startHour = dayIndex * 24;
-      return Array.from({ length: 24 }, (_, i) => ({
-        hour: i,
-        temp: weatherData.hourly.temperature_2m[startHour + i] || 0,
-        precipitation: weatherData.hourly.precipitation[startHour + i] || 0,
-        humidity: weatherData.hourly.relative_humidity_2m[startHour + i] || 0,
-        windspeed: weatherData.hourly.windspeed_10m[startHour + i] || 0,
-        pressure: weatherData.hourly.pressure_msl[startHour + i] || 0,
-        uv: weatherData.hourly.uv_index[startHour + i] || 0,
-      }));
-    };
+const renderChart = () => {
+  const hourlyData = getHourlyData(selectedDay);
+  const labels = hourlyData.map(d => `${d.hour}h`);
+  
+  const chartConfigs = {
+    temperature: { data: hourlyData.map(d => d.temp), color: '#00E676', suffix: '°C' },
+    precipitation: { data: hourlyData.map(d => d.precipitation), color: '#2196F3', suffix: 'mm' },
+    humidity: { data: hourlyData.map(d => d.humidity), color: '#FF9800', suffix: '%' },
+    windspeed: { data: hourlyData.map(d => d.windspeed), color: '#9C27B0', suffix: 'km/h' },
+    pressure: { data: hourlyData.map(d => d.pressure), color: '#F44336', suffix: 'hPa' },
+    uv: { data: hourlyData.map(d => d.uv), color: '#FFC107', suffix: '' },
+  };
 
-    const handleChartDataPointClick = (data) => {
-      const hourlyData = getHourlyData(selectedDay);
-      const dataIndex = data.index;
-      const actualIndex = dataIndex * 3; // Since we filter every 3rd item
-      const pointData = hourlyData[actualIndex];
-      
-      if (pointData) {
-        setChartDataModal({
-          visible: true,
-          data: {
-            hour: pointData.hour,
-            temp: pointData.temp,
-            precipitation: pointData.precipitation,
-            humidity: pointData.humidity,
-            windspeed: pointData.windspeed,
-            pressure: pointData.pressure,
-            uv: pointData.uv,
-          }
-        });
-      }
-    };
+  const config = chartConfigs[activeChart];
 
-    const renderChart = () => {
-      const hourlyData = getHourlyData(selectedDay);
-      const labels = hourlyData.filter((_, i) => i % 3 === 0).map(d => `${d.hour}h`);
-      
-      const chartConfigs = {
-        temperature: { data: hourlyData.filter((_, i) => i % 3 === 0).map(d => d.temp), color: '#00E676', suffix: '°C' },
-        precipitation: { data: hourlyData.filter((_, i) => i % 3 === 0).map(d => d.precipitation), color: '#2196F3', suffix: 'mm' },
-        humidity: { data: hourlyData.filter((_, i) => i % 3 === 0).map(d => d.humidity), color: '#FF9800', suffix: '%' },
-        windspeed: { data: hourlyData.filter((_, i) => i % 3 === 0).map(d => d.windspeed), color: '#9C27B0', suffix: 'km/h' },
-        pressure: { data: hourlyData.filter((_, i) => i % 3 === 0).map(d => d.pressure), color: '#F44336', suffix: 'hPa' },
-        uv: { data: hourlyData.filter((_, i) => i % 3 === 0).map(d => d.uv), color: '#FFC107', suffix: '' },
-      };
+  return (
+    <View style={styles.chartContainer}>
+      <LineChart
+        data={{
+          labels,
+          datasets: [{ data: config.data, color: () => config.color, strokeWidth: 3 }]
+        }}
+        width={width - 80}
+        height={320}
+        chartConfig={{
+          backgroundColor: 'transparent',
+          backgroundGradientFrom: 'rgba(0,0,0,0.1)',
+          backgroundGradientTo: 'rgba(0,0,0,0.1)',
+          decimalPlaces: 1,
+          color: () => config.color,
+          labelColor: () => 'rgba(255,255,255,0.7)',
+          style: { borderRadius: 20 },
+          propsForBackgroundLines: { strokeWidth: 1, stroke: 'rgba(255,255,255,0.1)' },
+          propsForDots: { r: '6', strokeWidth: '2', stroke: config.color, fill: config.color },
+          propsForLabels: { fontSize: 12, fontWeight: '600' },
+        }}
+        bezier
+        style={styles.chart}
+        withInnerLines={true}
+        withOuterLines={false}
+        withVerticalLines={false}
+        withHorizontalLines={true}
+        onDataPointClick={handleChartDataPointClick}
+        fromZero={activeChart === 'precipitation' || activeChart === 'uv'}
+      />
+      <Text style={[styles.chartUnit, { color: config.color }]}>
+        {activeChart.charAt(0).toUpperCase() + activeChart.slice(1)} {config.suffix}
+      </Text>
+    </View>
+  );
+};
 
-      const config = chartConfigs[activeChart];
+const displayDays = 14;
 
-      return (
-        <View style={styles.chartContainer}>
-          <LineChart
-            data={{
-              labels,
-              datasets: [{ data: config.data, color: () => config.color, strokeWidth: 3 }]
-            }}
-            width={width - 60}
-            height={220}
-            chartConfig={{
-              backgroundColor: 'transparent',
-              backgroundGradientFrom: 'rgba(0,0,0,0.1)',
-              backgroundGradientTo: 'rgba(0,0,0,0.1)',
-              decimalPlaces: 1,
-              color: () => config.color,
-              labelColor: () => 'rgba(255,255,255,0.9)',
-              style: { borderRadius: 16 },
-              propsForBackgroundLines: { strokeWidth: 1, stroke: 'rgba(255,255,255,0.1)' },
-              propsForDots: { r: '6', strokeWidth: '2', stroke: config.color, fill: config.color },
-              propsForLabels: { fontSize: 12, fontWeight: '600' },
-            }}
-            bezier
-            style={styles.chart}
-            withInnerLines={true}
-            withOuterLines={false}
-            withVerticalLines={false}
-            withHorizontalLines={true}
-            onDataPointClick={handleChartDataPointClick}
-          />
-          <Text style={[styles.chartUnit, { color: config.color }]}>
-            {activeChart.charAt(0).toUpperCase() + activeChart.slice(1)} {config.suffix}
-          </Text>
-        </View>
-      );
-    };
-
-    const displayDays = 14;
-
-    if (loading) {
-      return (
-        <View style={styles.container}>
-          <LinearGradient colors={['#0F0F23', '#1A1A2E', '#16213E']} style={styles.gradient}>
-            <SafeAreaView style={styles.safeArea}>
-              <View style={styles.loadingContainer}>
-                <Ionicons name="partly-sunny" size={60} color="#00E676" />
-                <Text style={styles.loadingText}>Loading Weather...</Text>
-              </View>
-            </SafeAreaView>
-          </LinearGradient>
-        </View>
-      );
-    }
-
-    if (showWindyMap) {
-      return (
-        <View style={styles.container}>
-          <StatusBar barStyle="light-content" backgroundColor="#0F0F23" />
-          <View style={styles.mapContainer}>
-            <View style={styles.mapHeader}>
-              <TouchableOpacity style={styles.headerButton} onPress={() => setShowWindyMap(false)}>
-                <Ionicons name="arrow-back" size={20} color="#FFFFFF" />
-              </TouchableOpacity>
-              <Text style={styles.headerTitle}>Weather Map</Text>
-              <TouchableOpacity style={styles.headerButton} onPress={initializeWeather}>
-                <Ionicons name="refresh" size={18} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
-            
-            <WebView
-              source={{ html: getWindyMapHTML(true) }}
-              style={styles.webView}
-              javaScriptEnabled={true}
-              domStorageEnabled={true}
-              startInLoadingState={true}
-              renderLoading={() => (
-                <View style={styles.webViewLoading}>
-                  <Ionicons name="map" size={40} color="#00E676" />
-                  <Text style={styles.loadingText}>Loading Map...</Text>
-                </View>
-              )}
-            />
+if (loading) {
+  return (
+    <View style={styles.container}>
+      <LinearGradient colors={['#0F0F23', '#1A1A2E', '#16213E']} style={styles.gradient}>
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.loadingContainer}>
+            <Ionicons name="partly-sunny" size={80} color="#00E676" />
+            <Text style={styles.loadingText}>Loading Weather...</Text>
           </View>
+        </SafeAreaView>
+      </LinearGradient>
+    </View>
+  );
+}
+
+if (showWindyMap) {
+  return (
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#0F0F23" />
+      <View style={styles.mapContainer}>
+        <View style={styles.mapHeader}>
+          <TouchableOpacity style={styles.headerButton} onPress={() => setShowWindyMap(false)}>
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Weather Map</Text>
+          <TouchableOpacity style={styles.headerButton} onPress={initializeWeather}>
+            <Ionicons name="refresh" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
         </View>
-      );
-    }
+        {renderMap(true)}
+      </View>
+    </View>
+  );
+}
 
-    return (
-      <View style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
-        <LinearGradient colors={['#0F0F23', '#1A1A2E', '#16213E']} style={styles.gradient}>
-          <SafeAreaView style={styles.safeArea}>
-            {/* Header */}
-            <View style={styles.header}>
-              <Text style={styles.headerTitle}>Weather Forecast</Text>
-              <TouchableOpacity style={styles.headerButton} onPress={initializeWeather}>
-                <Ionicons name="refresh" size={18} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
+return (
+  <View style={styles.container}>
+    <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+    <LinearGradient colors={['#0F0F23', '#1A1A2E', '#16213E']} style={styles.gradient}>
+      <SafeAreaView style={styles.safeArea}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.headerButton} onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Weather Forecast</Text>
+          <TouchableOpacity style={styles.headerButton} onPress={initializeWeather}>
+            <Ionicons name="refresh" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
 
-            <ScrollView
-              style={styles.content}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.scrollContent}
-              refreshControl={<RefreshControl refreshing={loading} onRefresh={initializeWeather} tintColor="#00E676" />}
-            >
-              {/* Location Toggle */}
-             {!isFromNavigation && (
+        <ScrollView
+          style={styles.content}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={<RefreshControl refreshing={loading} onRefresh={initializeWeather} tintColor="#00E676" />}
+        > {!isFromNavigation && (
                 <View style={styles.locationToggle}>
-                  <TouchableOpacity
-                    style={[styles.toggleButton, !useGPS && styles.activeToggle]}
-                    onPress={() => setUseGPS(false)}
-                  >
-                    <Ionicons name="business" size={16} color={!useGPS ? "#00E676" : "rgba(255,255,255,0.7)"} />
-                    <Text style={[styles.toggleText, !useGPS && styles.activeToggleText]}>
-                      {user?.city || 'City'}
-                    </Text>
+                  <TouchableOpacity style={[styles.toggleButton, !useGPS && styles.activeToggle]} onPress={() => setUseGPS(false)}>
+                    <Ionicons name="business" size={18} color={!useGPS ? "#00E676" : "rgba(255,255,255,0.7)"} />
+                    <Text style={[styles.toggleText, !useGPS && styles.activeToggleText]}>{user?.city || 'City'}</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.toggleButton, useGPS && styles.activeToggle]}
-                    onPress={() => setUseGPS(true)}
-                  >
-                    <Ionicons name="location" size={16} color={useGPS ? "#00E676" : "rgba(255,255,255,0.7)"} />
+                  <TouchableOpacity style={[styles.toggleButton, useGPS && styles.activeToggle]} onPress={() => setUseGPS(true)}>
+                    <Ionicons name="location" size={18} color={useGPS ? "#00E676" : "rgba(255,255,255,0.7)"} />
                     <Text style={[styles.toggleText, useGPS && styles.activeToggleText]}>GPS</Text>
                   </TouchableOpacity>
                 </View>
               )}
+          {/* Top Row - Current Weather & Map */}
+          <View style={styles.topRow}>
+            {/* Current Weather - Left Column */}
+            <View style={styles.leftColumn}>
+             
 
-              {/* Current Weather */}
               <View style={styles.card}>
                 <View style={styles.locationHeader}>
-                  <Ionicons name={isFromNavigation ? "business" : (useGPS ? "location" : "business")} size={16} color="#00E676" />
+                  <Ionicons name={isFromNavigation ? "business" : (useGPS ? "location" : "business")} size={20} color="#00E676" />
                   <Text style={styles.locationText}>
-                    {isFromNavigation 
-                      ? cityName 
-                      : (useGPS ? 'Current Location' : (user?.city || 'City'))
-                    }
+                    {isFromNavigation ? cityName : (useGPS ? 'Current Location' : (user?.city || 'City'))}
                   </Text>
                 </View>
                 <View style={styles.currentMain}>
-                  <Ionicons name={getWeatherIcon(weatherData?.daily?.weathercode?.[0])} size={70} color="#00E676" />
+                  <Ionicons name={getWeatherIcon(weatherData?.daily?.weathercode?.[0])} size={100} color="#00E676" />
                   <View style={styles.tempContainer}>
                     <Text style={styles.currentTemp}>{Math.round(weatherData?.daily?.temperature_2m_max?.[0] || 0)}°</Text>
                     <Text style={styles.tempRange}>
@@ -731,414 +741,309 @@ import React, { useState, useEffect } from 'react';
                 
                 <View style={styles.weatherDetails}>
                   <View style={styles.detailItem}>
-                    <Ionicons name="water" size={16} color="#2196F3" />
+                    <Ionicons name="water" size={20} color="#2196F3" />
                     <Text style={styles.detailText}>{weatherData?.daily?.precipitation_sum?.[0] || 0}mm</Text>
                   </View>
                   <View style={styles.detailItem}>
-                    <Ionicons name="leaf" size={16} color="#4CAF50" />
+                    <Ionicons name="leaf" size={20} color="#4CAF50" />
                     <Text style={styles.detailText}>{Math.round(weatherData?.daily?.windspeed_10m_max?.[0] || 0)}km/h</Text>
                   </View>
                   <View style={styles.detailItem}>
-                    <Ionicons name="water-outline" size={16} color="#FF9800" />
+                    <Ionicons name="water-outline" size={20} color="#FF9800" />
                     <Text style={styles.detailText}>{Math.round(weatherData?.daily?.relative_humidity_2m_mean?.[0] || 0)}%</Text>
                   </View>
-                </View>
-              </View>
-
-              {/* Weather Map Overview */}
-              <View style={styles.card}>
-                <View style={styles.mapOverviewHeader}>
-                  <Text style={styles.sectionTitle}>Weather Map</Text>
-                  <TouchableOpacity 
-                    style={styles.fullscreenButton} 
-                    onPress={() => setShowWindyMap(true)}
-                  >
-                    <Ionicons name="expand" size={18} color="#00E676" />
-                    <Text style={styles.fullscreenButtonText}>Full View</Text>
-                  </TouchableOpacity>
-                </View>
-                
-                <View style={styles.mapOverviewContainer}>
-                  <WebView
-                    source={{ html: getWindyMapHTML(false) }}
-                    style={styles.mapOverview}
-                    javaScriptEnabled={true}
-                    domStorageEnabled={true}
-                    scrollEnabled={false}
-                    startInLoadingState={true}
-                    renderLoading={() => (
-                      <View style={styles.mapOverviewLoading}>
-                        <Ionicons name="map" size={30} color="#00E676" />
-                        <Text style={styles.mapLoadingText}>Loading Map...</Text>
-                      </View>
-                    )}
-                  />
-                  <TouchableOpacity 
-                    style={styles.mapOverlay} 
-                    onPress={() => setShowWindyMap(true)}
-                    activeOpacity={0.7}
-                  >
-                  </TouchableOpacity>
                 </View>
               </View>
 
               {/* Advisories */}
               {getAdvisories().length > 0 && (
                 <View style={styles.advisoriesCard}>
-                  <Text style={styles.sectionTitle}>Weather Advisories</Text>
+                  <Text style={styles.sectionTitle}>Alerts</Text>
                   <View style={styles.advisoriesContainer}>
                     {getAdvisories().map((advisory, index) => (
                       <View key={index} style={[styles.advisoryItem, { borderLeftColor: advisory.color }]}>
-                        <Ionicons name={advisory.icon} size={18} color={advisory.color} />
+                        <Ionicons name={advisory.icon} size={20} color={advisory.color} />
                         <Text style={[styles.advisoryText, { color: advisory.color }]}>{advisory.text}</Text>
                       </View>
                     ))}
                   </View>
                 </View>
               )}
+            </View>
 
-
-              {/* Horizontal Forecast */}
+            {/* Map - Right Column */}
+            <View style={styles.rightColumn}>
               <View style={styles.card}>
-                <Text style={styles.sectionTitle}>{displayDays}-Day Forecast</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.forecastScroll}>
-                  {weatherData?.daily?.time?.slice(0, displayDays).map((date, index) => (
-                    <TouchableOpacity
-                      key={index}
-                      style={[styles.forecastDay, selectedDay === index && styles.selectedDay]}
-                      onPress={() => setSelectedDay(index)}
-                    >
-                      <Text style={styles.dayText}>{formatDate(date, index)}</Text>
-                      <Ionicons name={getWeatherIcon(weatherData.daily.weathercode[index])} size={32} color="#00E676" />
-                      <Text style={styles.forecastTemp}>
-                        {Math.round(weatherData.daily.temperature_2m_max[index])}°
-                      </Text>
-                      <Text style={styles.forecastTempMin}>
-                        {Math.round(weatherData.daily.temperature_2m_min[index])}°
-                      </Text>
-                      <Text style={styles.precipText}>{weatherData.daily.precipitation_sum[index]}mm</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-
-              {/* Charts */}
-              <View style={styles.card}>
-                <Text style={styles.sectionTitle}>Hourly Forecast - {formatDate(weatherData?.daily?.time?.[selectedDay], selectedDay)}</Text>
-                
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chartTabs}>
-                  {['temperature', 'precipitation', 'humidity', 'windspeed', 'pressure', 'uv'].map(chart => (
-                    <TouchableOpacity
-                      key={chart}
-                      style={[styles.chartTab, activeChart === chart && styles.activeChartTab]}
-                      onPress={() => setActiveChart(chart)}
-                    >
-                      <Text style={[styles.chartTabText, activeChart === chart && styles.activeChartTabText]}>
-                        {chart.charAt(0).toUpperCase() + chart.slice(1)}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-                
-                {renderChart()}
-              </View>
-            </ScrollView>
-
-            {/* Chart Data Modal */}
-            <Modal
-              visible={chartDataModal.visible}
-              transparent={true}
-              animationType="fade"
-              onRequestClose={() => setChartDataModal({ visible: false, data: null })}
-            >
-              <View style={styles.modalOverlay}>
-                <View style={styles.modalContent}>
-                  <Text style={styles.modalTitle}>
-                    {chartDataModal.data?.hour}:00 Details
-                  </Text>
-                  {chartDataModal.data && (
-                    <View style={styles.modalData}>
-                      <View style={styles.modalRow}>
-                        <Ionicons name="thermometer" size={16} color="#00E676" />
-                        <Text style={styles.modalText}>Temperature: {chartDataModal.data.temp.toFixed(1)}°C</Text>
-                      </View>
-                      <View style={styles.modalRow}>
-                        <Ionicons name="water" size={16} color="#2196F3" />
-                        <Text style={styles.modalText}>Precipitation: {chartDataModal.data.precipitation.toFixed(1)}mm</Text>
-                      </View>
-                      <View style={styles.modalRow}>
-                        <Ionicons name="water-outline" size={16} color="#FF9800" />
-                        <Text style={styles.modalText}>Humidity: {chartDataModal.data.humidity.toFixed(0)}%</Text>
-                      </View>
-                      <View style={styles.modalRow}>
-                        <Ionicons name="leaf" size={16} color="#9C27B0" />
-                        <Text style={styles.modalText}>Wind Speed: {chartDataModal.data.windspeed.toFixed(1)}km/h</Text>
-                      </View>
-                      <View style={styles.modalRow}>
-                        <Ionicons name="speedometer" size={16} color="#F44336" />
-                        <Text style={styles.modalText}>Pressure: {chartDataModal.data.pressure.toFixed(0)}hPa</Text>
-                      </View>
-                      <View style={styles.modalRow}>
-                        <Ionicons name="sunny" size={16} color="#FFC107" />
-                        <Text style={styles.modalText}>UV Index: {chartDataModal.data.uv.toFixed(1)}</Text>
-                      </View>
-                    </View>
-                  )}
-                  <TouchableOpacity
-                    style={styles.modalCloseButton}
-                    onPress={() => setChartDataModal({ visible: false, data: null })}
-                  >
-                    <Text style={styles.modalCloseText}>Close</Text>
+                <View style={styles.mapOverviewHeader}>
+                  <Text style={styles.sectionTitle}>Weather Map</Text>
+                  <TouchableOpacity style={styles.fullscreenButton} onPress={() => setShowWindyMap(true)}>
+                    <Ionicons name="expand" size={20} color="#00E676" />
+                    <Text style={styles.fullscreenButtonText}>Full View</Text>
                   </TouchableOpacity>
                 </View>
+                
+                <View style={styles.mapOverviewContainer}>
+                  {renderMap(false)}
+                  <TouchableOpacity style={styles.mapOverlay} onPress={() => setShowWindyMap(true)} activeOpacity={0.7} />
+                </View>
               </View>
-            </Modal>
-          </SafeAreaView>
-        </LinearGradient>
-      </View>
-    );
-  };
+            </View>
+          </View>
 
-  const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#0F0F23' },
-    gradient: { flex: 1 },
-    safeArea: { flex: 1 },
-    header: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-      paddingHorizontal: 20, paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 15 : 20,
-      paddingBottom: 15,
-    },
-    headerButton: {
-      width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255, 255, 255, 0.1)',
-      justifyContent: 'center', alignItems: 'center', borderColor: 'rgba(0,230,118,0.3)', borderWidth: 1,
-    },
-    headerTitle: { fontSize: 18, fontWeight: '700', color: '#FFFFFF', textAlign: 'center', flex: 1 },
-    content: { flex: 1, paddingHorizontal: 20 },
-    scrollContent: { paddingBottom: 100 },
-    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    loadingText: { fontSize: 16, color: '#FFFFFF', marginTop: 20, fontWeight: '600' },
-    
-    // Map styles
-    mapContainer: { flex: 1, backgroundColor: '#0F0F23', paddingBottom: 110 },
-    mapHeader: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-      paddingHorizontal: 20, paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 15 : 50,
-      paddingBottom: 10, backgroundColor: '#0F0F23',
-    },
-    webView: { flex: 1 },
-    webViewLoading: {
-      position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-      justifyContent: 'center', alignItems: 'center', backgroundColor: '#0F0F23',
-    },
-    
-    // Map Overview styles
-    mapOverviewHeader: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-      marginBottom: 15,
-    },
-    fullscreenButton: {
-      flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,230,118,0.1)',
-      paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20,
-      borderColor: 'rgba(0,230,118,0.3)', borderWidth: 1,
-    },
-    fullscreenButtonText: {
-      fontSize: 14, color: '#00E676', fontWeight: '600', marginLeft: 6,
-    },
-    mapOverviewContainer: {
-      height: 200, borderRadius: 16, overflow: 'hidden', position: 'relative',
-      backgroundColor: 'rgba(255,255,255,0.05)',
-    },
-    mapOverview: {
-      flex: 1, backgroundColor: 'transparent',
-    },
-  mapOverviewLoading: {
-      position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-      justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(15,15,35,0.8)',
-    },
-    mapLoadingText: {
-      fontSize: 14, color: '#FFFFFF', marginTop: 8, fontWeight: '500',
-    },
-    mapOverlay: {
-      position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: 'rgba(0,0,0,0.2)', justifyContent: 'center', alignItems: 'center',
-    },
-    mapOverlayContent: {
-      alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)',
-      paddingHorizontal: 20, paddingVertical: 12, borderRadius: 25,
-    },
-    mapOverlayText: {
-      fontSize: 14, color: '#FFFFFF', fontWeight: '600', marginTop: 4,
-    },
+          {/* Horizontal Forecast */}
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>{displayDays}-Day Forecast</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.forecastScroll}>
+              {weatherData?.daily?.time?.slice(0, displayDays).map((date, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[styles.forecastDay, selectedDay === index && styles.selectedDay]}
+                  onPress={() => setSelectedDay(index)}
+                >
+                  <Text style={styles.dayText}>{formatDate(date, index)}</Text>
+                  <Ionicons name={getWeatherIcon(weatherData.daily.weathercode[index])} size={36} color="#00E676" />
+                  <Text style={styles.forecastTemp}>{Math.round(weatherData.daily.temperature_2m_max[index])}°</Text>
+                  <Text style={styles.forecastTempMin}>{Math.round(weatherData.daily.temperature_2m_min[index])}°</Text>
+                  <Text style={styles.precipText}>{weatherData.daily.precipitation_sum[index]}mm</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
 
-    // Card styles
-    card: {
-      backgroundColor: 'rgba(255, 255, 255, 0.08)', borderRadius: 20,
-      padding: 20, marginBottom: 16, borderColor: 'rgba(0,230,118,0.15)', borderWidth: 1,
-    },
-    locationToggle: {
-      flexDirection: 'row', backgroundColor: 'rgba(255, 255, 255, 0.1)',
-      borderRadius: 25, padding: 4, marginBottom: 20, alignSelf: 'center',
-    },
-    toggleButton: {
-      flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8,
-      borderRadius: 20, minWidth: 80, justifyContent: 'center',
-    },
-    activeToggle: {
-      backgroundColor: 'rgba(0,230,118,0.2)', borderColor: 'rgba(0,230,118,0.4)', borderWidth: 1,
-    },
-    toggleText: {
-      fontSize: 14, fontWeight: '600', color: 'rgba(255,255,255,0.7)', marginLeft: 4,
-    },
-    activeToggleText: { color: '#00E676' },
-    
-    // Current weather
-    locationHeader: {
-      flexDirection: 'row', alignItems: 'center', marginBottom: 20,
-    },
-    locationText: {
-      fontSize: 16, fontWeight: '600', color: '#FFFFFF', marginLeft: 8,
-    },
-    currentMain: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20,
-    },
-    tempContainer: { alignItems: 'flex-end' },
-    currentTemp: {
-      fontSize: 56, fontWeight: '300', color: '#FFFFFF', lineHeight: 60,
-    },
-    tempRange: {
-      fontSize: 16, color: 'rgba(255,255,255,0.7)', fontWeight: '500',
-    },
-    weatherDetails: {
-      flexDirection: 'row', justifyContent: 'space-around', paddingTop: 16,
-      borderTopColor: 'rgba(255,255,255,0.1)', borderTopWidth: 1,
-    },
-    detailItem: {
-      flexDirection: 'row', alignItems: 'center',
-    },
-    detailText: {
-      fontSize: 14, color: '#FFFFFF', fontWeight: '600', marginLeft: 6,
-    },
+          {/* Charts */}
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Hourly Details - {formatDate(weatherData?.daily?.time?.[selectedDay], selectedDay)}</Text>
+            
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chartTabs}>
+              {['temperature', 'precipitation', 'humidity', 'windspeed', 'pressure', 'uv'].map(chart => (
+                <TouchableOpacity
+                  key={chart}
+                  style={[styles.chartTab, activeChart === chart && styles.activeChartTab]}
+                  onPress={() => setActiveChart(chart)}
+                >
+                  <Text style={[styles.chartTabText, activeChart === chart && styles.activeChartTabText]}>
+                    {chart.charAt(0).toUpperCase() + chart.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            
+            {renderChart()}
+          </View>
+        </ScrollView>
 
-    // Advisories
-    advisoriesCard: {
-      backgroundColor: 'rgba(255, 87, 34, 0.1)', borderRadius: 20,
-      padding: 20, marginBottom: 16, borderColor: 'rgba(255,87,34,0.3)', borderWidth: 1,
-    },
-    advisoriesContainer: { marginTop: 12 },
-    advisoryItem: {
-      flexDirection: 'row', alignItems: 'center', paddingVertical: 8,
-      paddingLeft: 12, borderLeftWidth: 3, marginBottom: 8,
-      backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 8,
-    },
-    advisoryText: {
-      fontSize: 14, fontWeight: '600', marginLeft: 12,
-    },
+        {/* Chart Data Modal */}
+        <Modal
+          visible={chartDataModal.visible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setChartDataModal({ visible: false, data: null })}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>{chartDataModal.data?.hour}:00 Details</Text>
+              {chartDataModal.data && (
+                <View style={styles.modalData}>
+                  <View style={styles.modalRow}>
+                    <Ionicons name="thermometer" size={20} color="#00E676" />
+                    <Text style={styles.modalText}>Temperature: {chartDataModal.data.temp.toFixed(1)}°C</Text>
+                  </View>
+                  <View style={styles.modalRow}>
+                    <Ionicons name="water" size={20} color="#2196F3" />
+                    <Text style={styles.modalText}>Precipitation: {chartDataModal.data.precipitation.toFixed(1)}mm</Text>
+                  </View>
+                  <View style={styles.modalRow}>
+                    <Ionicons name="water-outline" size={20} color="#FF9800" />
+                    <Text style={styles.modalText}>Humidity: {chartDataModal.data.humidity.toFixed(0)}%</Text>
+                  </View>
+                  <View style={styles.modalRow}>
+                    <Ionicons name="leaf" size={20} color="#9C27B0" />
+                    <Text style={styles.modalText}>Wind Speed: {chartDataModal.data.windspeed.toFixed(1)}km/h</Text>
+                  </View>
+                  <View style={styles.modalRow}>
+                    <Ionicons name="speedometer" size={20} color="#F44336" />
+                    <Text style={styles.modalText}>Pressure: {chartDataModal.data.pressure.toFixed(0)}hPa</Text>
+                  </View>
+                  <View style={styles.modalRow}>
+                    <Ionicons name="sunny" size={20} color="#FFC107" />
+                    <Text style={styles.modalText}>UV Index: {chartDataModal.data.uv.toFixed(1)}</Text>
+                  </View>
+                </View>
+              )}
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setChartDataModal({ visible: false, data: null })}
+              >
+                <Text style={styles.modalCloseText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      </SafeAreaView>
+    </LinearGradient>
+  </View>
+);
+};
 
-    // Section title
-    sectionTitle: {
-      fontSize: 18, fontWeight: '700', color: '#FFFFFF', marginBottom: 16,
-    },
+const styles = StyleSheet.create({
+container: { flex: 1, backgroundColor: '#0F0F23' },
+gradient: { flex: 1 },
+safeArea: { flex: 1 },
+header: {
+  flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  paddingHorizontal: 24, paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 20 : 25, paddingBottom: 20,
+},
+headerButton: {
+  width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  justifyContent: 'center', alignItems: 'center', borderColor: 'rgba(0,230,118,0.3)', borderWidth: 1,
+},
+headerTitle: { fontSize: 22, fontWeight: '700', color: '#FFFFFF', textAlign: 'center', flex: 1 },
+content: { flex: 1, paddingHorizontal: 24 },
+scrollContent: { paddingBottom: 120 },
+loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+loadingText: { fontSize: 18, color: '#FFFFFF', marginTop: 24, fontWeight: '600' },
 
-    // Forecast
-    forecastScroll: { marginTop: 8 },
-    forecastDay: {
-      alignItems: 'center', paddingVertical: 16, paddingHorizontal: 12,
-      marginRight: 8, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.05)',
-      minWidth: 80, borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1,
-    },
-    selectedDay: {
-      backgroundColor: 'rgba(0,230,118,0.15)', borderColor: 'rgba(0,230,118,0.4)',
-    },
-    dayText: {
-      fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.8)', marginBottom: 8,
-    },
-    forecastTemp: {
-      fontSize: 16, fontWeight: '700', color: '#FFFFFF', marginTop: 8,
-    },
-    forecastTempMin: {
-      fontSize: 12, fontWeight: '500', color: 'rgba(255,255,255,0.6)', marginTop: 2,
-    },
-    precipText: {
-      fontSize: 10, color: '#2196F3', fontWeight: '600', marginTop: 4,
-    },
-    chart: {
-      borderRadius: 16,
-    },
-    chartTabs: {
-      marginBottom: 20,
-      paddingHorizontal: 0,
-    },
-    chartTab: {
-      backgroundColor: 'rgba(255,255,255,0.1)',
-      paddingHorizontal: 16,
-      paddingVertical: 8,
-      borderRadius: 20,
-      marginRight: 10,
-    },
-    activeChartTab: {
-      backgroundColor: 'rgba(0,230,118,0.2)',
-      borderColor: '#00E676',
-      borderWidth: 2,
-    },
-    chartTabText: {
-      color: 'rgba(255,255,255,0.8)',
-      fontSize: 14,
-      fontWeight: '600',
-      textAlign: 'center',
-    },
-    activeChartTabText: {
-      color: '#00E676',
-      fontWeight: '700',
-    },
+// Web-style layout
+topRow: { flexDirection: 'row', marginBottom: 20, gap: 20 },
+leftColumn: { flex: 1 },
+rightColumn: { flex: 1 },
 
-  chartContainer: {
-      alignItems: 'center',
-      marginBottom: 20,
-      borderRadius: 16,
-      padding: 15,
-    },
-    
-    chart: {
-      borderRadius: 16,
-    },
-    
-    // Chart unit text
-    chartUnit: {
-      fontSize: 16,
-      fontWeight: '700',
-      marginTop: 15,
-      textAlign: 'center',
-      opacity: 1,
-    },
+// Map styles
+mapContainer: { flex: 1, backgroundColor: '#0F0F23', paddingBottom: 110 },
+mapHeader: {
+  flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  paddingHorizontal: 24, paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 20 : 55,
+  paddingBottom: 15, backgroundColor: '#0F0F23',
+},
+webView: { flex: 1 },
+webViewLoading: {
+  position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+  justifyContent: 'center', alignItems: 'center', backgroundColor: '#0F0F23',
+},
 
-    // Modal
-    modalOverlay: {
-      flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center',
-      alignItems: 'center', paddingHorizontal: 20,
-    },
-    modalContent: {
-      backgroundColor: '#1A1A2E', borderRadius: 20, padding: 24,
-      width: '100%', maxWidth: 350, borderColor: 'rgba(0,230,118,0.3)', borderWidth: 1,
-    },
-    modalTitle: {
-      fontSize: 18, fontWeight: '700', color: '#FFFFFF', textAlign: 'center',
-      marginBottom: 20,
-    },
-    modalData: { marginBottom: 20 },
-    modalRow: {
-      flexDirection: 'row', alignItems: 'center', paddingVertical: 8,
-      borderBottomColor: 'rgba(255,255,255,0.1)', borderBottomWidth: 1,
-    },
-    modalText: {
-      fontSize: 14, color: '#FFFFFF', fontWeight: '500', marginLeft: 12,
-    },
-    modalCloseButton: {
-      backgroundColor: 'rgba(0,230,118,0.2)', paddingVertical: 12,
-      borderRadius: 12, alignItems: 'center', borderColor: 'rgba(0,230,118,0.4)', borderWidth: 1,
-    },
-    modalCloseText: {
-      fontSize: 16, fontWeight: '600', color: '#00E676',
-    },
-  });
+// Map Overview styles
+mapOverviewHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
+fullscreenButton: {
+  flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,230,118,0.1)',
+  paddingHorizontal: 16, paddingVertical: 10, borderRadius: 22,
+  borderColor: 'rgba(0,230,118,0.3)', borderWidth: 1,
+},
+fullscreenButtonText: { fontSize: 16, color: '#00E676', fontWeight: '600', marginLeft: 8 },
+mapOverviewContainer: {
+  height: 350, borderRadius: 20, overflow: 'hidden', position: 'relative',
+  backgroundColor: 'rgba(255,255,255,0.05)',
+},
+mapOverview: { flex: 1, backgroundColor: 'transparent' },
+mapOverviewLoading: {
+  position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+  justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(15,15,35,0.8)',
+},
+mapLoadingText: { fontSize: 16, color: '#FFFFFF', marginTop: 10, fontWeight: '500' },
+mapOverlay: {
+  position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+  backgroundColor: 'rgba(0,0,0,0.2)', justifyContent: 'center', alignItems: 'center',
+},
+mapOverlayContent: {
+  alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)',
+  paddingHorizontal: 24, paddingVertical: 16, borderRadius: 28,
+},
+mapOverlayText: { fontSize: 16, color: '#FFFFFF', fontWeight: '600', marginTop: 6 },
 
-  export default WeatherScreen;
+// Card styles
+card: {
+  backgroundColor: 'rgba(255, 255, 255, 0.08)', borderRadius: 24,
+  padding: 24, marginBottom: 20, borderColor: 'rgba(0,230,118,0.15)', borderWidth: 1,
+},
+locationToggle: {
+  flexDirection: 'row', backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  borderRadius: 28, padding: 6, marginBottom: 24, alignSelf: 'center',
+},
+toggleButton: {
+  flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12,
+  borderRadius: 22, minWidth: 100, justifyContent: 'center',
+},
+activeToggle: { backgroundColor: 'rgba(0,230,118,0.2)', borderColor: 'rgba(0,230,118,0.4)', borderWidth: 1 },
+toggleText: { fontSize: 16, fontWeight: '600', color: 'rgba(255,255,255,0.7)', marginLeft: 6 },
+activeToggleText: { color: '#00E676' },
+
+// Current weather
+locationHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
+locationText: { fontSize: 18, fontWeight: '600', color: '#FFFFFF', marginLeft: 10 },
+currentMain: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 },
+tempContainer: { alignItems: 'flex-end' },
+currentTemp: { fontSize: 72, fontWeight: '200', color: '#FFFFFF', lineHeight: 80 },
+tempRange: { fontSize: 18, color: 'rgba(255,255,255,0.7)', fontWeight: '500' },
+weatherDetails: {
+  flexDirection: 'row', justifyContent: 'space-around', paddingTop: 20,
+  borderTopColor: 'rgba(255,255,255,0.1)', borderTopWidth: 1,
+},
+detailItem: { flexDirection: 'row', alignItems: 'center' },
+detailText: { fontSize: 16, color: '#FFFFFF', fontWeight: '600', marginLeft: 8 },
+
+// Advisories
+advisoriesCard: {
+  backgroundColor: 'rgba(255, 87, 34, 0.1)', borderRadius: 24,
+  padding: 24, marginBottom: 20, borderColor: 'rgba(255,87,34,0.3)', borderWidth: 1,
+},
+advisoriesContainer: { marginTop: 12 },
+advisoryItem: {
+  flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingLeft: 16,
+  borderLeftWidth: 4, marginBottom: 8, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 12,
+},
+advisoryText: { fontSize: 15, fontWeight: '600', marginLeft: 12 },
+
+// Section title
+sectionTitle: { fontSize: 20, fontWeight: '700', color: '#FFFFFF', marginBottom: 20 },
+
+// Forecast
+forecastScroll: { marginTop: 12 },
+forecastDay: {
+  alignItems: 'center', paddingVertical: 16, paddingHorizontal: 14,
+  marginRight: 12, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.05)',
+  minWidth: 90, borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1,
+},
+selectedDay: { backgroundColor: 'rgba(0,230,118,0.15)', borderColor: 'rgba(0,230,118,0.4)' },
+dayText: { fontSize: 14, fontWeight: '600', color: 'rgba(255,255,255,0.8)', marginBottom: 8 },
+forecastTemp: { fontSize: 18, fontWeight: '700', color: '#FFFFFF', marginTop: 8 },
+forecastTempMin: { fontSize: 14, fontWeight: '500', color: 'rgba(255,255,255,0.6)', marginTop: 3 },
+precipText: { fontSize: 12, color: '#2196F3', fontWeight: '600', marginTop: 6 },
+
+// Charts
+chartTabs: { marginBottom: 24, paddingHorizontal: 0 },
+chartTab: {
+  backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 20, paddingVertical: 12,
+  borderRadius: 24, marginRight: 12,
+},
+activeChartTab: { backgroundColor: 'rgba(0,230,118,0.2)', borderColor: '#00E676', borderWidth: 2 },
+chartTabText: { color: 'rgba(255,255,255,0.8)', fontSize: 16, fontWeight: '600', textAlign: 'center' },
+activeChartTabText: { color: '#00E676', fontWeight: '700' },
+chartContainer: { alignItems: 'center', marginBottom: 24, borderRadius: 20, padding: 20 },
+chart: { borderRadius: 20 },
+chartUnit: { fontSize: 18, fontWeight: '700', marginTop: 20, textAlign: 'center', opacity: 1 },
+
+// Modal
+modalOverlay: {
+  flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center',
+  alignItems: 'center', paddingHorizontal: 24,
+},
+modalContent: {
+  backgroundColor: '#1A1A2E', borderRadius: 24, padding: 28,
+  width: '100%', maxWidth: 400, borderColor: 'rgba(0,230,118,0.3)', borderWidth: 1,
+},
+modalTitle: { fontSize: 20, fontWeight: '700', color: '#FFFFFF', textAlign: 'center', marginBottom: 24 },
+modalData: { marginBottom: 24 },
+modalRow: {
+  flexDirection: 'row', alignItems: 'center', paddingVertical: 12,
+  borderBottomColor: 'rgba(255,255,255,0.1)', borderBottomWidth: 1,
+},
+modalText: { fontSize: 16, color: '#FFFFFF', fontWeight: '500', marginLeft: 16 },
+modalCloseButton: {
+  backgroundColor: 'rgba(0,230,118,0.2)', paddingVertical: 16, borderRadius: 16,
+  alignItems: 'center', borderColor: 'rgba(0,230,118,0.4)', borderWidth: 1,
+},
+modalCloseText: { fontSize: 18, fontWeight: '600', color: '#00E676' },
+iframeFullScreen: { flex: 1, width: '100%', height: '100vh', borderWidth: 0 },
+iframeOverview: { width: '100%', height: 300, borderWidth: 0 },
+});
+
+export default WeatherScreen;

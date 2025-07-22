@@ -70,8 +70,6 @@ const MapScreen = ({ navigation }) => {
   const drawerAnimation = useState(new Animated.Value(-DRAWER_WIDTH))[0];
   const searchInputRef = useRef(null);
   const webViewRef = useRef(null);
-  const lastNominatimRequest = useRef(0);
-  const NOMINATIM_RATE_LIMIT = 1000;
   const blurTimeoutRef = useRef(null);
   
   const updateState = (updates) => setState(prev => ({ ...prev, ...updates }));
@@ -183,168 +181,173 @@ const MapScreen = ({ navigation }) => {
     updateState({ aqiData });
   }, [state.cities]);
 
-  const searchLocations = async (query) => {
-    const now = Date.now();
-    const timeSinceLastRequest = now - lastNominatimRequest.current;
-    
-    if (timeSinceLastRequest < NOMINATIM_RATE_LIMIT) {
-      await new Promise(resolve => 
-        setTimeout(resolve, NOMINATIM_RATE_LIMIT - timeSinceLastRequest)
-      );
-    }
-    
-    lastNominatimRequest.current = Date.now();
-    
-    if (!query.trim()) {
+const NOMINATIM_RATE_LIMIT = 1000; // 1 second between requests
+const lastNominatimRequest = useRef(0);
+
+const getLocationIcon = (type, className) => {
+  if (type === 'school' || className === 'amenity') return 'school-outline';
+  if (type === 'hospital') return 'medical-outline';
+  if (type === 'mall' || type === 'shopping') return 'storefront-outline';
+  if (type === 'restaurant') return 'restaurant-outline';
+  if (type === 'gas_station') return 'car-outline';
+  if (className === 'building') return 'business-outline';
+  return 'location-outline';
+};
+
+const getMockLocationSuggestions = (query) => {
+  const locations = [
+    { name: 'SM Mall of Asia, Pasay', type: 'shopping', icon: 'storefront-outline' },
+    { name: 'Ayala Center, Makati', type: 'shopping', icon: 'storefront-outline' },
+    { name: 'University of the Philippines Diliman', type: 'school', icon: 'school-outline' },
+    { name: 'Philippine General Hospital', type: 'hospital', icon: 'medical-outline' },
+    { name: 'Rizal Park, Manila', type: 'place', icon: 'leaf-outline' },
+    { name: 'Bonifacio Global City', type: 'place', icon: 'business-outline' },
+  ];
+  return locations
+    .filter(location => location.name.toLowerCase().includes(query.toLowerCase()))
+    .slice(0, 5)
+    .map((location, index) => ({
+      id: `mock_${index}`,
+      name: location.name,
+      shortName: location.name.split(',')[0],
+      type: location.type,
+      icon: location.icon
+    }));
+};
+
+const searchLocations = async (query) => {
+  const now = Date.now();
+  const timeSinceLastRequest = now - lastNominatimRequest.current;
+
+  if (timeSinceLastRequest < NOMINATIM_RATE_LIMIT) {
+    await new Promise(resolve =>
+      setTimeout(resolve, NOMINATIM_RATE_LIMIT - timeSinceLastRequest)
+    );
+  }
+
+  lastNominatimRequest.current = Date.now();
+
+  if (query.length < 2) {
+    updateState({
+      searchResults: [],
+      showSearchResults: false,
+      isSearching: false
+    });
+    return;
+  }
+
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&countrycodes=ph&format=json&limit=10&addressdetails=1`;
+
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'EnvironmentalReportApp/1.0' }
+    });
+
+    if (!response.ok) throw new Error('API request failed');
+
+    const data = await response.json();
+
+    const formattedResults = data.map(item => ({
+      id: item.place_id.toString(),
+      name: item.display_name.replace(', Philippines', ''),
+      shortName: item.name || item.display_name.split(',')[0],
+      lat: parseFloat(item.lat),
+      lon: parseFloat(item.lon),
+      address: item.display_name,
+      importance: item.importance || 0,
+      type: item.type || item.class || 'location',
+      icon: getLocationIcon(item.type, item.class)
+    }));
+
+    formattedResults.sort((a, b) => {
+      if (b.importance !== a.importance) {
+        return b.importance - a.importance;
+      }
+      return a.name.localeCompare(b.name);
+    });
+
+    updateState({
+      searchResults: formattedResults.slice(0, 5),
+      showSearchResults: true,
+      isSearching: false,
+      searchCache: {
+        ...state.searchCache,
+        [query.toLowerCase()]: formattedResults.slice(0, 5)
+      }
+    });
+
+  } catch (error) {
+    console.error('Location search error:', error);
+
+    const fallback = getMockLocationSuggestions(query);
+
+    updateState({
+      searchResults: fallback,
+      showSearchResults: true,
+      isSearching: false,
+      searchCache: {
+        ...state.searchCache,
+        [query.toLowerCase()]: fallback
+      }
+    });
+  }
+};
+
+const debouncedSearch = useRef(
+  _.debounce((query) => {
+    searchLocations(query);
+  }, 300)
+).current;
+
+const handleSearchChange = (text) => {
+  updateState({
+    searchQuery: text
+  });
+
+  if (text.length > 2) {
+    const cacheKey = text.toLowerCase();
+
+    if (state.searchCache[cacheKey]) {
       updateState({
-        searchResults: [],
-        showSearchResults: false,
+        searchResults: state.searchCache[cacheKey],
+        showSearchResults: true,
         isSearching: false
       });
-      return;
-    }
-        
-    try {
-      const boundedUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=10&bounded=1&viewbox=120.85,14.3,121.15,14.8&countrycodes=ph`;
-      
-      const response = await fetch(boundedUrl, { 
-        headers: { 'User-Agent': 'MetroManilaWeatherApp/1.0' } 
-      });
-      const results = await response.json();
-      
-      let filteredResults = [];
-      
-      if (results && results.length > 0) {
-        filteredResults = results.map(item => ({
-          id: item.place_id.toString(),
-          name: item.display_name.split(',')[0],
-          lat: parseFloat(item.lat),
-          lon: parseFloat(item.lon),
-          address: item.display_name,
-          importance: item.importance || 0,
-          type: item.type || item.class || 'location',
-          icon: getLocationIcon(item.type, item.class)
-        }));
-      } else {
-        const fallbackUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ', Metro Manila')}&limit=10&countrycodes=ph`;
-        
-        const phResponse = await fetch(fallbackUrl, {
-          headers: { 'User-Agent': 'MetroManilaWeatherApp/1.0' }
-        });
-        const phResults = await phResponse.json();
-        
-        filteredResults = phResults
-          .filter(item => {
-            const lat = parseFloat(item.lat);
-            const lon = parseFloat(item.lon);
-            return lat > 14.3 && lat < 14.8 && lon > 120.85 && lon < 121.15;
-          })
-          .map(item => ({
-            id: item.place_id.toString(),
-            name: item.display_name.split(',')[0],
-            lat: parseFloat(item.lat),
-            lon: parseFloat(item.lon),
-            address: item.display_name,
-            importance: item.importance || 0,
-            type: item.type || item.class || 'location',
-            icon: getLocationIcon(item.type, item.class)
-          }));
-      }
-
-      filteredResults.sort((a, b) => {
-        if (b.importance !== a.importance) {
-          return b.importance - a.importance;
-        }
-        return a.name.localeCompare(b.name);
-      });
-
-      filteredResults = filteredResults.slice(0, 5);
-      
-      updateState({
-        searchResults: filteredResults,
-        showSearchResults: true,
-        isSearching: false,
-        searchCache: {
-          ...state.searchCache,
-          [query.toLowerCase()]: filteredResults
-        }
-      });
-      
-    } catch (error) {
-      console.error('❌ Search error:', error);
-      updateState({
-        searchResults: [], 
-        showSearchResults: true,
-        isSearching: false 
-      });
-    }
-  };
-
-  const getLocationIcon = (type, className) => {
-    if (type === 'city' || type === 'town') return 'business';
-    if (type === 'school' || className === 'amenity') return 'school';
-    if (type === 'hospital') return 'medical';
-    if (type === 'mall' || type === 'shopping') return 'storefront';
-    if (type === 'restaurant') return 'restaurant';
-    if (type === 'gas_station') return 'car';
-    if (className === 'building') return 'business';
-    return 'location';
-  };
-
-  const debouncedSearch = useRef(
-    _.debounce((query) => {
-      searchLocations(query);
-    }, 300)
-  ).current;
-
-  const handleSearchChange = (text) => {    
-    updateState({
-      searchQuery: text
-    });
-    
-    if (text.length > 2) {
-      const cacheKey = text.toLowerCase();
-      
-      if (state.searchCache[cacheKey]) {
-        updateState({
-          searchResults: state.searchCache[cacheKey],
-          showSearchResults: true,
-          isSearching: false
-        });
-      } else {
-        updateState({
-          showSearchResults: true,
-          isSearching: true,
-          searchResults: []
-        });
-        
-        debouncedSearch(text);
-      }
     } else {
       updateState({
-        searchResults: [],
-        showSearchResults: false,
-        selectedLocation: null,
-        isSearching: false
+        showSearchResults: true,
+        isSearching: true,
+        searchResults: []
       });
-      removeSearchMarker();
-    }
-  };
 
-  const handleSearchFocus = () => {
-    if (blurTimeoutRef.current) {
-      clearTimeout(blurTimeoutRef.current);
+      debouncedSearch(text);
     }
-    if (state.searchQuery.length > 0 && state.searchResults.length > 0) {
-      updateState({ showSearchResults: true });
-    }
-  };
+  } else {
+    updateState({
+      searchResults: [],
+      showSearchResults: false,
+      selectedLocation: null,
+      isSearching: false
+    });
+    removeSearchMarker();
+  }
+};
 
-  const handleSearchBlur = () => {
-    blurTimeoutRef.current = setTimeout(() => {
-      updateState({ showSearchResults: false });
-    }, 150);
-  };
+const handleSearchFocus = () => {
+  if (blurTimeoutRef.current) {
+    clearTimeout(blurTimeoutRef.current);
+  }
+  if (state.searchQuery.length > 0 && state.searchResults.length > 0) {
+    updateState({ showSearchResults: true });
+  }
+};
+
+const handleSearchBlur = () => {
+  blurTimeoutRef.current = setTimeout(() => {
+    updateState({ showSearchResults: false });
+  }, 150);
+};
+
 
   const removeSearchMarker = () => {
     if (webViewRef.current) {
@@ -680,7 +683,6 @@ const MapScreen = ({ navigation }) => {
             .leaflet-popup-tip { background: linear-gradient(135deg, rgba(26, 26, 46, 0.97) 0%, rgba(16, 33, 62, 0.97) 100%) !important; border: 1px solid rgba(0, 230, 118, 0.4) !important; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important; }
             .leaflet-popup-close-button { color: rgba(255, 255, 255, 0.8) !important; font-size: 18px !important; font-weight: bold !important; right: 12px !important; top: 12px !important; width: 24px !important; height: 24px !important; text-align: center !important; line-height: 22px !important; background: rgba(0, 0, 0, 0.3) !important; border-radius: 50% !important; transition: all 0.2s ease !important; }
             .leaflet-popup-close-button:hover { background: rgba(255, 77, 77, 0.8) !important; color: white !important; }
-            .leaflet-tile { filter: hue-rotate(200deg) saturate(0.8) brightness(0.7) contrast(1.2); }
             .leaflet-control-container .leaflet-bottom { bottom: 8px !important; }
             .leaflet-control-attribution { background: linear-gradient(135deg, rgba(0, 0, 0, 0.8) 0%, rgba(26, 26, 46, 0.8) 100%) !important; color: rgba(255, 255, 255, 0.8) !important; font-size: 10px !important; padding: 4px 8px !important; border-radius: 8px !important; border: 1px solid rgba(255, 255, 255, 0.1) !important; backdrop-filter: blur(8px) !important; }
             .leaflet-control-attribution a { color: #00E676 !important; text-decoration: none !important; }
