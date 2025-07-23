@@ -25,10 +25,13 @@ import MapScreen from '../screens/user/MapScreen';
 import HealthAssessmentScreen from '../screens/user/HealthAssessmentScreen';
 import HistoryScreen from '../screens/user/HistoryScreen';
 import ChatbotScreen from '../screens/user/ChatbotScreen';
+import ReportScreen from '../screens/user/ReportScreen';
+import MyReportScreen from '../screens/user/MyReportsScreen';
+import BulletinScreen from '../screens/user/BulletinScreen'; 
+import BulletinDetails from '../screens/user/BulletinDetails';
 
 const Stack = createStackNavigator();
 const Drawer = createDrawerNavigator();
-const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 // Custom Header Component with Toggle Button
 const CustomHeader = ({ title, showToggle = true, navigation: propNavigation }) => {
@@ -37,15 +40,12 @@ const CustomHeader = ({ title, showToggle = true, navigation: propNavigation }) 
   
   const handleToggleDrawer = () => {
     try {
-      // Check if we're in a drawer navigator context
       const state = navigation.getState();
       const parentState = navigation.getParent()?.getState();
       
-      // If we're in a drawer navigator, toggle it
       if (state?.type === 'drawer' || parentState?.type === 'drawer') {
         navigation.dispatch(DrawerActions.toggleDrawer());
       } else {
-        // Try to find the drawer navigator in the navigation tree
         let currentNav = navigation;
         while (currentNav) {
           if (currentNav.getState?.()?.type === 'drawer') {
@@ -57,7 +57,6 @@ const CustomHeader = ({ title, showToggle = true, navigation: propNavigation }) 
       }
     } catch (error) {
       console.log('Drawer toggle error:', error);
-      // Fallback: try to navigate to the drawer
       try {
         navigation.navigate('MainDrawer');
       } catch (navError) {
@@ -112,10 +111,13 @@ const CustomDrawerContent = ({ state, descriptors, navigation }) => {
   const visibleDrawerItems = [
     { name: 'Home', icon: 'home', label: 'Home' },
     { name: 'Map', icon: 'map', label: 'Map' },
-    { name: 'Weather', icon: 'partly-sunny', label: 'Weather' },
-    { name: 'Aqi', icon: 'cloud', label: 'Air Quality' },
+    // { name: 'Weather', icon: 'partly-sunny', label: 'Weather' },
+    // { name: 'Aqi', icon: 'cloud', label: 'Air Quality' },
     { name: 'HealthAssessment', icon: 'heart', label: 'Health Assessment' },
-    { name: 'Chatbot', icon: 'chatbubbles', label: 'AI Assistant' },
+    { name: 'BulletinScreen', icon: 'notifications', label: 'Bulletin' },
+    // { name: 'Chatbot', icon: 'chatbubbles', label: 'AI Assistant' },
+    { name: 'ReportScreen', icon: 'megaphone', label: 'Report an Incident' },
+    { name: 'MyReportScreen', icon: 'list', label: 'My Reports' },
     { name: 'Settings', icon: 'settings', label: 'Settings' },
   ];
   
@@ -137,8 +139,25 @@ const CustomDrawerContent = ({ state, descriptors, navigation }) => {
       
       <View style={styles.glassOverlay} />
       
-      {/* Drawer Header */}
+      {/* Drawer Header with Logo and App Name */}
       <View style={styles.drawerHeader}>
+        <View style={styles.drawerHeaderContent}>
+          <View style={styles.appIconContainer}>
+            <View style={styles.appIcon}>
+              <LinearGradient
+                colors={['#10b981', '#059669']}
+                style={styles.appIconGradient}
+              >
+                <Ionicons name="leaf" size={24} color="#ffffff" />
+              </LinearGradient>
+            </View>
+          </View>
+          
+          <View style={styles.appTitleContainer}>
+            <Text style={styles.appTitle}>AirNet AI</Text>
+          </View>
+        </View>
+        
         <Pressable
           style={({ pressed }) => [
             styles.closeButton,
@@ -207,6 +226,17 @@ const CustomDrawerContent = ({ state, descriptors, navigation }) => {
         })}
       </ScrollView>
       
+      {/* Bottom Footer */}
+      <View style={styles.drawerFooter}>
+        <LinearGradient
+          colors={[ 'rgba(26, 26, 46, 0.98)', 'rgba(22, 33, 62, 0.98)']}
+          style={StyleSheet.absoluteFillObject}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        />
+        <View style={styles.footerGlassOverlay} />
+      </View>
+      
     </View>
   );
 };
@@ -226,7 +256,7 @@ const MainDrawerNavigator = () => {
         ),
         drawerType: 'slide',
         drawerStyle: {
-          width: 300, // Fixed width of 300 pixels
+          width: 300,
           backgroundColor: 'transparent',
         },
         overlayColor: 'rgba(0, 0, 0, 0.6)',
@@ -256,6 +286,7 @@ const MainDrawerNavigator = () => {
         name="Weather" 
         component={WeatherScreen}
         options={{
+          drawerItemStyle: { display: 'none' }, 
           headerShown: false,
           title: 'Weather',
         }}
@@ -264,6 +295,7 @@ const MainDrawerNavigator = () => {
         name="Aqi" 
         component={AqiScreen}
         options={{
+          drawerItemStyle: { display: 'none' },         
           headerShown: false,
           title: 'Air Quality',
         }}
@@ -277,11 +309,43 @@ const MainDrawerNavigator = () => {
         }}
       />
       <Drawer.Screen 
+        name="BulletinScreen" 
+        component={BulletinScreen}
+        options={{
+          headerShown: false,
+          title: 'Bulletin',
+        }}
+      />
+      <Drawer.Screen 
+        name="BulletinDetail" 
+        component={BulletinDetails}
+        options={{
+          headerShown: false,
+          title: 'Bulletin',
+        }}
+      />
+      <Drawer.Screen 
         name="Chatbot" 
         component={ChatbotScreen}
         options={{
           headerShown: false,
           title: 'AI Assistant',
+        }}
+      />
+      <Drawer.Screen 
+        name="ReportScreen" 
+        component={ReportScreen}
+        options={{
+          headerShown: false,
+          title: 'Report an Incident',
+        }}
+      />
+      <Drawer.Screen 
+        name="MyReportScreen" 
+        component={MyReportScreen}
+        options={{
+          headerShown: false,
+          title: 'My Reports',
         }}
       />
       <Drawer.Screen 
@@ -296,7 +360,7 @@ const MainDrawerNavigator = () => {
         name="History" 
         component={HistoryScreen}
         options={{
-          drawerItemStyle: { display: 'none' }, // Hide from drawer
+          drawerItemStyle: { display: 'none' },
           headerShown: false,
           title: 'History',
         }}
@@ -305,7 +369,7 @@ const MainDrawerNavigator = () => {
         name="Profile" 
         component={ProfileScreen}
         options={{
-          drawerItemStyle: { display: 'none' }, // Hide from drawer
+          drawerItemStyle: { display: 'none' },
           headerShown: false,
           title: 'Profile',
         }}
@@ -378,7 +442,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop:10,
+    paddingTop: 10,
   },
   toggleButtonPressed: {
     opacity: 0.7,
@@ -398,7 +462,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '600',
     color: 'white',
-    padding:20,
+    padding: 20,
     textAlign: 'left',
     flex: 1,
   },
@@ -420,41 +484,47 @@ const styles = StyleSheet.create({
   },
   drawerHeader: {
     paddingHorizontal: 20,
-    paddingVertical: 24,
+    paddingVertical: 32,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.1)',
   },
-  drawerHeaderContent: {
+ drawerHeaderContent: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  appIconContainer: {
-    marginBottom: 12,
+    appIconContainer: {
+    marginRight: 12,
   },
   appIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    overflow: 'hidden',
+    elevation: 8,
+    shadowColor: '#10b981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+  },
+  appIconGradient: {
+    width: '100%',
+    height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#00E676',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 8,
+  },
+  appTitleContainer: {
+    flex: 1,
   },
   appTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: 'white',
-    marginBottom: 4,
-  },
-  appSubtitle: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontWeight: '400',
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#10b981',
+    marginBottom: 2,
+    letterSpacing: -0.5,
   },
   closeButton: {
     width: 36,
@@ -463,6 +533,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    marginTop: 4,
   },
   closeButtonPressed: {
     opacity: 0.7,
@@ -544,6 +615,19 @@ const styles = StyleSheet.create({
   activeDrawerItemLabel: {
     color: 'white',
     fontWeight: '600',
+  },
+  
+  // Drawer Footer Styles
+  drawerFooter: {
+    height: 28, // Half the height of header (56px / 2)
+    overflow: 'hidden',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 230, 118, 0.2)',
+    position: 'relative',
+  },
+  footerGlassOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
   },
 });
 

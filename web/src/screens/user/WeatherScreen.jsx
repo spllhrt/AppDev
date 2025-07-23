@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
   import {
     View, Text, StyleSheet, SafeAreaView, TouchableOpacity,
-    Dimensions, StatusBar, Platform, RefreshControl, Alert, Modal
+    Dimensions, StatusBar, Platform, RefreshControl,ActivityIndicator, Alert, Modal
   } from 'react-native';
   import { ScrollView } from 'react-native-gesture-handler';
   import { WebView } from 'react-native-webview';
@@ -616,12 +616,12 @@ const renderChart = () => {
           labels,
           datasets: [{ data: config.data, color: () => config.color, strokeWidth: 3 }]
         }}
-        width={width - 80}
+        width={Dimensions.get('window').width - 80}
         height={320}
         chartConfig={{
           backgroundColor: 'transparent',
-          backgroundGradientFrom: 'rgba(0,0,0,0.1)',
-          backgroundGradientTo: 'rgba(0,0,0,0.1)',
+          backgroundGradientFrom: 'rgba(15,15,35,0.8)',
+          backgroundGradientTo: 'rgba(26,26,46,0.8)',
           decimalPlaces: 1,
           color: () => config.color,
           labelColor: () => 'rgba(255,255,255,0.7)',
@@ -655,7 +655,10 @@ if (loading) {
         <SafeAreaView style={styles.safeArea}>
           <View style={styles.loadingContainer}>
             <Ionicons name="partly-sunny" size={80} color="#00E676" />
-            <Text style={styles.loadingText}>Loading Weather...</Text>
+            <Text style={styles.loadingText}>Loading Weather</Text>
+            <View style={styles.loadingSpinner}>
+              <ActivityIndicator size="large" color="#00E676" />
+            </View>
           </View>
         </SafeAreaView>
       </LinearGradient>
@@ -689,7 +692,10 @@ return (
     <LinearGradient colors={['#0F0F23', '#1A1A2E', '#16213E']} style={styles.gradient}>
       <SafeAreaView style={styles.safeArea}>
         {/* Header */}
-        <View style={styles.header}>
+        <LinearGradient 
+          colors={['#0F0F23', '#1A1A2E']} 
+          style={styles.header}
+        >
           <TouchableOpacity style={styles.headerButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
@@ -697,7 +703,7 @@ return (
           <TouchableOpacity style={styles.headerButton} onPress={initializeWeather}>
             <Ionicons name="refresh" size={22} color="#FFFFFF" />
           </TouchableOpacity>
-        </View>
+        </LinearGradient>
 
         <ScrollView
           style={styles.content}
@@ -898,11 +904,14 @@ headerButton: {
   justifyContent: 'center', alignItems: 'center', borderColor: 'rgba(0,230,118,0.3)', borderWidth: 1,
 },
 headerTitle: { fontSize: 22, fontWeight: '700', color: '#FFFFFF', textAlign: 'center', flex: 1 },
-content: { flex: 1, paddingHorizontal: 24 },
-scrollContent: { paddingBottom: 120 },
+content: { flex: 1, paddingHorizontal: 14},
+scrollContent: { paddingBottom: 120, paddingTop: 15 },
 loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 loadingText: { fontSize: 18, color: '#FFFFFF', marginTop: 24, fontWeight: '600' },
 
+loadingSpinner: {
+  marginTop: 20
+},
 // Web-style layout
 topRow: { flexDirection: 'row', marginBottom: 20, gap: 20 },
 leftColumn: { flex: 1 },
@@ -982,12 +991,12 @@ detailText: { fontSize: 16, color: '#FFFFFF', fontWeight: '600', marginLeft: 8 }
 
 // Advisories
 advisoriesCard: {
-  backgroundColor: 'rgba(255, 87, 34, 0.1)', borderRadius: 24,
-  padding: 24, marginBottom: 20, borderColor: 'rgba(255,87,34,0.3)', borderWidth: 1,
+  backgroundColor: 'rgba(255, 87, 34, 0.1)', borderRadius: 24,paddingVertical: 16,
+  paddingHorizontal: 24, marginBottom: 12, borderColor: 'rgba(255,87,34,0.3)', borderWidth: 1,
 },
 advisoriesContainer: { marginTop: 12 },
 advisoryItem: {
-  flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingLeft: 16,
+  flexDirection: 'row', alignItems: 'center', paddingVertical: 5, paddingLeft: 16,
   borderLeftWidth: 4, marginBottom: 8, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 12,
 },
 advisoryText: { fontSize: 15, fontWeight: '600', marginLeft: 12 },

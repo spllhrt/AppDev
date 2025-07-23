@@ -238,7 +238,7 @@ const BulletinFeed = ({ navigation }) => {
       <LinearGradient colors={['#0A0A0A', '#1A1A2E', '#16213E']} style={styles.gradient}>
         <SafeAreaView style={styles.safeArea}>
           <View style={styles.header}>
-            <Text style={styles.headerTitle}>Bulletins</Text>
+            <Text style={styles.headerTitle}> AirNet AI Bulletins</Text>
           </View>
           
           <FlatList

@@ -549,7 +549,7 @@ const renderChart = () => {
             withDots: true
           }] 
         }}
-        width={Dimensions.get('window').width - 40}
+        width={Dimensions.get('window').width - 80}
         height={chartHeight}
         chartConfig={{
           backgroundColor: 'transparent',
@@ -748,30 +748,36 @@ return (
 
               {/* 5-Day Forecast */}
               <View style={styles.webForecastCard}>
-                <Text style={styles.webCardTitle}>5-Day Air Quality Forecast</Text>
-                <View style={styles.webForecastGrid}>
-                  {aqiData.daily.map((day, index) => {
-                    const dayCategory = getAQICategory(day.aqi);
-                    const isSelected = selectedDay === index;
-                    return (
-                      <TouchableOpacity 
-                        key={index} 
-                        style={[
-                          styles.webForecastItem, 
-                          isSelected && styles.webForecastItemSelected,
-                          { borderColor: dayCategory.color }
-                        ]} 
-                        onPress={() => setSelectedDay(index)}
-                      >
-                        <Text style={styles.webForecastDay}>{formatDate(day.date, index)}</Text>
-                        <Text style={[styles.webForecastAqi, { color: dayCategory.color }]}>{day.aqi}</Text>
-                        <Text style={styles.webForecastCategory}>{dayCategory.text}</Text>
-                        <View style={[styles.webForecastIndicator, { backgroundColor: dayCategory.color }]} />
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
+                    <Text style={styles.webCardTitle}>5-Day Air Quality Forecast</Text>
+                    <ScrollView 
+                      horizontal={false}
+                      vertical={true}
+                      showsVerticalScrollIndicator={false}
+                      style={styles.forecastScrollContainer}
+                      contentContainerStyle={styles.forecastScrollContent}
+                    >
+                      {aqiData.daily.map((day, index) => {
+                        const dayCategory = getAQICategory(day.aqi);
+                        const isSelected = selectedDay === index;
+                        return (
+                          <TouchableOpacity 
+                            key={index} 
+                            style={[
+                              styles.webForecastItem, 
+                              isSelected && styles.webForecastItemSelected,
+                              { borderColor: dayCategory.color }
+                            ]} 
+                            onPress={() => setSelectedDay(index)}
+                          >
+                            <Text style={styles.webForecastDay}>{formatDate(day.date, index)}</Text>
+                            <Text style={[styles.webForecastAqi, { color: dayCategory.color }]}>{day.aqi}</Text>
+                            <Text style={styles.webForecastCategory}>{dayCategory.text}</Text>
+                            <View style={[styles.webForecastIndicator, { backgroundColor: dayCategory.color }]} />
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
             </View>
           </View>
 
@@ -1157,6 +1163,13 @@ const styles = StyleSheet.create({
   },
   
   // Web Forecast Section
+   forecastScrollContainer: {
+    maxHeight: 298, // Adjust this value as needed
+    marginTop: 20
+  },
+  forecastScrollContent: {
+    gap: 12
+  },
   webForecastCard: {
     backgroundColor: 'rgba(255,255,255,0.05)',
     borderRadius: 25,
@@ -1168,16 +1181,18 @@ const styles = StyleSheet.create({
     gap: 12,
     marginTop: 20
   },
-  webForecastItem: { 
+ webForecastItem: { 
     backgroundColor: 'rgba(255,255,255,0.08)', 
     padding: 20, 
     borderRadius: 16,
     borderWidth: 1,
     borderLeftWidth: 4,
+    height: '16.5%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    position: 'relative'
+    position: 'relative',
+    width: '100%' // Make sure it takes full width
   },
   webForecastItemSelected: { 
     backgroundColor: 'rgba(0,230,118,0.15)', 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Dimensions, RefreshControl, StatusBar, Platform, SafeAreaView } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity,ActivityIndicator, StyleSheet, Alert, Dimensions, RefreshControl, StatusBar, Platform, SafeAreaView } from 'react-native';
 import { useSelector } from 'react-redux';
 import { useNavigation } from '@react-navigation/native';
 import * as Location from 'expo-location';
@@ -68,11 +68,11 @@ const HomeScreen = () => {
           if (!response.ok) return null;
           const data = await response.json();
           if (!data.hourly?.pm2_5) return null;
-          
+
           const pm25Values = data.hourly.pm2_5.filter(val => val !== null);
           const avgPM25 = pm25Values.reduce((sum, val) => sum + val, 0) / pm25Values.length;
           const aqi = pm25ToAQI(avgPM25);
-          
+
           return { ...city, aqi, category: getAQICategory(aqi) };
         } catch (error) {
           console.error(`Failed to fetch AQI for ${city.name}:`, error);
@@ -93,7 +93,7 @@ const HomeScreen = () => {
     try {
       setLoading(true);
       let coords, locationName = '';
-      
+
       try {
         if (useGPS) {
           coords = await getCurrentLocation();
@@ -115,7 +115,7 @@ const HomeScreen = () => {
         coords = { latitude: 14.5995, longitude: 120.9842 };
         locationName = 'Manila';
       }
-      
+
       if (coords) {
         setLocation({ ...coords, name: locationName });
         setDisplayLocationName(locationName);
@@ -123,7 +123,7 @@ const HomeScreen = () => {
       }
     } catch (error) {
       Alert.alert('AQI Error', 'Failed to load air quality data.', [
-        { text: 'Retry', onPress: initializeAQI }, 
+        { text: 'Retry', onPress: initializeAQI },
         { text: 'Cancel', style: 'cancel' }
       ]);
     } finally {
@@ -136,12 +136,12 @@ const HomeScreen = () => {
       const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10`, {
         headers: { 'User-Agent': 'YourAppName/1.0 (your@email.com)' }
       });
-      
+
       const text = await response.text();
       if (text.startsWith('<!DOCTYPE html>') || text.startsWith('<')) {
         throw new Error('Received HTML response instead of JSON');
       }
-      
+
       const data = JSON.parse(text);
       return {
         city: data.address?.city || data.address?.town,
@@ -159,29 +159,29 @@ const HomeScreen = () => {
       const response = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}, Philippines&format=json&limit=1`, {
         headers: { 'User-Agent': 'YourAppName/1.0 (your@email.com)' }
       });
-      
+
       const text = await response.text();
       if (text.startsWith('<!DOCTYPE html>') || text.startsWith('<')) {
         throw new Error('Received HTML response instead of JSON');
       }
-      
+
       const data = JSON.parse(text);
-      
+
       if (data.length > 0) {
         return { latitude: parseFloat(data[0].lat), longitude: parseFloat(data[0].lon) };
       }
-      
+
       const philippineCities = {
         'manila': { lat: 14.5995, lon: 120.9842 }, 'makati': { lat: 14.5547, lon: 121.0244 },
         'quezon city': { lat: 14.6760, lon: 121.0437 }, 'cebu': { lat: 10.3157, lon: 123.8854 },
         'davao': { lat: 7.1907, lon: 125.4553 },
       };
-      
+
       const normalizedCity = city.toLowerCase().trim();
       if (philippineCities[normalizedCity]) {
         return philippineCities[normalizedCity];
       }
-      
+
       throw new Error('City not found');
     } catch (error) {
       console.log('Geocoding failed:', error);
@@ -192,10 +192,10 @@ const HomeScreen = () => {
   const getCurrentLocation = async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') throw new Error('Location permission denied');
-    const location = await Location.getCurrentPositionAsync({ 
-      accuracy: Location.Accuracy.Balanced, 
-      timeout: 15000, 
-      maximumAge: 300000 
+    const location = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+      timeout: 15000,
+      maximumAge: 300000
     });
     return { latitude: location.coords.latitude, longitude: location.coords.longitude };
   };
@@ -206,7 +206,7 @@ const HomeScreen = () => {
       if (!response.ok) throw new Error(`AQI API error: ${response.status}`);
       const data = await response.json();
       if (!data.hourly?.pm2_5) throw new Error('Invalid AQI data');
-      
+
       const processedData = { ...data, daily: calculateDailyAQI(data.hourly) };
       setAqiData(processedData);
       await fetchWeatherData(lat, lon);
@@ -222,17 +222,17 @@ const HomeScreen = () => {
       const dayStart = i * 24;
       const dayEnd = Math.min(dayStart + 24, hourly.pm2_5.length);
       if (dayStart >= hourly.pm2_5.length) break;
-      
+
       const dayHours = hourly.pm2_5.slice(dayStart, dayEnd).filter(val => val !== null);
       if (dayHours.length === 0) continue;
-      
+
       const avgPM25 = dayHours.reduce((sum, val) => sum + val, 0) / dayHours.length;
       const calculatedAQI = pm25ToAQI(avgPM25);
-      days.push({ 
-        date: new Date(Date.now() + i * 24 * 60 * 60 * 1000).toISOString().split('T')[0], 
-        aqi: calculatedAQI, 
-        pm25: avgPM25, 
-        category: getAQICategory(calculatedAQI) 
+      days.push({
+        date: new Date(Date.now() + i * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        aqi: calculatedAQI,
+        pm25: avgPM25,
+        category: getAQICategory(calculatedAQI)
       });
     }
     return days;
@@ -245,7 +245,7 @@ const HomeScreen = () => {
       { cLo: 35.5, cHi: 55.4, iLo: 101, iHi: 150 }, { cLo: 55.5, cHi: 150.4, iLo: 151, iHi: 200 },
       { cLo: 150.5, cHi: 250.4, iLo: 201, iHi: 300 }, { cLo: 250.5, cHi: 500.4, iLo: 301, iHi: 500 }
     ];
-    
+
     for (const bp of breakpoints) {
       if (pm25 >= bp.cLo && pm25 <= bp.cHi) {
         return Math.round(((bp.iHi - bp.iLo) / (bp.cHi - bp.cLo)) * (pm25 - bp.cLo) + bp.iLo);
@@ -279,10 +279,10 @@ const HomeScreen = () => {
   const fetchWeatherData = async (lat, lon) => {
     try {
       const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat || location?.latitude || 14.5995}&longitude=${lon || location?.longitude || 120.9842}&current=temperature_2m,relative_humidity_2m,precipitation_probability,weather_code,wind_speed_10m,uv_index&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max&timezone=auto`);
-      
+
       if (!response.ok) throw new Error(`Weather API error: ${response.status}`);
       const weather = await response.json();
-      
+
       const weatherDataObj = {
         location: displayLocationName,
         temperature: Math.round(weather.current.temperature_2m),
@@ -291,9 +291,9 @@ const HomeScreen = () => {
         weatherCode: weather.current.weather_code,
         weather: getWeatherDescription(weather.current.weather_code)
       };
-      
+
       setWeatherData(weatherDataObj);
-      
+
       if (aqiData?.daily?.[0]) {
         const advisoryData = await generateAdvisories({ ...weatherDataObj, aqi: aqiData.daily[0].aqi });
         setAdvisories(advisoryData);
@@ -345,7 +345,7 @@ Format your response as a JSON object with a single 'text' property containing t
     // Fallback advisory
     const aqiInfo = getAQICategory(data.aqi);
     let advisory = "";
-    
+
     if (aqiInfo.text === 'Good') {
       advisory += "Air quality is excellent today, making it perfect for outdoor activities and exercise. ";
     } else if (aqiInfo.text === 'Moderate') {
@@ -394,6 +394,15 @@ Format your response as a JSON object with a single 'text' property containing t
     return 'partly-sunny';
   };
 
+  const getAQIIcon = (aqi) => {
+    if (aqi <= 50) return 'leaf';
+    if (aqi <= 100) return 'leaf-outline';
+    if (aqi <= 150) return 'aperture-outline';
+    if (aqi <= 200) return 'nuclear-outline';
+    if (aqi <= 300) return 'warning-outline';
+    return 'skull-outline';
+  };
+
   const handleLocationToggle = async () => {
     if (!useGPS) {
       try {
@@ -438,6 +447,9 @@ Format your response as a JSON object with a single 'text' property containing t
             <View style={styles.loadingContainer}>
               <Ionicons name="leaf" size={60} color="#00E676" />
               <Text style={styles.loadingText}>Loading...</Text>
+<View style={styles.loadingSpinner}>
+              <ActivityIndicator size="large" color="#00E676" />
+            </View>
             </View>
           </SafeAreaView>
         </LinearGradient>
@@ -469,298 +481,316 @@ Format your response as a JSON object with a single 'text' property containing t
   const worstCities = [...philippineCitiesAqi].reverse().slice(0, 5);
 
   return (
-  <View style={styles.container}>
-    <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
-    <LinearGradient colors={['#0A0A0A', '#1A1A2E', '#16213E']} style={styles.gradient}>
-      <SafeAreaView style={styles.safeArea}>
-        <ScrollView 
-          showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#00E676" colors={['#00E676']} progressBackgroundColor="#1A1A2E" />}
-          contentContainerStyle={styles.scrollContent}
-        >
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.headerContainer}>
-              <View style={styles.headerLeft}>
-                <View style={styles.brandContainer}>
-                  <View style={styles.brandText}>
-                    <View style={styles.locationBadge}>
-                      <Ionicons name="location-outline" size={18} color="#00E676" />
-                      <Text style={styles.locationText}>{displayLocationName}</Text>
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      <LinearGradient colors={['#0A0A0A', '#1A1A2E', '#16213E']} style={styles.gradient}>
+        <SafeAreaView style={styles.safeArea}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#00E676" colors={['#00E676']} progressBackgroundColor="#1A1A2E" />}
+            contentContainerStyle={styles.scrollContent}
+          >
+            {/* Header */}
+            <View style={styles.header}>
+              <View style={styles.headerContainer}>
+                <View style={styles.headerLeft}>
+                  <View style={styles.brandContainer}>
+                    <View style={styles.brandText}>
+                      <View style={styles.locationBadge}>
+                        <Ionicons name="location-outline" size={18} color="#00E676" />
+                        <Text style={styles.locationText}>{displayLocationName}</Text>
+                      </View>
                     </View>
                   </View>
                 </View>
-              </View>
-              <View style={styles.headerRight}>
-                <View style={styles.locationContainer}>
-                  <View style={styles.controlsContainer}>
-                    <TouchableOpacity style={[styles.controlBtn, refreshing && styles.refreshingButton]} onPress={handleRefresh} disabled={refreshing}>
-                      <Ionicons name="refresh" size={20} color="#00E676" style={[refreshing && styles.refreshingIcon]} />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.controlBtn} onPress={handleLocationToggle}>
-                      <Ionicons name={useGPS ? 'location' : 'home'} size={20} color="#00E676" />
-                    </TouchableOpacity>
+                <View style={styles.headerRight}>
+                  <View style={styles.locationContainer}>
+                    <View style={styles.controlsContainer}>
+                      <TouchableOpacity style={[styles.controlBtn, refreshing && styles.refreshingButton]} onPress={handleRefresh} disabled={refreshing}>
+                        <Ionicons name="refresh" size={20} color="#00E676" style={[refreshing && styles.refreshingIcon]} />
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.controlBtn} onPress={handleLocationToggle}>
+                        <Ionicons name={useGPS ? 'location' : 'home'} size={20} color="#00E676" />
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
               </View>
             </View>
-          </View>
 
-          {/* Main Content Grid */}
-          <View style={styles.mainGrid}>
-            {/* Left Column - Primary Cards */}
-            <View style={styles.leftColumn}>
-              {/* Weather Card */}
-              <TouchableOpacity style={styles.weatherCard}>
-                <LinearGradient colors={['rgba(0,230,118,0.15)', 'rgba(0,230,118,0.08)', 'rgba(0,230,118,0.03)']} style={styles.cardGradient}>
-                  <View style={styles.cardHeader}>
-                    <View style={styles.cardTitleRow}>
-                      <Text style={styles.cardTitle}>Current Weather</Text>
-                      <View style={styles.cardBadge}>
-                        <Ionicons name="partly-sunny" size={16} color="#00E676" />
-                      </View>
-                    </View>
-                  </View>
-                  <View style={styles.weatherContent}>
-                    <View style={styles.weatherMain}>
-                      <View style={styles.weatherIconLarge}>
-                        <Ionicons name={getWeatherIcon(weatherData.weatherCode)} size={64} color="#00E676" />
-                      </View>
-                      <View style={styles.weatherData}>
-                        <Text style={styles.weatherTemp}>{weatherData.temperature}°C</Text>
-                        <Text style={styles.weatherDesc}>{weatherData.weather}</Text>
-                      </View>
-                    </View>
-                    <View style={styles.weatherMetrics}>
-                      <View style={styles.metricCard}>
-                        <View style={styles.metricIcon}>
-                          <Ionicons name="water-outline" size={20} color="#00E676" />
-                        </View>
-                        <View style={styles.metricData}>
-                          <Text style={styles.metricValue}>{weatherData.humidity}%</Text>
-                          <Text style={styles.metricLabel}>Humidity</Text>
-                        </View>
-                      </View>
-                      <View style={styles.metricCard}>
-                        <View style={styles.metricIcon}>
-                          <Ionicons name="leaf-outline" size={20} color="#00E676" />
-                        </View>
-                        <View style={styles.metricData}>
-                          <Text style={styles.metricValue}>{weatherData.windSpeed} km/h</Text>
-                          <Text style={styles.metricLabel}>Wind Speed</Text>
+            {/* Main Content Grid */}
+            <View style={styles.mainGrid}>
+              {/* Left Column - Primary Cards */}
+              <View style={styles.leftColumn}>
+                {/* Weather Card */}
+                <TouchableOpacity style={styles.weatherCard}>
+                  <LinearGradient colors={['rgba(0,230,118,0.15)', 'rgba(0,230,118,0.08)', 'rgba(0,230,118,0.03)']} style={styles.cardGradient}>
+                    <View style={styles.cardHeader}>
+                      <View style={styles.cardTitleRow}>
+                        <Text style={styles.cardTitle}>Current Weather</Text>
+                        <View style={styles.cardBadge}>
+                          <Ionicons name="partly-sunny" size={16} color="#00E676" />
                         </View>
                       </View>
                     </View>
-                  </View>
-                </LinearGradient>
-              </TouchableOpacity>
-
-              {/* AQI Card */}
-              <TouchableOpacity style={styles.aqiCard}>
-                <LinearGradient colors={[aqiInfo.bgColor, 'rgba(255,255,255,0.03)', 'rgba(0,0,0,0.1)']} style={styles.cardGradient}>
-                  <View style={styles.cardHeader}>
-                    <View style={styles.cardTitleRow}>
-                      <Text style={styles.cardTitle}>Air Quality Index</Text>
-                      <View style={[styles.cardBadge, { backgroundColor: aqiInfo.color }]}>
-                        <Ionicons name="speedometer" size={16} color="#FFFFFF" />
+                    <View style={styles.weatherContent}>
+                      <View style={styles.weatherMain}>
+                        <View style={styles.weatherIconLarge}>
+                          <Ionicons name={getWeatherIcon(weatherData.weatherCode)} size={64} color="#00E676" />
+                        </View>
+                        <View style={styles.weatherData}>
+                          <Text style={styles.weatherTemp}>{weatherData.temperature}°C</Text>
+                          <Text style={styles.weatherDesc}>{weatherData.weather}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.weatherMetrics}>
+                        <View style={styles.metricCard}>
+                          <View style={styles.metricIcon}>
+                            <Ionicons name="water-outline" size={20} color="#00E676" />
+                          </View>
+                          <View style={styles.metricData}>
+                            <Text style={styles.metricValue}>{weatherData.humidity}%</Text>
+                            <Text style={styles.metricLabel}>Humidity</Text>
+                          </View>
+                        </View>
+                        <View style={styles.metricCard}>
+                          <View style={styles.metricIcon}>
+                            <Ionicons name="leaf-outline" size={20} color="#00E676" />
+                          </View>
+                          <View style={styles.metricData}>
+                            <Text style={styles.metricValue}>{weatherData.windSpeed} km/h</Text>
+                            <Text style={styles.metricLabel}>Wind Speed</Text>
+                          </View>
+                        </View>
                       </View>
                     </View>
-                  </View>
-                  <View style={styles.aqiContent}>
-                    <View style={styles.aqiMain}>
-                      <View style={styles.aqiIndicator}>
-                        <View style={[styles.aqiCircle, { backgroundColor: aqiInfo.color }]}>
-                          <Text style={styles.aqiNumber}>{currentAQI.aqi}</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.aqiCard}>
+                  <LinearGradient colors={[aqiInfo.bgColor, 'rgba(255,255,255,0.03)', 'rgba(0,0,0,0.1)']} style={styles.cardGradient}>
+                    <View style={styles.cardHeader}>
+                      <View style={styles.cardTitleRow}>
+                        <Text style={styles.cardTitle}>Air Quality Index</Text>
+                        <View style={[styles.cardBadge, { backgroundColor: aqiInfo.color }]}>
+                          <Ionicons name="leaf" size={16} color="#FFFFFF" />
+                        </View>
+                      </View>
+                    </View>
+                    <View style={styles.aqiContent}>
+                      <View style={styles.aqiMain}>
+                        <View style={styles.aqiIndicator}>
+                          <View style={[styles.aqiCircle, { backgroundColor: aqiInfo.color }]}>
+                            <Ionicons name={getAQIIcon(currentAQI.aqi)} size={48} color="#FFFFFF" />
+                          </View>
+                          <View style={styles.aqiData}>
+                            <Text style={styles.aqiNumber}>{currentAQI.aqi}</Text>
+                            <Text style={[styles.aqiStatus, { color: aqiInfo.color }]}>{aqiInfo.text}</Text>
+                          </View>
                         </View>
                       </View>
                       <View style={styles.aqiDetails}>
-                        <Text style={[styles.aqiStatus, { color: aqiInfo.color }]}>{aqiInfo.text}</Text>
                         <View style={styles.aqiProgressContainer}>
                           <View style={styles.aqiProgressBar}>
                             <View style={[styles.aqiProgress, { width: `${Math.min(currentAQI.aqi / 5, 100)}%`, backgroundColor: aqiInfo.color }]} />
                           </View>
-                          <Text style={styles.aqiScale}>0 - 500 Scale</Text>
+                          <View style={styles.aqiScaleContainer}>
+                            <Text style={styles.aqiScale}>0</Text>
+                            <Text style={styles.aqiScale}>Good</Text>
+                            <Text style={styles.aqiScale}>500</Text>
+                          </View>
                         </View>
                       </View>
                     </View>
-                  </View>
-                </LinearGradient>
-              </TouchableOpacity>
-              <View style={styles.healthTipsCard}>
-            <LinearGradient colors={['rgba(33,150,243,0.15)', 'rgba(33,150,243,0.08)', 'rgba(33,150,243,0.03)']} style={styles.cardGradient}>
-              <View style={styles.cardHeader}>
-                <View style={styles.cardTitleRow}>
-                  <Text style={styles.cardTitle}>Health Tips</Text>
-                  <View style={[styles.cardBadge, { backgroundColor: 'rgba(33,150,243,0.15)' }]}>
-                    <Ionicons name="fitness" size={16} color="#2196F3" />
-                  </View>
-                </View>
-              </View>
-              <View style={styles.healthTipsContent}>
-                <View style={styles.tipCard}>
-                  <View style={styles.tipIcon}>
-                    <Ionicons name="water" size={20} color="#2196F3" />
-                  </View>
-                  <View style={styles.tipContent}>
-                    <Text style={styles.tipTitle}>Hydration Reminder</Text>
-                    <Text style={styles.tipDescription}>
-                      {currentAQI.aqi > 150 ? 'Drink extra water to help flush out toxins' : 'Stay hydrated - aim for 8 glasses of water daily'}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.tipCard}>
-                  <View style={styles.tipIcon}>
-                    <Ionicons name="home" size={20} color="#2196F3" />
-                  </View>
-                  <View style={styles.tipContent}>
-                    <Text style={styles.tipTitle}>Indoor Air Quality</Text>
-                    <Text style={styles.tipDescription}>
-                      {currentAQI.aqi > 100 ? 'Keep windows closed and use air purifiers' : 'Open windows for fresh air circulation'}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.tipCard}>
-                  <View style={styles.tipIcon}>
-                    <Ionicons name="leaf" size={20} color="#2196F3" />
-                  </View>
-                  <View style={styles.tipContent}>
-                    <Text style={styles.tipTitle}>Respiratory Health</Text>
-                    <Text style={styles.tipDescription}>
-                      {currentAQI.aqi > 100 ? 'Consider breathing exercises and avoid outdoor activities' : 'Perfect conditions for deep breathing exercises'}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            </LinearGradient>
-          </View>
-            </View>
+                  </LinearGradient>
+                </TouchableOpacity>
 
-            {/* Right Column - Secondary Cards */}
-            <View style={styles.rightColumn}>
-              {/* AI Advisory */}
-              {advisories && (
-                <View style={styles.advisoryCard}>
-                  <LinearGradient colors={['rgba(0,230,118,0.1)', 'rgba(0,230,118,0.05)', 'rgba(0,230,118,0.02)']} style={styles.cardGradient}>
+                <View style={styles.fullWidthSection}>
+                  {/* Cities Bulletin */}
+                  {philippineCitiesAqi.length > 0 && (
+                    <View style={styles.bulletinCard}>
+                      <LinearGradient colors={['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.03)', 'rgba(255,255,255,0.01)']} style={styles.cardGradient}>
+                        <View style={styles.cardHeader}>
+                          <View style={styles.cardTitleRow}>
+                            <Text style={styles.cardTitle}>Metro Manila Air Quality Overview</Text>
+                            <View style={styles.cardBadge}>
+                              <Ionicons name="stats-chart" size={16} color="#00E676" />
+                            </View>
+                          </View>
+                        </View>
+                        <View style={styles.bulletinContent}>
+                          <View style={styles.bulletinGrid}>
+                            <View style={styles.bulletinSection}>
+                              <View style={styles.bulletinSectionHeader}>
+                                <View style={[styles.bulletinIndicator, { backgroundColor: '#00C853' }]} />
+                                <Text style={styles.bulletinSectionTitle}>Best Air Quality</Text>
+                              </View>
+                              <View style={styles.cityList}>
+                                {bestCities.map((city, idx) => (
+                                  <View key={`best-${idx}`} style={styles.cityItem}>
+                                    <Text style={styles.cityRank}>{idx + 1}</Text>
+                                    <Text style={styles.cityName}>{city.name}</Text>
+                                    <View style={styles.cityAqiContainer}>
+                                      <View style={[styles.cityAqiDot, { backgroundColor: city.category.color }]} />
+                                      <Text style={[styles.cityAqiValue, { color: city.category.color }]}>{city.aqi}</Text>
+                                    </View>
+                                  </View>
+                                ))}
+                              </View>
+                            </View>
+                            <View style={styles.bulletinSection}>
+                              <View style={styles.bulletinSectionHeader}>
+                                <View style={[styles.bulletinIndicator, { backgroundColor: '#FF5252' }]} />
+                                <Text style={styles.bulletinSectionTitle}>Worst Air Quality</Text>
+                              </View>
+                              <View style={styles.cityList}>
+                                {worstCities.map((city, idx) => (
+                                  <View key={`worst-${idx}`} style={styles.cityItem}>
+                                    <Text style={styles.cityRank}>{idx + 1}</Text>
+                                    <Text style={styles.cityName}>{city.name}</Text>
+                                    <View style={styles.cityAqiContainer}>
+                                      <View style={[styles.cityAqiDot, { backgroundColor: city.category.color }]} />
+                                      <Text style={[styles.cityAqiValue, { color: city.category.color }]}>{city.aqi}</Text>
+                                    </View>
+                                  </View>
+                                ))}
+                              </View>
+                            </View>
+                          </View>
+                        </View>
+                      </LinearGradient>
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              {/* Right Column - Secondary Cards */}
+              <View style={styles.rightColumn}>
+                {/* AI Advisory */}
+                {advisories && (
+                  <View style={styles.advisoryCard}>
+                    <LinearGradient colors={['rgba(0,230,118,0.1)', 'rgba(0,230,118,0.05)', 'rgba(0,230,118,0.02)']} style={styles.cardGradient}>
+                      <View style={styles.cardHeader}>
+                        <View style={styles.cardTitleRow}>
+                          <Text style={styles.cardTitle}>AI Advisory</Text>
+                          <View style={styles.cardBadge}>
+                            <Ionicons name="bulb" size={16} color="#00E676" />
+                          </View>
+                        </View>
+                      </View>
+                      <View style={styles.advisoryContent}>
+                        <Text style={styles.advisoryText}>{advisories.text}</Text>
+                      </View>
+                    </LinearGradient>
+                  </View>
+                )}
+
+                {/* Quick Actions */}
+                <View style={styles.quickActionsCard}>
+                  <LinearGradient colors={['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.04)', 'rgba(255,255,255,0.02)']} style={styles.cardGradient}>
                     <View style={styles.cardHeader}>
                       <View style={styles.cardTitleRow}>
-                        <Text style={styles.cardTitle}>AI Advisory</Text>
+                        <Text style={styles.cardTitle}>Quick Actions</Text>
                         <View style={styles.cardBadge}>
-                          <Ionicons name="bulb" size={16} color="#00E676" />
+                          <Ionicons name="flash" size={16} color="#00E676" />
                         </View>
                       </View>
                     </View>
-                    <View style={styles.advisoryContent}>
-                      <Text style={styles.advisoryText}>{advisories.text}</Text>
+                    <View style={styles.quickActionsGrid}>
+                      <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('HealthAssessment')}>
+                        <View style={styles.quickActionIcon}>
+                          <Ionicons name="heart" size={24} color="#00E676" />
+                        </View>
+                        <Text style={styles.quickActionText}>Health</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.quickActionBtn} onPress={() => handleQuickAccess('Weather')}>
+                        <View style={styles.quickActionIcon}>
+                          <Ionicons name="cloud" size={24} color="#00E676" />
+                        </View>
+                        <Text style={styles.quickActionText}>Weather</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.quickActionBtn} onPress={() => handleQuickAccess('Aqi')}>
+                        <View style={styles.quickActionIcon}>
+                          <Ionicons name="analytics" size={24} color="#00E676" />
+                        </View>
+                        <Text style={styles.quickActionText}>AQI</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.quickActionBtn} onPress={handleChatPress}>
+                        <View style={styles.quickActionIcon}>
+                          <Ionicons name="chatbubbles" size={24} color="#00E676" />
+                        </View>
+                        <Text style={styles.quickActionText}>Chat</Text>
+                      </TouchableOpacity> <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('ReportScreen')}>
+                        <View style={styles.quickActionIcon}>
+                          <Ionicons name="megaphone" size={24} color="#00E676" />
+                        </View>
+                        <Text style={styles.quickActionText}>Report</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('MyReportScreen')}>
+                        <View style={styles.quickActionIcon}>
+                          <Ionicons name="list" size={24} color="#00E676" />
+                        </View>
+                        <Text style={styles.quickActionText}>My Reports</Text>
+                      </TouchableOpacity>
                     </View>
                   </LinearGradient>
                 </View>
-              )}
-
-              {/* Quick Actions */}
-              <View style={styles.quickActionsCard}>
-                <LinearGradient colors={['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.04)', 'rgba(255,255,255,0.02)']} style={styles.cardGradient}>
-                  <View style={styles.cardHeader}>
-                    <View style={styles.cardTitleRow}>
-                      <Text style={styles.cardTitle}>Quick Actions</Text>
-                      <View style={styles.cardBadge}>
-                        <Ionicons name="flash" size={16} color="#00E676" />
+                <View style={styles.healthTipsCard}>
+                  <LinearGradient colors={['rgba(33,150,243,0.15)', 'rgba(33,150,243,0.08)', 'rgba(33,150,243,0.03)']} style={styles.cardGradient}>
+                    <View style={styles.cardHeader}>
+                      <View style={styles.cardTitleRow}>
+                        <Text style={styles.cardTitle}>Health Tips</Text>
+                        <View style={[styles.cardBadge, { backgroundColor: 'rgba(33,150,243,0.15)' }]}>
+                          <Ionicons name="fitness" size={16} color="#2196F3" />
+                        </View>
                       </View>
                     </View>
-                  </View>
-                  <View style={styles.quickActionsGrid}>
-                    <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('HealthAssessment')}>
-                      <View style={styles.quickActionIcon}>
-                        <Ionicons name="heart" size={24} color="#00E676" />
+                    <View style={styles.healthTipsContent}>
+                      <View style={styles.tipCard}>
+                        <View style={styles.tipIcon}>
+                          <Ionicons name="water" size={20} color="#2196F3" />
+                        </View>
+                        <View style={styles.tipContent}>
+                          <Text style={styles.tipTitle}>Hydration Reminder</Text>
+                          <Text style={styles.tipDescription}>
+                            {currentAQI.aqi > 150 ? 'Drink extra water to help flush out toxins' : 'Stay hydrated - aim for 8 glasses of water daily'}
+                          </Text>
+                        </View>
                       </View>
-                      <Text style={styles.quickActionText}>Health</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.quickActionBtn} onPress={() => handleQuickAccess('Weather')}>
-                      <View style={styles.quickActionIcon}>
-                        <Ionicons name="cloud" size={24} color="#00E676" />
+                      <View style={styles.tipCard}>
+                        <View style={styles.tipIcon}>
+                          <Ionicons name="home" size={20} color="#2196F3" />
+                        </View>
+                        <View style={styles.tipContent}>
+                          <Text style={styles.tipTitle}>Indoor Air Quality</Text>
+                          <Text style={styles.tipDescription}>
+                            {currentAQI.aqi > 100 ? 'Keep windows closed and use air purifiers' : 'Open windows for fresh air circulation'}
+                          </Text>
+                        </View>
                       </View>
-                      <Text style={styles.quickActionText}>Weather</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.quickActionBtn} onPress={() => handleQuickAccess('Aqi')}>
-                      <View style={styles.quickActionIcon}>
-                        <Ionicons name="analytics" size={24} color="#00E676" />
+                      <View style={styles.tipCard}>
+                        <View style={styles.tipIcon}>
+                          <Ionicons name="leaf" size={20} color="#2196F3" />
+                        </View>
+                        <View style={styles.tipContent}>
+                          <Text style={styles.tipTitle}>Respiratory Health</Text>
+                          <Text style={styles.tipDescription}>
+                            {currentAQI.aqi > 100 ? 'Consider breathing exercises and avoid outdoor activities' : 'Perfect conditions for deep breathing exercises'}
+                          </Text>
+                        </View>
                       </View>
-                      <Text style={styles.quickActionText}>AQI</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.quickActionBtn} onPress={handleChatPress}>
-                      <View style={styles.quickActionIcon}>
-                        <Ionicons name="chatbubbles" size={24} color="#00E676" />
-                      </View>
-                      <Text style={styles.quickActionText}>Chat</Text>
-                    </TouchableOpacity>
-                  </View>
-                </LinearGradient>
+                    </View>
+                  </LinearGradient>
+                </View>
               </View>
             </View>
-          </View>
 
-          {/* Full Width Cards */}
-          <View style={styles.fullWidthSection}>
-            {/* Cities Bulletin */}
-            {philippineCitiesAqi.length > 0 && (
-              <View style={styles.bulletinCard}>
-                <LinearGradient colors={['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.03)', 'rgba(255,255,255,0.01)']} style={styles.cardGradient}>
-                  <View style={styles.cardHeader}>
-                    <View style={styles.cardTitleRow}>
-                      <Text style={styles.cardTitle}>Metro Manila Air Quality Overview</Text>
-                      <View style={styles.cardBadge}>
-                        <Ionicons name="stats-chart" size={16} color="#00E676" />
-                      </View>
-                    </View>
-                  </View>
-                  <View style={styles.bulletinContent}>
-                    <View style={styles.bulletinGrid}>
-                      <View style={styles.bulletinSection}>
-                        <View style={styles.bulletinSectionHeader}>
-                          <View style={[styles.bulletinIndicator, { backgroundColor: '#00C853' }]} />
-                          <Text style={styles.bulletinSectionTitle}>Best Air Quality</Text>
-                        </View>
-                        <View style={styles.cityList}>
-                          {bestCities.map((city, idx) => (
-                            <View key={`best-${idx}`} style={styles.cityItem}>
-                              <Text style={styles.cityRank}>{idx + 1}</Text>
-                              <Text style={styles.cityName}>{city.name}</Text>
-                              <View style={styles.cityAqiContainer}>
-                                <View style={[styles.cityAqiDot, { backgroundColor: city.category.color }]} />
-                                <Text style={[styles.cityAqiValue, { color: city.category.color }]}>{city.aqi}</Text>
-                              </View>
-                            </View>
-                          ))}
-                        </View>
-                      </View>
-                      <View style={styles.bulletinSection}>
-                        <View style={styles.bulletinSectionHeader}>
-                          <View style={[styles.bulletinIndicator, { backgroundColor: '#FF5252' }]} />
-                          <Text style={styles.bulletinSectionTitle}>Worst Air Quality</Text>
-                        </View>
-                        <View style={styles.cityList}>
-                          {worstCities.map((city, idx) => (
-                            <View key={`worst-${idx}`} style={styles.cityItem}>
-                              <Text style={styles.cityRank}>{idx + 1}</Text>
-                              <Text style={styles.cityName}>{city.name}</Text>
-                              <View style={styles.cityAqiContainer}>
-                                <View style={[styles.cityAqiDot, { backgroundColor: city.category.color }]} />
-                                <Text style={[styles.cityAqiValue, { color: city.category.color }]}>{city.aqi}</Text>
-                              </View>
-                            </View>
-                          ))}
-                        </View>
-                      </View>
-                    </View>
-                  </View>
-                </LinearGradient>
-              </View>
-            )}
-          </View>
-        </ScrollView>
-      </SafeAreaView>
-    </LinearGradient>
-  </View>
-);
+            {/* Full Width Cards */}
+
+          </ScrollView>
+        </SafeAreaView>
+      </LinearGradient>
+    </View>
+  );
 };
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0A0A0A', maxWidth: '100%', alignSelf: 'center', width: '100%', minHeight: '100vh' },
@@ -769,6 +799,10 @@ const styles = StyleSheet.create({
   scrollContent: { paddingBottom: 140, paddingHorizontal: 70, minHeight: '100vh' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { fontSize: 16, color: '#FFFFFF', marginTop: 20, fontWeight: '600' },
+  
+  loadingSpinner: {
+    marginTop: 20
+  },
   header: { paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 32 : 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
   headerContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 32 },
   headerLeft: { flex: 1 },
@@ -809,17 +843,19 @@ const styles = StyleSheet.create({
   metricValue: { color: '#FFFFFF', fontSize: 16, fontWeight: '700', marginBottom: 2 },
   metricLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '500' },
   aqiCard: { borderRadius: 24, overflow: 'hidden' },
-  aqiContent: { gap: 16 },
-  aqiMain: { flexDirection: 'row', alignItems: 'center', gap: 20 },
-  aqiIndicator: { width: 80, height: 80, borderRadius: 40, justifyContent: 'center', alignItems: 'center' },
-  aqiCircle: { width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
-  aqiNumber: { color: '#FFFFFF', fontSize: 20, fontWeight: '800' },
-  aqiDetails: { flex: 1 },
-  aqiStatus: { fontSize: 20, fontWeight: '700', marginBottom: 12, letterSpacing: 0.5 },
-  aqiProgressContainer: { gap: 8 },
-  aqiProgressBar: { height: 8, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 4 },
-  aqiProgress: { height: 8, borderRadius: 4 },
-  aqiScale: { color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: '500' },
+  aqiContent: { gap: 50, paddingVertical: 1 },
+  aqiMain: { flexDirection: 'column', alignItems: 'center', gap: 16 },
+  aqiIndicator: { flexDirection: 'row', alignItems: 'center', gap: 20 },
+  aqiCircle: { width: 80, height: 80, borderRadius: 40, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 16, elevation: 8, borderWidth: 3, borderColor: 'rgba(255,255,255,0.3)' },
+  aqiData: { alignItems: 'flex-start', gap: 4 },
+  aqiNumber: { color: '#FFFFFF', fontSize: 32, fontWeight: '900', letterSpacing: 0.5, textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4 },
+  aqiDetails: { width: '100%' },
+  aqiStatus: { fontSize: 16, fontWeight: '700', letterSpacing: 0.5 },
+  aqiProgressContainer: { gap: 12, width: '100%' },
+  aqiProgressBar: { height: 10, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
+  aqiProgress: { height: 10, borderRadius: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 3 },
+  aqiScaleContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 4 },
+  aqiScale: { color: 'rgba(255,255,255,0.7)', fontSize: 15, fontWeight: '600', letterSpacing: 0.3 },
   advisoryCard: { borderRadius: 24, overflow: 'hidden' },
   advisoryContent: { gap: 16 },
   advisoryIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(0,230,118,0.15)', justifyContent: 'center', alignItems: 'center', alignSelf: 'flex-start', borderWidth: 1, borderColor: 'rgba(0,230,118,0.3)' },
@@ -830,7 +866,7 @@ const styles = StyleSheet.create({
   quickActionIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,230,118,0.15)', justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
   quickActionText: { color: 'rgba(255,255,255,0.9)', fontSize: 12, fontWeight: '600' },
   fullWidthSection: { gap: 24, paddingTop: 12 },
-  healthTipsCard: { borderRadius: 24, overflow: 'hidden', marginBottom: 24 },
+  healthTipsCard: { borderRadius: 24, overflow: 'hidden', marginBottom: -13 },
   healthTipsContent: { gap: 16 },
   tipCard: { flexDirection: 'row', alignItems: 'center', gap: 16, backgroundColor: 'rgba(33,150,243,0.1)', paddingHorizontal: 16, paddingVertical: 14, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(33,150,243,0.2)' },
   tipIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(33,150,243,0.15)', justifyContent: 'center', alignItems: 'center' },

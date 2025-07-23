@@ -290,7 +290,7 @@ Remember: You're a caring friend who happens to be an air quality expert, not a 
     );
   };
 
-  const quickActions = ['Kamusta ang hangin ngayon?', 'Safe ba mag-exercise today?', 'Kailangan ko ba ng mask?', 'Paano mag-protect sa pollution?', 'Show me the forecast'];
+  const quickActions = ['Kamusta ang hangin ngayon?', 'Safe ba mag-exercise today?', 'Kailangan ko ba ng mask?', 'Paano mag-protect sa pollution?'];
 
   return (
     <View style={styles.container}>
@@ -301,108 +301,100 @@ Remember: You're a caring friend who happens to be an air quality expert, not a 
           {/* Header */}
           <View style={styles.header}>
             <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-              <Ionicons name="arrow-back" size={20} color="#FFFFFF" />
+              <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={styles.headerCenter}>
               <Text style={styles.headerTitle}>Amihan 🌬️</Text>
               <Text style={styles.headerSubtitle}>Your Air Quality Friend</Text>
             </View>
-            <TouchableOpacity onPress={fetchWeatherData}>
-              <Ionicons name="refresh" size={18} color="#00E676" />
+            <TouchableOpacity onPress={fetchWeatherData} style={styles.refreshButton}>
+              <Ionicons name="refresh" size={20} color="#00E676" />
             </TouchableOpacity>
           </View>
 
-          {/* Main Content Area */}
-          <View style={styles.mainContent}>
-            
-            {/* Sidebar */}
-            <View style={styles.sidebar}>
-              <View style={styles.sidebarHeader}>
-                <Text style={styles.sidebarTitle}>Air Quality</Text>
-                <TouchableOpacity onPress={fetchWeatherData}>
-                  <Ionicons name="refresh" size={14} color="#00E676" />
+          {/* Weather Info Bar */}
+          {weatherData && (
+            <View style={styles.weatherBar}>
+              <View style={styles.weatherItem}>
+                <Ionicons name="location" size={16} color="#00E676" />
+                <Text style={styles.weatherText}>{weatherData.location}</Text>
+              </View>
+              <View style={styles.weatherItem}>
+                <Text style={styles.aqiText}>AQI: {weatherData.aqi}</Text>
+                <Text style={[styles.aqiLevel, { color: getAQILevel(weatherData.aqi).color }]}>
+                  {getAQILevel(weatherData.aqi).label}
+                </Text>
+              </View>
+              <View style={styles.weatherItem}>
+                <Text style={styles.tempText}>{weatherData.temperature}°C</Text>
+              </View>
+            </View>
+          )}
+
+          {/* Quick Actions */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.quickActionsScroll}>
+            <View style={styles.quickActions}>
+              {quickActions.map((action, index) => (
+                <TouchableOpacity 
+                  key={index} 
+                  style={styles.quickActionChip} 
+                  onPress={() => setInputValue(action)}
+                >
+                  <Text style={styles.quickActionText}>{action}</Text>
                 </TouchableOpacity>
-              </View>
-              
-              {weatherData && (
-                <View style={styles.weatherWidget}>
-                  <View style={styles.locationRow}>
-                    <Ionicons name="location" size={12} color="#00E676" />
-                    <Text style={styles.locationText}>{weatherData.location}</Text>
-                  </View>
-                  <Text style={styles.aqiValue}>{weatherData.aqi}</Text>
-                  <Text style={[styles.aqiLevel, { color: getAQILevel(weatherData.aqi).color }]}>
-                    {getAQILevel(weatherData.aqi).label}
+              ))}
+            </View>
+          </ScrollView>
+
+          {/* Messages */}
+          <ScrollView ref={scrollViewRef} style={styles.messagesContainer} showsVerticalScrollIndicator={false}>
+            {messages.map((message) => (
+              <View key={message.id} style={[styles.messageWrapper, message.type === 'user' ? styles.userWrapper : styles.botWrapper]}>
+                <View style={[styles.messageBubble, message.type === 'user' ? styles.userBubble : styles.botBubble]}>
+                  {message.type === 'bot' && <Text style={styles.avatarText}>🌬️</Text>}
+                  <Text style={[styles.messageText, message.type === 'user' ? styles.userText : styles.botText]}>
+                    {message.content}
                   </Text>
-                  <Text style={styles.temperature}>{weatherData.temperature}°C</Text>
-                </View>
-              )}
-              
-              <View style={styles.quickActionsVertical}>
-                <Text style={styles.quickActionsTitle}>Quick Actions</Text>
-                {quickActions.map((action, index) => (
-                  <TouchableOpacity 
-                    key={index} 
-                    style={styles.quickActionButton} 
-                    onPress={() => setInputValue(action)}
-                  >
-                    <Text style={styles.quickActionText}>{action}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            {/* Chat Area */}
-            <View style={styles.chatArea}>
-              <ScrollView ref={scrollViewRef} style={styles.messagesContainer} showsVerticalScrollIndicator={false}>
-                {messages.map((message) => (
-                  <View key={message.id} style={[styles.messageWrapper, message.type === 'user' ? styles.userWrapper : styles.botWrapper]}>
-                    <View style={[styles.messageBubble, message.type === 'user' ? styles.userBubble : styles.botBubble]}>
-                      {message.type === 'bot' && <Text style={styles.avatarText}>🌬️</Text>}
-                      <Text style={[styles.messageText, message.type === 'user' ? styles.userText : styles.botText]}>
-                        {message.content}
-                      </Text>
-                      {message.hasChart && <AQIChart />}
-                      {message.hasForecast && <ForecastCards />}
-                      <Text style={styles.timestamp}>
-                        {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </Text>
-                    </View>
-                  </View>
-                ))}
-                
-                {isLoading && (
-                  <View style={styles.loadingWrapper}>
-                    <View style={styles.loadingBubble}>
-                      <Text style={styles.avatarText}>🌬️</Text>
-                      <Text style={styles.loadingText}>Checking ang hangin for you...</Text>
-                    </View>
-                  </View>
-                )}
-              </ScrollView>
-
-              <View style={styles.inputContainer}>
-                <View style={styles.inputWrapper}>
-                  <TextInput
-                    value={inputValue}
-                    onChangeText={setInputValue}
-                    placeholder="Chat with Amihan about air quality..."
-                    placeholderTextColor="rgba(255,255,255,0.5)"
-                    style={styles.textInput}
-                    multiline
-                  />
-                  <TouchableOpacity
-                    onPress={handleSendMessage}
-                    disabled={!inputValue.trim() || isLoading}
-                    style={[styles.sendButton, (!inputValue.trim() || isLoading) && styles.sendButtonDisabled]}
-                  >
-                    <Ionicons name="send" size={16} color="#0A0A0A" />
-                  </TouchableOpacity>
+                  {message.hasChart && <AQIChart />}
+                  {message.hasForecast && <ForecastCards />}
+                  <Text style={styles.timestamp}>
+                    {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </Text>
                 </View>
               </View>
-            </View>
+            ))}
+            
+            {isLoading && (
+              <View style={styles.loadingWrapper}>
+                <View style={styles.loadingBubble}>
+                  <Text style={styles.avatarText}>🌬️</Text>
+                  <Text style={styles.loadingText}>Checking ang hangin for you...</Text>
+                </View>
+              </View>
+            )}
+          </ScrollView>
 
+          {/* Input */}
+          <View style={styles.inputContainer}>
+            <View style={styles.inputWrapper}>
+              <TextInput
+                value={inputValue}
+                onChangeText={setInputValue}
+                placeholder="Chat with Amihan about air quality..."
+                placeholderTextColor="rgba(255,255,255,0.5)"
+                style={styles.textInput}
+                multiline
+              />
+              <TouchableOpacity
+                onPress={handleSendMessage}
+                disabled={!inputValue.trim() || isLoading}
+                style={[styles.sendButton, (!inputValue.trim() || isLoading) && styles.sendButtonDisabled]}
+              >
+                <Ionicons name="send" size={20} color="#0A0A0A" />
+              </TouchableOpacity>
+            </View>
           </View>
+
         </SafeAreaView>
       </LinearGradient>
     </View>
@@ -412,103 +404,102 @@ Remember: You're a caring friend who happens to be an air quality expert, not a 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0A0A0A' },
   gradient: { flex: 1 },
-  safeArea: { flex: 1, paddingBottom: Platform.OS === 'ios' ? 20 : 10 },
+  safeArea: { flex: 1 },
+  
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 20, 
-    paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: 'rgba(0,230,118,0.1)'
+    paddingHorizontal: 20, paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 15 : 15,
+    paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: 'rgba(0,230,118,0.1)'
   },
   backButton: {
-    width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.1)',
+    width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.1)',
     justifyContent: 'center', alignItems: 'center'
   },
   headerCenter: { flex: 1, alignItems: 'center' },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
-  headerSubtitle: { fontSize: 11, color: 'rgba(255,255,255,0.6)' },
-  
-  mainContent: { flex: 1, flexDirection: 'row' },
-  
-  sidebar: {
-    width: width * 0.28, backgroundColor: 'rgba(255,255,255,0.03)', 
-    borderRightWidth: 1, borderRightColor: 'rgba(0,230,118,0.1)', padding: 15
+  headerTitle: { fontSize: 20, fontWeight: '700', color: '#FFFFFF' },
+  headerSubtitle: { fontSize: 14, color: 'rgba(255,255,255,0.7)' },
+  refreshButton: {
+    width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,230,118,0.1)',
+    justifyContent: 'center', alignItems: 'center'
   },
-  sidebarHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-  sidebarTitle: { fontSize: 13, fontWeight: '600', color: '#FFFFFF' },
   
-  weatherWidget: {
-    backgroundColor: 'rgba(0,230,118,0.08)', borderRadius: 12, padding: 12,
-    borderWidth: 1, borderColor: 'rgba(0,230,118,0.2)', marginBottom: 15
+  weatherBar: {
+    flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center',
+    paddingVertical: 15, paddingHorizontal: 20, backgroundColor: 'rgba(0,230,118,0.05)',
+    borderBottomWidth: 1, borderBottomColor: 'rgba(0,230,118,0.1)'
   },
-  locationRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  locationText: { fontSize: 10, color: '#00E676', marginLeft: 4 },
-  aqiValue: { fontSize: 24, fontWeight: '700', color: '#00E676', textAlign: 'center' },
-  aqiLevel: { fontSize: 10, fontWeight: '600', textAlign: 'center', marginTop: 2 },
-  temperature: { fontSize: 11, color: '#FFC107', textAlign: 'center', marginTop: 4 },
+  weatherItem: { alignItems: 'center' },
+  weatherText: { fontSize: 14, color: '#00E676', marginTop: 4 },
+  aqiText: { fontSize: 16, fontWeight: '700', color: '#00E676' },
+  aqiLevel: { fontSize: 12, fontWeight: '600', marginTop: 2 },
+  tempText: { fontSize: 16, fontWeight: '600', color: '#FFC107' },
   
-  quickActionsVertical: { flex: 1 },
-  quickActionsTitle: { fontSize: 11, fontWeight: '600', color: 'rgba(255,255,255,0.7)', marginBottom: 10 },
-  quickActionButton: {
-    backgroundColor: 'rgba(0,230,118,0.1)', borderRadius: 8, padding: 8, marginBottom: 6,
-    borderWidth: 1, borderColor: 'rgba(0,230,118,0.2)'
+  quickActionsScroll: { maxHeight: 60 },
+  quickActions: { flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 15 },
+  quickActionChip: {
+    backgroundColor: 'rgba(0,230,118,0.1)', borderRadius: 20, paddingHorizontal: 16,
+    paddingVertical: 8, marginRight: 12, borderWidth: 1, borderColor: 'rgba(0,230,118,0.2)'
   },
-  quickActionText: { fontSize: 9, color: '#FFFFFF', textAlign: 'center' },
+  quickActionText: { fontSize: 14, color: '#FFFFFF' },
   
-  chatArea: { flex: 1, flexDirection: 'column' },
   messagesContainer: { flex: 1, paddingHorizontal: 20 },
-  messageWrapper: { marginVertical: 3 },
+  messageWrapper: { marginVertical: 8 },
   userWrapper: { alignItems: 'flex-end' },
   botWrapper: { alignItems: 'flex-start' },
-  messageBubble: { maxWidth: '80%', borderRadius: 12, padding: 12 },
+  messageBubble: { maxWidth: '85%', borderRadius: 18, padding: 16 },
   userBubble: { backgroundColor: 'rgba(0,230,118,0.2)', borderWidth: 1, borderColor: 'rgba(0,230,118,0.3)' },
   botBubble: { backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(0,230,118,0.2)' },
-  avatarText: { fontSize: 14, marginBottom: 4 },
-  messageText: { fontSize: 13, lineHeight: 18 },
+  avatarText: { fontSize: 20, marginBottom: 8 },
+  messageText: { fontSize: 16, lineHeight: 22 },
   userText: { color: '#FFFFFF' },
   botText: { color: 'rgba(255,255,255,0.9)' },
-  timestamp: { fontSize: 9, color: 'rgba(255,255,255,0.5)', marginTop: 6, alignSelf: 'flex-end' },
+  timestamp: { fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 8, alignSelf: 'flex-end' },
   
   chartContainer: {
-    marginTop: 10, padding: 10, backgroundColor: 'rgba(0,230,118,0.05)',
-    borderRadius: 10, borderWidth: 1, borderColor: 'rgba(0,230,118,0.2)'
+    marginTop: 15, padding: 15, backgroundColor: 'rgba(0,230,118,0.05)',
+    borderRadius: 12, borderWidth: 1, borderColor: 'rgba(0,230,118,0.2)'
   },
-  chartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  chartLabel: { fontSize: 11, fontWeight: '600', color: 'rgba(255,255,255,0.8)' },
-  levelBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 },
-  levelText: { color: '#FFFFFF', fontSize: 9, fontWeight: '600' },
-  progressBackground: { height: 6, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 3, marginBottom: 6 },
-  progressBar: { height: '100%', borderRadius: 3 },
-  aqiNumber: { fontSize: 20, fontWeight: '700', color: '#00E676', textAlign: 'center' },
+  chartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  chartLabel: { fontSize: 14, fontWeight: '600', color: 'rgba(255,255,255,0.8)' },
+  levelBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  levelText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },
+  progressBackground: { height: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 4, marginBottom: 10 },
+  progressBar: { height: '100%', borderRadius: 4 },
+  aqiNumber: { fontSize: 28, fontWeight: '700', color: '#00E676', textAlign: 'center' },
   
-  forecastContainer: { marginTop: 10 },
-  forecastTitle: { fontSize: 11, fontWeight: '600', color: 'rgba(255,255,255,0.8)', marginBottom: 6 },
+  forecastContainer: { marginTop: 15 },
+  forecastTitle: { fontSize: 14, fontWeight: '600', color: 'rgba(255,255,255,0.8)', marginBottom: 10 },
   forecastRow: { flexDirection: 'row', justifyContent: 'space-between' },
   forecastCard: {
-    backgroundColor: 'rgba(255,255,255,0.05)', padding: 8, borderRadius: 8,
-    alignItems: 'center', flex: 1, marginHorizontal: 2, borderWidth: 1, borderColor: 'rgba(0,230,118,0.2)'
+    backgroundColor: 'rgba(255,255,255,0.05)', padding: 12, borderRadius: 12,
+    alignItems: 'center', flex: 1, marginHorizontal: 3, borderWidth: 1, borderColor: 'rgba(0,230,118,0.2)'
   },
-  forecastDay: { fontSize: 9, fontWeight: '600', color: 'rgba(255,255,255,0.7)' },
-  forecastAqi: { fontSize: 11, fontWeight: '700', color: '#00E676', marginVertical: 2 },
-  forecastLevel: { fontSize: 7, color: 'rgba(255,255,255,0.6)', textAlign: 'center' },
-  forecastTemp: { fontSize: 8, color: '#FFC107', marginTop: 2 },
+  forecastDay: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.7)' },
+  forecastAqi: { fontSize: 14, fontWeight: '700', color: '#00E676', marginVertical: 4 },
+  forecastLevel: { fontSize: 10, color: 'rgba(255,255,255,0.6)', textAlign: 'center' },
+  forecastTemp: { fontSize: 12, color: '#FFC107', marginTop: 4 },
   
-  loadingWrapper: { alignItems: 'flex-start', marginVertical: 3 },
+  loadingWrapper: { alignItems: 'flex-start', marginVertical: 8 },
   loadingBubble: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.08)',
-    padding: 10, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(0,230,118,0.2)'
+    padding: 16, borderRadius: 18, borderWidth: 1, borderColor: 'rgba(0,230,118,0.2)'
   },
-  loadingText: { fontSize: 11, color: 'rgba(255,255,255,0.7)', marginLeft: 6 },
+  loadingText: { fontSize: 14, color: 'rgba(255,255,255,0.7)', marginLeft: 8 },
   
   inputContainer: {
-    backgroundColor: 'rgba(255,255,255,0.05)', paddingHorizontal: 20, paddingVertical: 10,
+    backgroundColor: 'rgba(255,255,255,0.05)', paddingHorizontal: 20, paddingVertical: 15,
     borderTopWidth: 1, borderTopColor: 'rgba(0,230,118,0.1)'
   },
   inputWrapper: { flexDirection: 'row', alignItems: 'flex-end' },
   textInput: {
-    flex: 1, borderWidth: 1, borderColor: 'rgba(156,39,176,0.4)', borderRadius: 10,
-    paddingHorizontal: 12, paddingVertical: 10, backgroundColor: 'rgba(255,255,255,0.08)',
-    fontSize: 13, maxHeight: 60, marginRight: 8, color: '#FFFFFF'
+    flex: 1, borderWidth: 1, borderColor: 'rgba(156,39,176,0.4)', borderRadius: 20,
+    paddingHorizontal: 18, paddingVertical: 12, backgroundColor: 'rgba(255,255,255,0.08)',
+    fontSize: 16, maxHeight: 80, marginRight: 12, color: '#FFFFFF'
   },
-  sendButton: { backgroundColor: '#9C27B0', width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
+  sendButton: { 
+    backgroundColor: '#9C27B0', width: 44, height: 44, borderRadius: 22, 
+    justifyContent: 'center', alignItems: 'center' 
+  },
   sendButtonDisabled: { backgroundColor: 'rgba(255,255,255,0.3)' }
 });
 
