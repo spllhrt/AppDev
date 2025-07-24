@@ -31,11 +31,40 @@ const ProfileScreen = ({ navigation }) => {
   });
   const [imageUri, setImageUri] = useState(user?.avatar?.url || null);
   const [showImageModal, setShowImageModal] = useState(false);
+  
+  // Modal state for messages
+  const [messageModal, setMessageModal] = useState({
+    visible: false,
+    type: 'info', // 'success', 'error', 'warning', 'info'
+    title: '',
+    message: '',
+    buttons: []
+  });
+  
   const isWeb = screenWidth > 768;
 
   useEffect(() => {
     loadProfileData();
   }, [user]);
+
+  // Function to show message modal
+  const showMessageModal = (type, title, message, buttons = []) => {
+    const defaultButtons = [
+      {
+        text: 'OK',
+        onPress: () => setMessageModal(prev => ({ ...prev, visible: false })),
+        style: 'default'
+      }
+    ];
+
+    setMessageModal({
+      visible: true,
+      type,
+      title,
+      message,
+      buttons: buttons.length > 0 ? buttons : defaultButtons
+    });
+  };
 
   const loadProfileData = async () => {
     try {
@@ -53,64 +82,138 @@ const ProfileScreen = ({ navigation }) => {
       });
     } catch (error) {
       console.log('No health profile found, using defaults');
+      showMessageModal('info', 'Profile Loading', 'Using default profile settings. You can update your information anytime.');
     }
     setImageUri(user?.avatar?.url || null);
   };
 
   const saveProfile = async () => {
-    try {
-      const formData = new FormData();
-      formData.append('name', profileData.name);
-      formData.append('city', profileData.city);
-      
-      if (imageUri && imageUri !== user?.avatar?.url) {
-        const filename = imageUri.split('/').pop();
-        const match = /\.(\w+)$/.exec(filename);
-        const type = match ? `image/${match[1]}` : 'image/jpeg';
-        formData.append('avatar', { uri: imageUri, name: filename || 'avatar.jpg', type });
+  try {
+    const formData = new FormData();
+
+    formData.append('name', profileData.name);
+    formData.append('city', profileData.city);
+
+    if (imageUri && imageUri !== user?.avatar?.url) {
+      const filename = imageUri.split('/').pop();
+      const match = /\.(\w+)$/.exec(filename);
+      const ext = match?.[1]?.toLowerCase();
+      const type = ext ? `image/${ext === 'jpg' ? 'jpeg' : ext}` : 'image/jpeg';
+
+      if (Platform.OS === 'web') {
+        // Web: fetch the blob from the URI
+        const response = await fetch(imageUri);
+        const blob = await response.blob();
+        formData.append('avatar', blob, filename || 'avatar.jpg');
+      } else {
+        // Mobile: use uri, name, and type
+        formData.append('avatar', {
+          uri: imageUri,
+          name: filename || 'avatar.jpg',
+          type: type,
+        });
       }
-      
-      const userResponse = await updateUserProfile(formData);
-      dispatch(updateUser(userResponse.user));
-      
-      const healthData = {
-        age: parseInt(profileData.age) || undefined,
-        gender: profileData.gender || undefined,
-        isPregnant: profileData.isPregnant,
-        isSmoker: profileData.isSmoker,
-        hasAsthma: profileData.hasAsthma,
-        hasHeartDisease: profileData.hasHeartDisease,
-        hasRespiratoryIssues: profileData.hasRespiratoryIssues,
-        outdoorExposure: profileData.outdoorExposure || undefined,
-      };
-      
-      await updateHealthProfile(healthData);
-      setIsEditing(false);
-      Alert.alert('Success', 'Profile updated successfully!');
-    } catch (error) {
-      console.error('Error updating profile:', error);
-      Alert.alert('Error', error.message || 'Failed to update profile');
-      loadProfileData();
     }
-  };
+
+    const userResponse = await updateUserProfile(formData);
+    dispatch(updateUser(userResponse.user));
+
+    const healthData = {
+      age: parseInt(profileData.age) || undefined,
+      gender: profileData.gender || undefined,
+      isPregnant: profileData.isPregnant,
+      isSmoker: profileData.isSmoker,
+      hasAsthma: profileData.hasAsthma,
+      hasHeartDisease: profileData.hasHeartDisease,
+      hasRespiratoryIssues: profileData.hasRespiratoryIssues,
+      outdoorExposure: profileData.outdoorExposure || undefined,
+    };
+
+    await updateHealthProfile(healthData);
+
+    setIsEditing(false);
+    showMessageModal('success', 'Success!', 'Your profile has been updated successfully.');
+  } catch (error) {
+    console.error('Error updating profile:', error);
+    showMessageModal(
+      'error',
+      'Update Failed',
+      error.message || 'Failed to update profile. Please try again.'
+    );
+    loadProfileData();
+  }
+};
 
   const handleImagePick = async () => {
     if (!isEditing) return;
-    Alert.alert('Select Photo', '', [
-      { text: 'Camera', onPress: () => pickImage('camera') },
-      { text: 'Gallery', onPress: () => pickImage('gallery') },
-      { text: 'Remove', onPress: () => setImageUri(null), style: 'destructive' },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
+    
+    const buttons = [
+      {
+        text: 'Camera',
+        onPress: () => {
+          setMessageModal(prev => ({ ...prev, visible: false }));
+          setTimeout(() => pickImage('camera'), 300);
+        }
+      },
+      {
+        text: 'Gallery',
+        onPress: () => {
+          setMessageModal(prev => ({ ...prev, visible: false }));
+          setTimeout(() => pickImage('gallery'), 300);
+        }
+      },
+      {
+        text: 'Remove Photo',
+        onPress: () => {
+          setImageUri(null);
+          setMessageModal(prev => ({ ...prev, visible: false }));
+        },
+        style: 'destructive'
+      },
+      {
+        text: 'Cancel',
+        onPress: () => setMessageModal(prev => ({ ...prev, visible: false })),
+        style: 'cancel'
+      }
+    ];
+
+    showMessageModal('info', 'Select Photo', 'Choose how you want to update your profile picture:', buttons);
   };
 
   const pickImage = async (source) => {
-    const result = source === 'camera'
-      ? await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.8 })
-      : await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.8 });
-    if (!result.canceled && result.assets?.[0]?.uri) {
-      setImageUri(result.assets[0].uri);
+    try {
+      const result = source === 'camera'
+        ? await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.8 })
+        : await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.8 });
+      
+      if (!result.canceled && result.assets?.[0]?.uri) {
+        setImageUri(result.assets[0].uri);
+        showMessageModal('success', 'Photo Selected', 'Your profile photo has been updated. Don\'t forget to save your changes!');
+      }
+    } catch (error) {
+      showMessageModal('error', 'Photo Selection Failed', 'Unable to select photo. Please try again.');
     }
+  };
+
+  const handleCancelEdit = () => {
+    const buttons = [
+      {
+        text: 'Discard Changes',
+        onPress: () => {
+          setIsEditing(false);
+          loadProfileData();
+          setMessageModal(prev => ({ ...prev, visible: false }));
+        },
+        style: 'destructive'
+      },
+      {
+        text: 'Continue Editing',
+        onPress: () => setMessageModal(prev => ({ ...prev, visible: false })),
+        style: 'cancel'
+      }
+    ];
+
+    showMessageModal('warning', 'Unsaved Changes', 'You have unsaved changes. Are you sure you want to discard them?', buttons);
   };
 
   const renderInput = (field, label, icon, options = {}) => (
@@ -193,7 +296,7 @@ const ProfileScreen = ({ navigation }) => {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.cancelButton}
-              onPress={() => { setIsEditing(false); loadProfileData(); }}
+              onPress={handleCancelEdit}
             >
               <Text style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
@@ -299,6 +402,73 @@ const ProfileScreen = ({ navigation }) => {
     </View>
   );
 
+  const getModalIconName = (type) => {
+    switch (type) {
+      case 'success': return 'checkmark-circle';
+      case 'error': return 'close-circle';
+      case 'warning': return 'warning';
+      case 'info':
+      default: return 'information-circle';
+    }
+  };
+
+  const getModalIconColor = (type) => {
+    switch (type) {
+      case 'success': return '#00E676';
+      case 'error': return '#FF5252';
+      case 'warning': return '#FFC107';
+      case 'info':
+      default: return '#2196F3';
+    }
+  };
+
+  const MessageModal = () => (
+    <Modal
+      visible={messageModal.visible}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setMessageModal(prev => ({ ...prev, visible: false }))}
+    >
+      <View style={styles.messageModalOverlay}>
+        <View style={styles.messageModalContainer}>
+          <View style={styles.messageModalHeader}>
+            <Ionicons 
+              name={getModalIconName(messageModal.type)} 
+              size={32} 
+              color={getModalIconColor(messageModal.type)} 
+            />
+            <Text style={styles.messageModalTitle}>{messageModal.title}</Text>
+          </View>
+          
+          <Text style={styles.messageModalText}>{messageModal.message}</Text>
+          
+          <View style={styles.messageModalButtons}>
+            {messageModal.buttons.map((button, index) => (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  styles.messageModalButton,
+                  button.style === 'destructive' && styles.messageModalButtonDestructive,
+                  button.style === 'cancel' && styles.messageModalButtonCancel,
+                  messageModal.buttons.length === 1 && styles.messageModalButtonSingle
+                ]}
+                onPress={button.onPress}
+              >
+                <Text style={[
+                  styles.messageModalButtonText,
+                  button.style === 'destructive' && styles.messageModalButtonTextDestructive,
+                  button.style === 'cancel' && styles.messageModalButtonTextCancel
+                ]}>
+                  {button.text}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
@@ -351,6 +521,7 @@ const ProfileScreen = ({ navigation }) => {
         )}
       </LinearGradient>
 
+      {/* Image Modal */}
       <Modal visible={showImageModal} transparent animationType="fade">
         <TouchableOpacity style={styles.modal} onPress={() => setShowImageModal(false)}>
           <Image source={{ uri: imageUri }} style={styles.fullImage} />
@@ -359,6 +530,9 @@ const ProfileScreen = ({ navigation }) => {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      {/* Message Modal */}
+      <MessageModal />
     </View>
   );
 };
@@ -507,6 +681,77 @@ const styles = StyleSheet.create({
   closeBtn: {
     position: 'absolute', top: 60, right: 30, width: 40, height: 40, borderRadius: 20,
     backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center',
+  },
+
+  // Message Modal Styles
+  messageModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  messageModalContainer: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 20,
+    padding: 25,
+    minWidth: 300,
+    maxWidth: '90%',
+    borderWidth: 1,
+    borderColor: 'rgba(0,230,118,0.3)',
+  },
+  messageModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    gap: 12,
+  },
+  messageModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    flex: 1,
+  },
+  messageModalText: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.9)',
+    lineHeight: 20,
+    marginBottom: 25,
+  },
+  messageModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'flex-end',
+  },
+  messageModalButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#00E676',
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  messageModalButtonSingle: {
+    flex: 1,
+  },
+  messageModalButtonDestructive: {
+    backgroundColor: '#FF5252',
+  },
+  messageModalButtonCancel: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  messageModalButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  messageModalButtonTextDestructive: {
+    color: '#FFFFFF',
+  },
+  messageModalButtonTextCancel: {
+    color: 'rgba(255,255,255,0.9)',
   },
 });
 

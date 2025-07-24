@@ -193,7 +193,7 @@ const BulletinFeed = ({ navigation }) => {
           >
             <Ionicons name="thumbs-up-outline" size={16} color={getUserReaction(item.reactions) === 'upvote' ? '#10B981' : 'rgba(255,255,255,0.6)'} />
             <Text style={[styles.reactionText, getUserReaction(item.reactions) === 'upvote' && { color: '#10B981' }]}>
-              {getReactionCount(item.reactions, 'upvote')}
+              {getReactionCount(item.reactions, 'upvote')} upvote
             </Text>
           </TouchableOpacity>
           
@@ -203,22 +203,15 @@ const BulletinFeed = ({ navigation }) => {
           >
             <Ionicons name="thumbs-down-outline" size={16} color={getUserReaction(item.reactions) === 'downvote' ? '#EF4444' : 'rgba(255,255,255,0.6)'} />
             <Text style={[styles.reactionText, getUserReaction(item.reactions) === 'downvote' && { color: '#EF4444' }]}>
-              {getReactionCount(item.reactions, 'downvote')}
+              {getReactionCount(item.reactions, 'downvote')} downvote
             </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.commentButton}>
-            <Ionicons name="chatbubble-outline" size={16} color="rgba(255,255,255,0.6)" />
-            <Text style={styles.commentText}>{item.comments.length}</Text>
           </TouchableOpacity>
         </View>
         
         <View style={styles.rightActions}>
-          <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="share-outline" size={16} color="rgba(255,255,255,0.6)" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="bookmark-outline" size={16} color="rgba(255,255,255,0.6)" />
+          <TouchableOpacity style={styles.commentButton}>
+            <Ionicons name="chatbubble-outline" size={16} color="rgba(255,255,255,0.6)" />
+            <Text style={styles.commentText}>{item.comments.length} comment</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -533,8 +526,6 @@ const styles = StyleSheet.create({
   reactionText: { fontSize: 12, color: 'rgba(255,255,255,0.6)', fontWeight: '600' },
   commentButton: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4 },
   commentText: { fontSize: 12, color: 'rgba(255,255,255,0.6)', fontWeight: '600' },
-  rightActions: { flexDirection: 'row', gap: 8 },
-  actionButton: { padding: 6, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.05)' },
 
   // Empty State
   emptyContainer: { paddingVertical: 60, alignItems: 'center' },

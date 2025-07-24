@@ -10,6 +10,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Modal,
+  Platform
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import * as ImagePicker from 'expo-image-picker';
@@ -99,40 +100,54 @@ const ProfileScreen = ({ navigation }) => {
     }
   }, []);
 
-  const handleUpdateProfile = useCallback(async () => {
-    if (!userInfo.name.trim() || !userInfo.email.trim()) {
-      Alert.alert('Error', 'Name and email are required');
-      return;
-    }
+  
+const handleUpdateProfile = useCallback(async () => {
+  if (!userInfo.name.trim() || !userInfo.email.trim()) {
+    Alert.alert('Error', 'Name and email are required');
+    return;
+  }
 
-    try {
-      setLoading(true);
-      const formData = new FormData();
-      formData.append('name', userInfo.name.trim());
-      formData.append('email', userInfo.email.trim());
-      
-      if (userInfo.avatar?.uri) {
+  try {
+    setLoading(true);
+
+    const formData = new FormData();
+    formData.append('name', userInfo.name.trim());
+    formData.append('email', userInfo.email.trim());
+
+    if (userInfo.avatar?.uri) {
+      const uri = userInfo.avatar.uri;
+      const filename = uri.split('/').pop();
+      const match = /\.(\w+)$/.exec(filename);
+      const ext = match?.[1]?.toLowerCase();
+      const type = ext ? `image/${ext === 'jpg' ? 'jpeg' : ext}` : 'image/jpeg';
+
+      if (Platform.OS === 'web') {
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        formData.append('avatar', blob, filename || 'avatar.jpg');
+      } else {
         formData.append('avatar', {
-          uri: userInfo.avatar.uri,
-          type: 'image/jpeg',
-          name: 'avatar.jpg',
+          uri,
+          type,
+          name: filename || 'avatar.jpg',
         });
       }
-
-      const response = await updateUserProfile(formData);
-      
-      if (response.success) {
-        dispatch(updateUser(response.user));
-        setEditMode(false);
-        Alert.alert('Success', 'Profile updated successfully!');
-      }
-    } catch (error) {
-      console.error('Profile update error:', error);
-      Alert.alert('Error', error.message || 'Failed to update profile');
-    } finally {
-      setLoading(false);
     }
-  }, [userInfo, dispatch]);
+
+    const response = await updateUserProfile(formData);
+
+    if (response.success) {
+      dispatch(updateUser(response.user));
+      setEditMode(false);
+      Alert.alert('Success', 'Profile updated successfully!');
+    }
+  } catch (error) {
+    console.error('Profile update error:', error);
+    Alert.alert('Error', error.message || 'Failed to update profile');
+  } finally {
+    setLoading(false);
+  }
+}, [userInfo, dispatch]);
 
   const resetPasswordData = useCallback(() => {
     setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' });

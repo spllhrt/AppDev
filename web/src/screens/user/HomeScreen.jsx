@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity,ActivityIndicator, StyleSheet, Alert, Dimensions, RefreshControl, StatusBar, Platform, SafeAreaView } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, StyleSheet, Alert, Dimensions, RefreshControl, StatusBar, Platform, SafeAreaView, Image } from 'react-native';
 import { useSelector } from 'react-redux';
 import { useNavigation } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { getAllBulletins } from '../../api/bulletin';
+import { getMyReports } from '../../api/report';
 
 const { width } = Dimensions.get('window');
 
@@ -16,11 +18,13 @@ const HomeScreen = () => {
   const [useGPS, setUseGPS] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [showChatLabel, setShowChatLabel] = useState(true);
   const [aqiData, setAqiData] = useState(null);
   const [location, setLocation] = useState(null);
   const [displayLocationName, setDisplayLocationName] = useState('');
   const [philippineCitiesAqi, setPhilippineCitiesAqi] = useState([]);
+  const [topBulletins, setTopBulletins] = useState([]);
+  const [topReports, setTopReports] = useState([]);
+  const [error, setError] = useState(null);
 
   const { user } = useSelector(state => state.auth || {});
 
@@ -32,12 +36,35 @@ const HomeScreen = () => {
   useEffect(() => {
     initializeAQI();
     fetchMajorCitiesAqi();
+    fetchTopBulletins();
+    fetchTopReports();
   }, [useGPS]);
 
-  useEffect(() => {
-    const timer = setTimeout(() => setShowChatLabel(false), 3000);
-    return () => clearTimeout(timer);
+  const fetchTopReports = useCallback(async () => {
+    try {
+      setError(null);
+      setLoading(true);
+      const response = await getMyReports();
+      const sortedReports = [...(response.reports || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 3);
+      setTopReports(sortedReports);
+    } catch (err) {
+      console.error('Error fetching reports:', err);
+      setError(err.message || 'Failed to fetch reports');
+      Alert.alert('Error', err.message || 'Could not load your reports', [{ text: 'OK' }]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  const fetchTopBulletins = async () => {
+    try {
+      const bulletins = await getAllBulletins();
+      const sorted = [...bulletins].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 3);
+      setTopBulletins(sorted);
+    } catch (error) {
+      console.error('Failed to fetch bulletins:', error);
+    }
+  };
 
   const handleChatPress = () => navigation.navigate('Chatbot');
 
@@ -61,6 +88,7 @@ const HomeScreen = () => {
       { name: 'Valenzuela', lat: 14.7000, lon: 120.9820 },
       { name: 'Pateros', lat: 14.5443, lon: 121.0699 },
     ];
+
     try {
       const aqiPromises = cities.map(async city => {
         try {
@@ -172,9 +200,9 @@ const HomeScreen = () => {
       }
 
       const philippineCities = {
-        'manila': { lat: 14.5995, lon: 120.9842 }, 'makati': { lat: 14.5547, lon: 121.0244 },
-        'quezon city': { lat: 14.6760, lon: 121.0437 }, 'cebu': { lat: 10.3157, lon: 123.8854 },
-        'davao': { lat: 7.1907, lon: 125.4553 },
+        'manila': { latitude: 14.5995, longitude: 120.9842 }, 'makati': { latitude: 14.5547, longitude: 121.0244 },
+        'quezon city': { latitude: 14.6760, longitude: 121.0437 }, 'cebu': { latitude: 10.3157, longitude: 123.8854 },
+        'davao': { latitude: 7.1907, longitude: 125.4553 },
       };
 
       const normalizedCity = city.toLowerCase().trim();
@@ -424,6 +452,8 @@ Format your response as a JSON object with a single 'text' property containing t
     try {
       await initializeAQI();
       await fetchMajorCitiesAqi();
+      await fetchTopReports();
+      await fetchTopBulletins();
     } catch (error) {
       console.error('Refresh failed:', error);
     } finally {
@@ -439,6 +469,79 @@ Format your response as a JSON object with a single 'text' property containing t
     }
   };
 
+  const getCategoryIcon = (category) => {
+    const icons = {
+      'Environmental Alert': '🌍', 'Weather Update': '🌤️', 'Public Safety': '🚨', 'Emergency': '🚨',
+      'Event Notice': '📅', 'Service Disruption': '⚠️', 'Health Advisory': '🏥', 'Traffic Alert': '🚦',
+      'Community Announcement': '📢', 'General': '📢'
+    };
+    return icons[category] || '📢';
+  };
+
+  const formatTimeAgo = (dateString) => {
+    const diffInMinutes = Math.floor((new Date() - new Date(dateString)) / (1000 * 60));
+    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
+    return `${Math.floor(diffInMinutes / 1440)}d ago`;
+  };
+
+  // Updated photo layout function matching AdminDashboard
+  const renderPhotoLayout = (photos) => {
+    if (!photos || photos.length === 0) return null;
+
+    switch (photos.length) {
+      case 1:
+        return (
+          <View style={styles.photoContainer}>
+            <Image source={{ uri: photos[0].url }} style={styles.singlePhoto} />
+          </View>
+        );
+      case 2:
+        return (
+          <View style={styles.photoContainer}>
+            <View style={styles.photoRow}>
+              <Image source={{ uri: photos[0].url }} style={styles.halfPhoto} />
+              <Image source={{ uri: photos[1].url }} style={styles.halfPhoto} />
+            </View>
+          </View>
+        );
+      case 3:
+        return (
+          <View style={styles.photoContainer}>
+            <Image source={{ uri: photos[0].url }} style={styles.mainPhoto} />
+            <View style={styles.photoRow}>
+              <Image source={{ uri: photos[1].url }} style={styles.halfPhoto} />
+              <Image source={{ uri: photos[2].url }} style={styles.halfPhoto} />
+            </View>
+          </View>
+        );
+      default:
+        return (
+          <View style={styles.photoContainer}>
+            <View style={styles.photoRow}>
+              <Image source={{ uri: photos[0].url }} style={styles.halfPhoto} />
+              <Image source={{ uri: photos[1].url }} style={styles.halfPhoto} />
+            </View>
+            <View style={styles.photoRow}>
+              <Image source={{ uri: photos[2].url }} style={styles.halfPhoto} />
+              <View style={styles.morePhotosContainer}>
+                <Image 
+                  source={{ uri: photos[3].url }} 
+                  style={[styles.halfPhoto, photos.length > 4 && styles.blurredPhoto]} 
+                  blurRadius={photos.length > 4 ? 2 : 0} 
+                />
+                {photos.length > 4 && (
+                  <View style={styles.morePhotosOverlay}>
+                    <Text style={styles.morePhotosText}>+{photos.length - 4}</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          </View>
+        );
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -447,9 +550,9 @@ Format your response as a JSON object with a single 'text' property containing t
             <View style={styles.loadingContainer}>
               <Ionicons name="leaf" size={60} color="#00E676" />
               <Text style={styles.loadingText}>Loading...</Text>
-<View style={styles.loadingSpinner}>
-              <ActivityIndicator size="large" color="#00E676" />
-            </View>
+              <View style={styles.loadingSpinner}>
+                <ActivityIndicator size="large" color="#00E676" />
+              </View>
             </View>
           </SafeAreaView>
         </LinearGradient>
@@ -566,6 +669,8 @@ Format your response as a JSON object with a single 'text' property containing t
                     </View>
                   </LinearGradient>
                 </TouchableOpacity>
+
+                {/* AQI Card */}
                 <TouchableOpacity style={styles.aqiCard}>
                   <LinearGradient colors={[aqiInfo.bgColor, 'rgba(255,255,255,0.03)', 'rgba(0,0,0,0.1)']} style={styles.cardGradient}>
                     <View style={styles.cardHeader}>
@@ -604,63 +709,116 @@ Format your response as a JSON object with a single 'text' property containing t
                   </LinearGradient>
                 </TouchableOpacity>
 
-                <View style={styles.fullWidthSection}>
-                  {/* Cities Bulletin */}
-                  {philippineCitiesAqi.length > 0 && (
-                    <View style={styles.bulletinCard}>
-                      <LinearGradient colors={['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.03)', 'rgba(255,255,255,0.01)']} style={styles.cardGradient}>
-                        <View style={styles.cardHeader}>
-                          <View style={styles.cardTitleRow}>
-                            <Text style={styles.cardTitle}>Metro Manila Air Quality Overview</Text>
-                            <View style={styles.cardBadge}>
-                              <Ionicons name="stats-chart" size={16} color="#00E676" />
+                {/* Cities Bulletin */}
+                {philippineCitiesAqi.length > 0 && (
+                  <View style={styles.bulletinCard}>
+                    <LinearGradient colors={['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.03)', 'rgba(255,255,255,0.01)']} style={styles.cardGradient}>
+                      <View style={styles.cardHeader}>
+                        <View style={styles.cardTitleRow}>
+                          <Text style={styles.cardTitle}>Metro Manila Air Quality Overview</Text>
+                          <View style={styles.cardBadge}>
+                            <Ionicons name="stats-chart" size={16} color="#00E676" />
+                          </View>
+                        </View>
+                      </View>
+                      <View style={styles.bulletinContent}>
+                        <View style={styles.bulletinGrid}>
+                          <View style={styles.bulletinSection}>
+                            <View style={styles.bulletinSectionHeader}>
+                              <View style={[styles.bulletinIndicator, { backgroundColor: '#00C853' }]} />
+                              <Text style={styles.bulletinSectionTitle}>Best Air Quality</Text>
+                            </View>
+                            <View style={styles.cityList}>
+                              {bestCities.map((city, idx) => (
+                                <View key={`best-${idx}`} style={styles.cityItem}>
+                                  <Text style={styles.cityRank}>{idx + 1}</Text>
+                                  <Text style={styles.cityName}>{city.name}</Text>
+                                  <View style={styles.cityAqiContainer}>
+                                    <View style={[styles.cityAqiDot, { backgroundColor: city.category.color }]} />
+                                    <Text style={[styles.cityAqiValue, { color: city.category.color }]}>{city.aqi}</Text>
+                                  </View>
+                                </View>
+                              ))}
+                            </View>
+                          </View>
+                          <View style={styles.bulletinSection}>
+                            <View style={styles.bulletinSectionHeader}>
+                              <View style={[styles.bulletinIndicator, { backgroundColor: '#FF5252' }]} />
+                              <Text style={styles.bulletinSectionTitle}>Worst Air Quality</Text>
+                            </View>
+                            <View style={styles.cityList}>
+                              {worstCities.map((city, idx) => (
+                                <View key={`worst-${idx}`} style={styles.cityItem}>
+                                  <Text style={styles.cityRank}>{idx + 1}</Text>
+                                  <Text style={styles.cityName}>{city.name}</Text>
+                                  <View style={styles.cityAqiContainer}>
+                                    <View style={[styles.cityAqiDot, { backgroundColor: city.category.color }]} />
+                                    <Text style={[styles.cityAqiValue, { color: city.category.color }]}>{city.aqi}</Text>
+                                  </View>
+                                </View>
+                              ))}
                             </View>
                           </View>
                         </View>
-                        <View style={styles.bulletinContent}>
-                          <View style={styles.bulletinGrid}>
-                            <View style={styles.bulletinSection}>
-                              <View style={styles.bulletinSectionHeader}>
-                                <View style={[styles.bulletinIndicator, { backgroundColor: '#00C853' }]} />
-                                <Text style={styles.bulletinSectionTitle}>Best Air Quality</Text>
-                              </View>
-                              <View style={styles.cityList}>
-                                {bestCities.map((city, idx) => (
-                                  <View key={`best-${idx}`} style={styles.cityItem}>
-                                    <Text style={styles.cityRank}>{idx + 1}</Text>
-                                    <Text style={styles.cityName}>{city.name}</Text>
-                                    <View style={styles.cityAqiContainer}>
-                                      <View style={[styles.cityAqiDot, { backgroundColor: city.category.color }]} />
-                                      <Text style={[styles.cityAqiValue, { color: city.category.color }]}>{city.aqi}</Text>
-                                    </View>
-                                  </View>
-                                ))}
-                              </View>
-                            </View>
-                            <View style={styles.bulletinSection}>
-                              <View style={styles.bulletinSectionHeader}>
-                                <View style={[styles.bulletinIndicator, { backgroundColor: '#FF5252' }]} />
-                                <Text style={styles.bulletinSectionTitle}>Worst Air Quality</Text>
-                              </View>
-                              <View style={styles.cityList}>
-                                {worstCities.map((city, idx) => (
-                                  <View key={`worst-${idx}`} style={styles.cityItem}>
-                                    <Text style={styles.cityRank}>{idx + 1}</Text>
-                                    <Text style={styles.cityName}>{city.name}</Text>
-                                    <View style={styles.cityAqiContainer}>
-                                      <View style={[styles.cityAqiDot, { backgroundColor: city.category.color }]} />
-                                      <Text style={[styles.cityAqiValue, { color: city.category.color }]}>{city.aqi}</Text>
-                                    </View>
-                                  </View>
-                                ))}
-                              </View>
-                            </View>
+                      </View>
+                    </LinearGradient>
+                  </View>
+                )}
+
+                {/* Top Bulletins Card - Updated with matching layout */}
+                {topBulletins.length > 0 && (
+                  <View style={styles.bulletinCard}>
+                    <LinearGradient colors={['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.03)', 'rgba(255,255,255,0.01)']} style={styles.cardGradient}>
+                      <View style={styles.cardHeader}>
+                        <View style={styles.cardTitleRow}>
+                          <Text style={styles.cardTitle}>Latest Bulletins</Text>
+                          <View style={styles.headerRightContainer}>
+                            <TouchableOpacity style={styles.seeMoreButton} onPress={() => navigation.navigate('BulletinScreen')}>
+                              <Text style={styles.seeMoreText}>See More</Text>
+                              <Ionicons name="chevron-forward" size={16} color="#00E676" />
+                            </TouchableOpacity>
                           </View>
                         </View>
-                      </LinearGradient>
-                    </View>
-                  )}
-                </View>
+                      </View>
+                      <View style={styles.bulletinContent}>
+                        {topBulletins.map((bulletin, idx) => (
+                          <View key={bulletin._id} style={styles.bulletinPost}>
+                            <TouchableOpacity onPress={() => navigation.navigate('BulletinDetail', { bulletin })} activeOpacity={0.7}>
+                              <View style={styles.bulletinHeader}>
+                                <View style={styles.bulletinIcon}>
+                                  <Text style={styles.bulletinIconText}>{getCategoryIcon(bulletin.category)}</Text>
+                                </View>
+                                <View style={styles.bulletinInfo}>
+                                  <Text style={styles.bulletinTitle}>{bulletin.title}</Text>
+                                  <Text style={styles.bulletinCategory}>{bulletin.category}</Text>
+                                  <Text style={styles.bulletinTime}>{formatTimeAgo(bulletin.createdAt)}</Text>
+                                </View>
+                              </View>
+                              
+                              <Text style={styles.bulletinMessage}>{bulletin.message}</Text>
+                              
+                              {renderPhotoLayout(bulletin.photos)}
+                              
+                              <View style={styles.bulletinFooter}>
+                                <View style={styles.bulletinReactions}>
+                                  <View style={styles.reactionButton}>
+                                    <Ionicons name="thumbs-up-outline" size={16} color="#10B981" style={styles.reactionIcon} />
+                                    <Text style={styles.reactionText}>{bulletin.reactions?.filter(r => r.type === 'upvote').length || 0}</Text>
+                                  </View>
+                                  <View style={styles.reactionButton}>
+                                    <Ionicons name="thumbs-down-outline" size={16} color="#EF4444" style={styles.reactionIcon} />
+                                    <Text style={styles.reactionText}>{bulletin.reactions?.filter(r => r.type === 'downvote').length || 0}</Text>
+                                  </View>
+                                </View>
+                                <Text style={styles.commentCount}>💬 {bulletin.comments?.length || 0} comments</Text>
+                              </View>
+                            </TouchableOpacity>
+                          </View>
+                        ))}
+                      </View>
+                    </LinearGradient>
+                  </View>
+                )}
               </View>
 
               {/* Right Column - Secondary Cards */}
@@ -719,7 +877,8 @@ Format your response as a JSON object with a single 'text' property containing t
                           <Ionicons name="chatbubbles" size={24} color="#00E676" />
                         </View>
                         <Text style={styles.quickActionText}>Chat</Text>
-                      </TouchableOpacity> <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('ReportScreen')}>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('ReportScreen')}>
                         <View style={styles.quickActionIcon}>
                           <Ionicons name="megaphone" size={24} color="#00E676" />
                         </View>
@@ -734,6 +893,8 @@ Format your response as a JSON object with a single 'text' property containing t
                     </View>
                   </LinearGradient>
                 </View>
+
+                {/* Health Tips */}
                 <View style={styles.healthTipsCard}>
                   <LinearGradient colors={['rgba(33,150,243,0.15)', 'rgba(33,150,243,0.08)', 'rgba(33,150,243,0.03)']} style={styles.cardGradient}>
                     <View style={styles.cardHeader}>
@@ -781,17 +942,75 @@ Format your response as a JSON object with a single 'text' property containing t
                     </View>
                   </LinearGradient>
                 </View>
+
+                {/* Top Reports Card */}
+                {topReports.length > 0 && (
+                  <View style={styles.reportsCard}>
+                    <LinearGradient colors={['rgba(255,152,0,0.15)', 'rgba(255,152,0,0.08)', 'rgba(255,152,0,0.03)']} style={styles.cardGradient}>
+                      <View style={styles.cardHeader}>
+                        <View style={styles.cardTitleRow}>
+                          <Text style={styles.cardTitle}>Latest Reports</Text>
+                          <View style={styles.headerRightContainer}>
+                            <TouchableOpacity style={styles.seeMoreButton} onPress={() => navigation.navigate('MyReportScreen')}>
+                              <Text style={styles.seeMoreText}>See More</Text>
+                              <Ionicons name="chevron-forward" size={16} color="#00E676" />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      </View>
+                      <View style={styles.reportsContent}>
+                        {topReports.map((report, idx) => (
+                          <TouchableOpacity key={report._id} style={styles.reportItem} onPress={() => navigation.navigate('MyReportScreen')}>
+                            {report.photo?.url && (
+                              <Image source={{ uri: report.photo.url }} style={styles.reportImage} resizeMode="cover" />
+                            )}
+                            <View style={styles.reportTextContent}>
+                              <View style={styles.reportItemHeader}>
+                                <Text style={styles.reportItemType}>{report.type}</Text>
+                                <Text style={styles.reportItemTime}>
+                                  {new Date(report.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                </Text>
+                              </View>
+                              <Text style={styles.reportItemLocation} numberOfLines={1}>
+                                <Ionicons name="location-outline" size={12} color="rgba(255,255,255,0.6)" />
+                                {' '}{report.location}
+                              </Text>
+                              {report.description && (
+                                <Text style={styles.reportItemDescription} numberOfLines={2}>
+                                  {report.description}
+                                </Text>
+                              )}
+                              <View style={styles.reportItemFooter}>
+                                <View style={[styles.reportStatusBadge, {
+                                  backgroundColor: report.status === 'resolved' ? 'rgba(76,175,80,0.2)' :
+                                    report.status === 'verified' ? 'rgba(33,150,243,0.2)' : 'rgba(255,193,7,0.2)',
+                                  borderColor: report.status === 'resolved' ? '#4CAF50' :
+                                    report.status === 'verified' ? '#2196F3' : '#FFC107'
+                                }]}>
+                                  <Text style={[styles.reportStatusText, {
+                                    color: report.status === 'resolved' ? '#4CAF50' :
+                                      report.status === 'verified' ? '#2196F3' : '#FFC107'
+                                  }]}>
+                                    {report.status.charAt(0).toUpperCase() + report.status.slice(1)}
+                                  </Text>
+                                </View>
+                              </View>
+                            </View>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </LinearGradient>
+                  </View>
+                )}
               </View>
             </View>
-
-            {/* Full Width Cards */}
-
           </ScrollView>
         </SafeAreaView>
       </LinearGradient>
     </View>
   );
 };
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0A0A0A', maxWidth: '100%', alignSelf: 'center', width: '100%', minHeight: '100vh' },
   gradient: { flex: 1 },
@@ -799,20 +1018,12 @@ const styles = StyleSheet.create({
   scrollContent: { paddingBottom: 140, paddingHorizontal: 70, minHeight: '100vh' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { fontSize: 16, color: '#FFFFFF', marginTop: 20, fontWeight: '600' },
-  
-  loadingSpinner: {
-    marginTop: 20
-  },
+  loadingSpinner: { marginTop: 20 },
   header: { paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 32 : 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
   headerContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 32 },
   headerLeft: { flex: 1 },
   brandContainer: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  brandIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(0,230,118,0.15)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(0,230,118,0.3)' },
   brandText: { gap: 2 },
-  brandTitle: { color: '#FFFFFF', fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
-  brandSubtitle: { color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 0.5 },
-  headerCenter: { flex: 1, alignItems: 'center' },
-  dateText: { color: 'rgba(255,255,255,0.7)', fontSize: 14, fontWeight: '500' },
   headerRight: { flex: 1, alignItems: 'flex-end' },
   locationContainer: { alignItems: 'flex-end', gap: 12 },
   locationBadge: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(0,230,118,0.15)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(0,230,118,0.3)' },
@@ -858,14 +1069,12 @@ const styles = StyleSheet.create({
   aqiScale: { color: 'rgba(255,255,255,0.7)', fontSize: 15, fontWeight: '600', letterSpacing: 0.3 },
   advisoryCard: { borderRadius: 24, overflow: 'hidden' },
   advisoryContent: { gap: 16 },
-  advisoryIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(0,230,118,0.15)', justifyContent: 'center', alignItems: 'center', alignSelf: 'flex-start', borderWidth: 1, borderColor: 'rgba(0,230,118,0.3)' },
   advisoryText: { color: 'rgba(255,255,255,0.9)', fontSize: 16, lineHeight: 24, fontWeight: '500' },
   quickActionsCard: { borderRadius: 24, overflow: 'hidden' },
   quickActionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   quickActionBtn: { width: '48%', alignItems: 'center', backgroundColor: 'rgba(0,230,118,0.1)', paddingVertical: 16, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(0,230,118,0.2)' },
   quickActionIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,230,118,0.15)', justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
   quickActionText: { color: 'rgba(255,255,255,0.9)', fontSize: 12, fontWeight: '600' },
-  fullWidthSection: { gap: 24, paddingTop: 12 },
   healthTipsCard: { borderRadius: 24, overflow: 'hidden', marginBottom: -13 },
   healthTipsContent: { gap: 16 },
   tipCard: { flexDirection: 'row', alignItems: 'center', gap: 16, backgroundColor: 'rgba(33,150,243,0.1)', paddingHorizontal: 16, paddingVertical: 14, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(33,150,243,0.2)' },
@@ -873,6 +1082,9 @@ const styles = StyleSheet.create({
   tipContent: { flex: 1 },
   tipTitle: { color: '#FFFFFF', fontSize: 14, fontWeight: '700', marginBottom: 4 },
   tipDescription: { color: 'rgba(255,255,255,0.8)', fontSize: 12, lineHeight: 16 },
+  headerRightContainer: { flexDirection: 'row', alignItems: 'center' },
+  seeMoreButton: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8 },
+  seeMoreText: { color: '#00E676', fontSize: 12, fontWeight: '600', marginRight: 4 },
   bulletinCard: { borderRadius: 24, overflow: 'hidden', paddingBottom: 25 },
   bulletinContent: { gap: 20 },
   bulletinGrid: { flexDirection: 'row', gap: 32, '@media (max-width: 768px)': { flexDirection: 'column', gap: 24 } },
@@ -887,6 +1099,58 @@ const styles = StyleSheet.create({
   cityAqiContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   cityAqiDot: { width: 8, height: 8, borderRadius: 4 },
   cityAqiValue: { fontSize: 14, fontWeight: '700', minWidth: 32, textAlign: 'center' },
+  
+  // Updated bulletin post styles matching AdminDashboard
+  bulletinPost: { 
+    backgroundColor: 'rgba(255,255,255,0.04)', 
+    borderRadius: 16, 
+    padding: 20, 
+    marginBottom: 16, 
+    borderWidth: 1, 
+    borderColor: 'rgba(0,230,118,0.1)' 
+  },
+  bulletinHeader: { flexDirection: 'row', marginBottom: 16, alignItems: 'flex-start' },
+  bulletinIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#3b82f6', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
+  bulletinIconText: { fontSize: 20, color: '#ffffff' },
+  bulletinInfo: { flex: 1 },
+  bulletinTitle: { fontSize: 16, fontWeight: '600', color: '#FFFFFF', marginBottom: 4, lineHeight: 20 },
+  bulletinCategory: { fontSize: 14, color: 'rgba(255,255,255,0.6)', fontWeight: '500', marginBottom: 4 },
+  bulletinTime: { fontSize: 12, color: 'rgba(255,255,255,0.4)', fontWeight: '400' },
+  bulletinMessage: { fontSize: 15, color: 'rgba(255,255,255,0.8)', lineHeight: 22, marginBottom: 16 },
+  
+  // Photo layout styles matching AdminDashboard
+  photoContainer: { marginBottom: 20, borderRadius: 16, overflow: 'hidden' },
+  singlePhoto: { width: '100%', height: 200, resizeMode: 'cover' },
+  mainPhoto: { width: '100%', height: 180, resizeMode: 'cover', marginBottom: 4 },
+  photoRow: { flexDirection: 'row', gap: 4 },
+  halfPhoto: { flex: 1, height: 120, resizeMode: 'cover' },
+  morePhotosContainer: { flex: 1, position: 'relative' },
+  blurredPhoto: { position: 'relative' },
+  morePhotosOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  morePhotosText: { color: '#ffffff', fontSize: 18, fontWeight: '700' },
+  
+  bulletinFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 16, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)' },
+  bulletinReactions: { flexDirection: 'row', gap: 20, alignItems: 'center' },
+  reactionButton: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6 },
+  reactionIcon: { marginRight: 4 },
+  reactionText: { fontSize: 14, color: 'rgba(255,255,255,0.6)', fontWeight: '500' },
+  commentCount: { fontSize: 14, color: 'rgba(255,255,255,0.6)', fontWeight: '500' },
+  
+  reportsCard: { borderRadius: 24, overflow: 'hidden', marginBottom: -13 },
+  reportsContent: { gap: 16 },
+  reportItem: { backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,152,0,0.1)' },
+  reportImage: { width: '100%', height: 120, borderTopLeftRadius: 12, borderTopRightRadius: 12 },
+  reportTextContent: { padding: 16 },
+  reportItemHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  reportItemType: { fontSize: 14, fontWeight: '600', color: '#FFFFFF', flex: 1 },
+  reportItemTime: { fontSize: 12, color: 'rgba(255,255,255,0.5)', marginLeft: 12 },
+  reportItemLocation: { fontSize: 12, color: 'rgba(255,255,255,0.6)', lineHeight: 16, marginBottom: 8 },
+  reportItemDescription: { fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 18, marginBottom: 12 },
+  reportItemFooter: { flexDirection: 'row', justifyContent: 'flex-start' },
+  reportStatusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1 },
+  reportStatusText: { fontSize: 11, fontWeight: '600' },
+  
   '@media (max-width: 100%)': { mainGrid: { flexDirection: 'column' }, leftColumn: { flex: 1 }, rightColumn: { flex: 1 } },
 });
+
 export default HomeScreen;

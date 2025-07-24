@@ -55,7 +55,7 @@ const BulletinDetail = ({ route, navigation }) => {
   const fetchBulletinDetails = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await getBulletinById(bulletin._id);
+      const data = await getBulletinById(initialBulletin._id); // Use initialBulletin._id here
       setBulletin(data);
     } catch (error) {
       Alert.alert('Error', error.message || 'Failed to fetch bulletin details');
@@ -63,7 +63,7 @@ const BulletinDetail = ({ route, navigation }) => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [bulletin._id]);
+  }, [initialBulletin._id]);
 
   useEffect(() => {
     fetchBulletinDetails();
@@ -92,6 +92,11 @@ const BulletinDetail = ({ route, navigation }) => {
     } finally {
       setIsSubmittingComment(false);
     }
+  };
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    fetchBulletinDetails();
   };
 
   const openImageViewer = (index) => {
@@ -166,40 +171,54 @@ const BulletinDetail = ({ route, navigation }) => {
     }
   };
 
-  const renderImageViewer = () => (
-    <Modal visible={imageViewerVisible} transparent animationType="fade">
-      <View style={styles.imageViewerContainer}>
-        <TouchableOpacity 
-          style={[styles.closeButton, { top: insets.top + 10 }]} 
-          onPress={() => setImageViewerVisible(false)}
-        >
-          <Ionicons name="close" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
+const renderImageViewer = () => (
+  <Modal visible={imageViewerVisible} transparent animationType="fade">
+    <View style={styles.imageViewerContainer}>
+      <TouchableOpacity 
+        style={[styles.closeButton, { top: insets.top + 10 }]} 
+        onPress={() => setImageViewerVisible(false)}
+      >
+        <Ionicons name="close" size={24} color="#FFFFFF" />
+      </TouchableOpacity>
+      
+      <View style={styles.imageListContainer}>
         <FlatList
           data={bulletin.photos}
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
           initialScrollIndex={selectedImageIndex}
+          contentContainerStyle={styles.flatListContent}
           getItemLayout={(data, index) => ({
             length: SCREEN_WIDTH,
             offset: SCREEN_WIDTH * index,
             index
           })}
           renderItem={({ item }) => (
-            <Image source={{ uri: item.url }} style={styles.fullscreenImage} resizeMode="contain" />
+            <View style={styles.imageItem}>
+              <Image 
+                source={{ uri: item.url }} 
+                style={styles.fullscreenImage} 
+                resizeMode="contain"
+              />
+            </View>
           )}
           keyExtractor={(item, index) => index.toString()}
+          onMomentumScrollEnd={(e) => {
+            const newIndex = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+            setSelectedImageIndex(newIndex);
+          }}
         />
-        <View style={[styles.imageCounter, { bottom: insets.bottom + 50 }]}>
-          <Text style={styles.imageCounterText}>
-            {selectedImageIndex + 1} / {bulletin.photos?.length}
-          </Text>
-        </View>
       </View>
-    </Modal>
-  );
-
+      
+      <View style={[styles.imageCounter, { bottom: insets.bottom + 20 }]}>
+        <Text style={styles.imageCounterText}>
+          {selectedImageIndex + 1} / {bulletin.photos?.length}
+        </Text>
+      </View>
+    </View>
+  </Modal>
+);
   const renderCommentModal = () => (
     <Modal
       visible={commentModalVisible}
@@ -294,138 +313,159 @@ const BulletinDetail = ({ route, navigation }) => {
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <View style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
+        <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
         <LinearGradient colors={['#0A0A0A', '#1A1A2E', '#16213E']} style={styles.gradient}>
           <SafeAreaView style={styles.safeArea}>
-            <View style={[styles.header, { paddingTop: insets.top }]}>
+            {/* Header */}
+            <View style={styles.header}>
               <TouchableOpacity style={styles.backButton} onPress={() => navigation.navigate('BulletinScreen')}>
                 <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
               </TouchableOpacity>
-              <Text style={styles.headerTitle}>Bulletin Details</Text>
+              <View style={styles.headerCenter}>
+                <Text style={styles.headerTitle}>Bulletin Details</Text>
+                <Text style={styles.headerSubtitle}>{bulletin.category}</Text>
+              </View>
               <TouchableOpacity style={styles.shareButton}>
                 <Ionicons name="share-outline" size={22} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
 
-            <ScrollView 
-              style={styles.scrollView}
-              contentContainerStyle={[styles.scrollViewContent, { paddingBottom: insets.bottom + 20 }]}
-              refreshControl={
-                <RefreshControl 
-                  refreshing={refreshing} 
-                  onRefresh={() => {
-                    setRefreshing(true); 
-                    fetchBulletinDetails();
-                  }} 
-                  tintColor="#00E676" 
-                />
-              }
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={styles.bulletinContainer}>
-                <View style={styles.bulletinHeader}>
-                  <View style={styles.bulletinIcon}>
-                    <Text style={styles.bulletinIconText}>
-                      {getCategoryIcon(bulletin.category)}
-                    </Text>
-                  </View>
-                  <View style={styles.bulletinInfo}>
-                    <Text style={styles.bulletinTitle}>{bulletin.title}</Text>
-                    <View style={styles.bulletinMeta}>
-                      <Text style={styles.bulletinAuthor}>{bulletin.createdBy.name}</Text>
-                      <Text style={styles.bulletinSeparator}>•</Text>
-                      <Text style={styles.bulletinTime}>{formatTimeAgo(bulletin.createdAt)}</Text>
-                      <Text style={styles.bulletinSeparator}>•</Text>
-                      <Text style={styles.bulletinCategory}>{bulletin.category}</Text>
+            {/* Main Container */}
+            <View style={styles.mainContainer}>
+              {/* Left Sidebar - Bulletin Info */}
+              <View style={styles.sidebar}>
+                <View style={styles.bulletinInfoCard}>
+                  <View style={styles.bulletinHeader}>
+                    <View style={styles.bulletinIcon}>
+                      <Text style={styles.bulletinIconText}>
+                        {getCategoryIcon(bulletin.category)}
+                      </Text>
+                    </View>
+                    <View style={styles.bulletinInfo}>
+                      <Text style={styles.bulletinTitle}>{bulletin.title}</Text>
+                      <View style={styles.bulletinMeta}>
+                        <Text style={styles.bulletinAuthor}>{bulletin.createdBy.name}</Text>
+                        <Text style={styles.bulletinTime}>{formatTimeAgo(bulletin.createdAt)}</Text>
+                        <View style={styles.categoryBadge}>
+                          <Text style={styles.categoryBadgeText}>{bulletin.category}</Text>
+                        </View>
+                      </View>
                     </View>
                   </View>
-                </View>
 
-                <Text style={styles.bulletinMessage}>{bulletin.message}</Text>
-                
-                <View style={styles.photoContainer}>
-                  {renderPhotoLayout(bulletin.photos)}
-                </View>
+                  <Text style={styles.bulletinMessage}>{bulletin.message}</Text>
 
-                <View style={styles.reactionsSummary}>
-                  <View style={styles.reactionsSummaryLeft}>
-                    {totalReactions > 0 && (
-                      <View style={styles.reactionIcons}>
-                        {upvoteCount > 0 && (
-                          <View style={styles.reactionIcon}>
-                            <Ionicons name="thumbs-up" size={12} color="#10B981" />
-                          </View>
-                        )}
-                        {downvoteCount > 0 && (
-                          <View style={styles.reactionIcon}>
-                            <Ionicons name="thumbs-down" size={12} color="#EF4444" />
-                          </View>
-                        )}
+                  {/* Reactions Summary */}
+                  <View style={styles.reactionsSummary}>
+                    <View style={styles.reactionsSummaryLeft}>
+                      {totalReactions > 0 && (
+                        <View style={styles.reactionIcons}>
+                          {upvoteCount > 0 && (
+                            <View style={styles.reactionIcon}>
+                              <Ionicons name="thumbs-up" size={12} color="#10B981" />
+                            </View>
+                          )}
+                          {downvoteCount > 0 && (
+                            <View style={styles.reactionIcon}>
+                              <Ionicons name="thumbs-down" size={12} color="#EF4444" />
+                            </View>
+                          )}
+                        </View>
+                      )}
+                      <Text style={styles.reactionCount}>{totalReactions} reactions</Text>
+                    </View>
+                    <Text style={styles.commentCount}>
+                      {commentsCount} comment{commentsCount !== 1 ? 's' : ''}
+                    </Text>
+                  </View>
+
+                  {/* Action Buttons */}
+                  <View style={styles.actionButtons}>
+                    <TouchableOpacity 
+                      style={[styles.actionButton, userReaction === 'upvote' && styles.activeUpvote]}
+                      onPress={() => handleReaction('upvote')}
+                    >
+                      <Ionicons 
+                        name="thumbs-up-outline" 
+                        size={16} 
+                        color={userReaction === 'upvote' ? '#10B981' : 'rgba(255,255,255,0.6)'} 
+                      />
+                      <Text style={[styles.actionButtonText, userReaction === 'upvote' && { color: '#10B981' }]}>
+                        {upvoteCount} upvote
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity 
+                      style={[styles.actionButton, userReaction === 'downvote' && styles.activeDownvote]}
+                      onPress={() => handleReaction('downvote')}
+                    >
+                      <Ionicons 
+                        name="thumbs-down-outline" 
+                        size={16} 
+                        color={userReaction === 'downvote' ? '#EF4444' : 'rgba(255,255,255,0.6)'} 
+                      />
+                      <Text style={[styles.actionButtonText, userReaction === 'downvote' && { color: '#EF4444' }]}>
+                        {downvoteCount} downvote
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity 
+                      style={styles.actionButton}
+                      onPress={() => setCommentModalVisible(true)}
+                    >
+                      <Ionicons name="chatbubble-outline" size={16} color="rgba(255,255,255,0.6)" />
+                      <Text style={styles.actionButtonText}>Comment</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+
+              {/* Main Content - Photos and Comments */}
+              <View style={styles.content}>
+                <ScrollView 
+                  style={styles.scrollView}
+                  contentContainerStyle={[styles.scrollViewContent, { paddingBottom: insets.bottom + 20 }]}
+                  refreshControl={
+                    <RefreshControl 
+                      refreshing={refreshing} 
+                      onRefresh={handleRefresh} 
+                      tintColor="#00E676" 
+                    />
+                  }
+                  showsVerticalScrollIndicator={false}
+                >
+                  {/* Photos Section */}
+                  {bulletin.photos && bulletin.photos.length > 0 && (
+                    <View style={styles.photosSection}>
+                      <Text style={styles.sectionTitle}>Photos ({bulletin.photos.length})</Text>
+                      <View style={styles.photoContainer}>
+                        {renderPhotoLayout(bulletin.photos)}
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Comments Section */}
+                  <View style={styles.commentsSection}>
+                    <Text style={styles.sectionTitle}>Comments ({commentsCount})</Text>
+                    {commentsCount > 0 ? (
+                      <FlatList
+                        data={bulletin.comments}
+                        renderItem={renderComment}
+                        keyExtractor={(item, index) => item._id || index.toString()}
+                        scrollEnabled={false}
+                        ItemSeparatorComponent={() => <View style={styles.commentSeparator} />}
+                      />
+                    ) : (
+                      <View style={styles.noCommentsContainer}>
+                        <Ionicons name="chatbubble-outline" size={48} color="rgba(255,255,255,0.3)" />
+                        <Text style={styles.noCommentsText}>No comments yet</Text>
+                        <Text style={styles.noCommentsSubtext}>Be the first to comment!</Text>
                       </View>
                     )}
-                    <Text style={styles.reactionCount}>{totalReactions}</Text>
                   </View>
-                  <Text style={styles.commentCount}>
-                    {commentsCount} comment{commentsCount !== 1 ? 's' : ''}
-                  </Text>
-                </View>
-
-                <View style={styles.actionButtons}>
-                  <TouchableOpacity 
-                    style={[styles.actionButton, userReaction === 'upvote' && styles.activeUpvote]}
-                    onPress={() => handleReaction('upvote')}
-                  >
-                    <Ionicons 
-                      name="thumbs-up-outline" 
-                      size={18} 
-                      color={userReaction === 'upvote' ? '#10B981' : 'rgba(255,255,255,0.6)'} 
-                    />
-                    <Text style={[styles.actionButtonText, userReaction === 'upvote' && { color: '#10B981' }]}>
-                      Upvote
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity 
-                    style={[styles.actionButton, userReaction === 'downvote' && styles.activeDownvote]}
-                    onPress={() => handleReaction('downvote')}
-                  >
-                    <Ionicons 
-                      name="thumbs-down-outline" 
-                      size={18} 
-                      color={userReaction === 'downvote' ? '#EF4444' : 'rgba(255,255,255,0.6)'} 
-                    />
-                    <Text style={[styles.actionButtonText, userReaction === 'downvote' && { color: '#EF4444' }]}>
-                      Downvote
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity 
-                    style={styles.actionButton}
-                    onPress={() => setCommentModalVisible(true)}
-                  >
-                    <Ionicons name="chatbubble-outline" size={18} color="rgba(255,255,255,0.6)" />
-                    <Text style={styles.actionButtonText}>Comment</Text>
-                  </TouchableOpacity>
-                </View>
+                </ScrollView>
               </View>
-
-              <View style={styles.commentsSection}>
-                <Text style={styles.commentsTitle}>Comments ({commentsCount})</Text>
-                {commentsCount > 0 ? (
-                  <FlatList
-                    data={bulletin.comments}
-                    renderItem={renderComment}
-                    keyExtractor={(item, index) => item._id || index.toString()}
-                    scrollEnabled={false}
-                  />
-                ) : (
-                  <View style={styles.noCommentsContainer}>
-                    <Text style={styles.noCommentsText}>No comments yet</Text>
-                    <Text style={styles.noCommentsSubtext}>Be the first to comment!</Text>
-                  </View>
-                )}
-              </View>
-            </ScrollView>
+            </View>
           </SafeAreaView>
         </LinearGradient>
         
@@ -440,32 +480,55 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0A0A0A' },
   gradient: { flex: 1 },
   safeArea: { flex: 1 },
+
+  // Header (similar to BulletinFeed)
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    paddingHorizontal: 24,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 12 : 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
   },
-  backButton: { padding: 8 },
-  headerTitle: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
-  shareButton: { padding: 8 },
-  scrollView: { flex: 1 },
-  scrollViewContent: { flexGrow: 1 },
-  bulletinContainer: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    margin: 16,
+  backButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerCenter: { flex: 1, alignItems: 'center' },
+  headerTitle: { fontSize: 24, fontWeight: '700', color: '#FFFFFF', letterSpacing: -0.5 },
+  headerSubtitle: { fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 2 },
+  shareButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // Main Layout (similar to BulletinFeed)
+  mainContainer: { flex: 1, flexDirection: 'row', paddingHorizontal: 70, paddingVertical: 16, gap: 20 },
+  sidebar: { width: 280 },
+  content: { flex: 1 },
+
+  // Bulletin Info Card
+  bulletinInfoCard: {
+    backgroundColor: 'rgba(255,255,255,0.04)',
     borderRadius: 12,
     padding: 16,
-    borderColor: 'rgba(0,230,118,0.2)',
     borderWidth: 1,
+    borderColor: 'rgba(0,230,118,0.15)',
   },
-  bulletinHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 },
+  bulletinHeader: { flexDirection: 'row', marginBottom: 12 },
   bulletinIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#00E676',
     justifyContent: 'center',
     alignItems: 'center',
@@ -473,31 +536,21 @@ const styles = StyleSheet.create({
   },
   bulletinIconText: { fontSize: 16 },
   bulletinInfo: { flex: 1 },
-  bulletinTitle: { fontSize: 16, fontWeight: '700', color: '#FFFFFF', marginBottom: 4, lineHeight: 22 },
-  bulletinMeta: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
-  bulletinAuthor: { fontSize: 12, color: 'rgba(255,255,255,0.8)', fontWeight: '500' },
-  bulletinSeparator: { fontSize: 12, color: 'rgba(255,255,255,0.6)', marginHorizontal: 6 },
-  bulletinTime: { fontSize: 12, color: 'rgba(255,255,255,0.6)' },
-  bulletinCategory: { fontSize: 12, color: 'rgba(255,255,255,0.6)' },
-  bulletinMessage: { fontSize: 14, color: 'rgba(255,255,255,0.9)', lineHeight: 20, marginBottom: 12 },
-  photoContainer: { marginBottom: 12, borderRadius: 8, overflow: 'hidden' },
-  singlePhoto: { width: '100%', height: 200, resizeMode: 'cover' },
-  mainPhoto: { width: '100%', height: 160, resizeMode: 'cover', marginBottom: 2 },
-  photoRow: { flexDirection: 'row', gap: 2 },
-  halfPhotoContainer: { flex: 1 },
-  halfPhoto: { width: '100%', height: 120, resizeMode: 'cover' },
-  blurredPhoto: { position: 'relative' },
-  morePhotosOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
+  bulletinTitle: { fontSize: 15, fontWeight: '700', color: '#FFFFFF', marginBottom: 4, lineHeight: 20 },
+  bulletinMeta: { flexDirection: 'column', gap: 4 },
+  bulletinAuthor: { fontSize: 12, color: '#00E676', fontWeight: '600' },
+  bulletinTime: { fontSize: 12, color: 'rgba(255,255,255,0.5)' },
+  categoryBadge: {
+    backgroundColor: 'rgba(0,230,118,0.12)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
   },
-  morePhotosText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
+  categoryBadgeText: { fontSize: 10, color: '#00E676', fontWeight: '600' },
+  bulletinMessage: { fontSize: 14, color: 'rgba(255,255,255,0.8)', lineHeight: 20, marginBottom: 16 },
+
+  // Reactions Summary
   reactionsSummary: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -505,6 +558,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.1)',
+    marginBottom: 12,
   },
   reactionsSummaryLeft: { flexDirection: 'row', alignItems: 'center' },
   reactionIcons: { flexDirection: 'row', marginRight: 6 },
@@ -519,24 +573,54 @@ const styles = StyleSheet.create({
   },
   reactionCount: { fontSize: 12, color: 'rgba(255,255,255,0.8)' },
   commentCount: { fontSize: 12, color: 'rgba(255,255,255,0.8)' },
-  actionButtons: { flexDirection: 'row', paddingTop: 8, gap: 6 },
+
+  // Action Buttons
+  actionButtons: { flexDirection: 'column', gap: 8 },
   actionButton: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 6,
+    borderRadius: 8,
     backgroundColor: 'rgba(255,255,255,0.05)',
-    gap: 4,
+    gap: 8,
   },
   activeUpvote: { backgroundColor: 'rgba(16,185,129,0.15)' },
   activeDownvote: { backgroundColor: 'rgba(239,68,68,0.15)' },
-  actionButtonText: { fontSize: 12, color: 'rgba(255,255,255,0.8)', fontWeight: '500' },
-  commentsSection: { paddingHorizontal: 16, paddingBottom: 10 },
-  commentsTitle: { fontSize: 16, fontWeight: '600', color: '#FFFFFF', marginBottom: 12 },
-  commentItem: { flexDirection: 'row', marginBottom: 12, alignItems: 'flex-start' },
+  actionButtonText: { fontSize: 12, color: 'rgba(255,255,255,0.8)', fontWeight: '600' },
+
+  // Main Content
+  scrollView: { flex: 1 },
+  scrollViewContent: { flexGrow: 1 },
+
+  // Sections
+  sectionTitle: { fontSize: 16, fontWeight: '600', color: '#FFFFFF', marginBottom: 12 },
+  
+  // Photos Section
+  photosSection: { marginBottom: 24 },
+  photoContainer: { borderRadius: 8, overflow: 'hidden' },
+  singlePhoto: { width: '100%', height: 400, resizeMode: 'cover' },
+  mainPhoto: { width: '100%', height: 300, resizeMode: 'cover', marginBottom: 2 },
+  photoRow: { flexDirection: 'row', gap: 2 },
+  halfPhotoContainer: { flex: 1 },
+  halfPhoto: { width: '100%', height: 280, resizeMode: 'cover' },
+  blurredPhoto: { position: 'relative' },
+  morePhotosOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  morePhotosText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
+
+  // Comments Section
+  commentsSection: {},
+  commentItem: { flexDirection: 'row', alignItems: 'flex-start' },
   commentAvatar: {
     width: 32,
     height: 32,
@@ -552,28 +636,53 @@ const styles = StyleSheet.create({
   commentAuthor: { fontSize: 12, fontWeight: '600', color: '#FFFFFF', marginBottom: 2 },
   commentText: { fontSize: 13, color: 'rgba(255,255,255,0.9)', lineHeight: 18 },
   commentTime: { fontSize: 11, color: 'rgba(255,255,255,0.6)', marginLeft: 10 },
-  noCommentsContainer: { alignItems: 'center', paddingVertical: 24 },
-  noCommentsText: { fontSize: 14, color: 'rgba(255,255,255,0.8)', fontWeight: '500', marginBottom: 2 },
+  commentSeparator: { height: 12 },
+  noCommentsContainer: { alignItems: 'center', paddingVertical: 40 },
+  noCommentsText: { fontSize: 14, color: 'rgba(255,255,255,0.8)', fontWeight: '500', marginTop: 12, marginBottom: 2 },
   noCommentsSubtext: { fontSize: 12, color: 'rgba(255,255,255,0.6)' },
-  imageViewerContainer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center' },
-  closeButton: {
-    position: 'absolute',
-    right: 20,
-    zIndex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 20,
-    padding: 10,
-  },
-  fullscreenImage: { width: SCREEN_WIDTH, height: '100%' },
-  imageCounter: {
-    position: 'absolute',
-    alignSelf: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  imageCounterText: { color: '#FFFFFF', fontSize: 12, fontWeight: '500' },
+
+  // Image Viewer
+imageViewerContainer: { 
+  flex: 1, 
+  backgroundColor: 'rgba(0,0,0,0.95)',
+},
+closeButton: {
+  position: 'absolute',
+  right: 20,
+  zIndex: 1,
+  backgroundColor: 'rgba(0,0,0,0.5)',
+  borderRadius: 20,
+  padding: 10,
+},
+imageContentContainer: {
+  flex: 1,
+  justifyContent: 'center',
+  paddingHorizontal: 20, // Add some padding on sides
+},
+imageItem: {
+  width: SCREEN_WIDTH - 40, // Account for padding
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+fullscreenImage: {
+  width: '100%',
+  height: undefined,
+  aspectRatio: 2,
+  maxHeight: '80%', // Reduced from 80% to make smaller
+},
+imageCounter: {
+  position: 'absolute',
+  alignSelf: 'center',
+  backgroundColor: 'rgba(0,0,0,0.5)',
+  paddingHorizontal: 12,
+  paddingVertical: 6,
+  borderRadius: 16,
+},
+imageCounterText: { 
+  color: '#FFFFFF', 
+  fontSize: 14, 
+  fontWeight: '500' 
+},
   // Comment Modal Styles
   modalOverlay: {
     flex: 1,

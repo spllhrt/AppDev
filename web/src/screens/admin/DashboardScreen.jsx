@@ -145,7 +145,7 @@ const AdminDashboard = ({ navigation }) => {
         totalBulletins: bulletins.length,
       });
 
-      setRecentReports(reports.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 5));
+      setRecentReports(reports.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 3));
       setRecentBulletins(bulletins.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 3));
       
       await fetchAQIData();
