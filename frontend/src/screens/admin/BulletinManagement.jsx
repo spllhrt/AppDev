@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, TextInput, Image, Alert, Acti
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from '@react-navigation/native';
-import { createBulletin, getAllBulletins, deleteBulletin, updateBulletin } from '../../api/bulletin';
+import { createBulletin, getAllBulletins, deleteBulletin, updateBulletin, getBulletinById } from '../../api/bulletin';
 
 const { width, height } = Dimensions.get('window');
 
@@ -13,11 +13,14 @@ const AdminBulletinManagement = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [updateModalVisible, setUpdateModalVisible] = useState(false);
+  const [viewModalVisible, setViewModalVisible] = useState(false);
   const [selectedImages, setSelectedImages] = useState([]);
   const [formData, setFormData] = useState({ title: '', category: '', message: '' });
   const [editingBulletin, setEditingBulletin] = useState(null);
+  const [viewingBulletin, setViewingBulletin] = useState(null);
   const [creating, setCreating] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [loadingBulletin, setLoadingBulletin] = useState(false);
   const [previewImage, setPreviewImage] = useState(null);
 
   const categories = ['Environmental Alert', 'Weather Update', 'Public Safety', 'Emergency', 'Event Notice', 'Service Disruption', 'Health Advisory', 'Traffic Alert', 'Community Announcement', 'General'];
@@ -34,6 +37,18 @@ const AdminBulletinManagement = () => {
       setBulletins([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchBulletinDetails = async (bulletinId) => {
+    try {
+      setLoadingBulletin(true);
+      const data = await getBulletinById(bulletinId);
+      setViewingBulletin(data);
+    } catch (error) {
+      Alert.alert('Error', error.message || 'Failed to fetch bulletin details');
+    } finally {
+      setLoadingBulletin(false);
     }
   };
 
@@ -130,6 +145,12 @@ const AdminBulletinManagement = () => {
     }
   };
 
+  const handleViewBulletin = async (bulletin) => {
+    setViewingBulletin(bulletin);
+    setViewModalVisible(true);
+    await fetchBulletinDetails(bulletin._id);
+  };
+
   const handleEditBulletin = (bulletin) => {
     setEditingBulletin(bulletin);
     setFormData({ title: bulletin.title || '', category: bulletin.category || '', message: bulletin.message || '' });
@@ -170,6 +191,159 @@ const AdminBulletinManagement = () => {
     return colors[category] || '#6366F1';
   };
 
+  const renderComment = (comment, index) => (
+    <View key={comment._id || index} style={styles.commentItem}>
+      <View style={styles.commentHeader}>
+        <View style={styles.commentUserInfo}>
+          <View style={styles.commentAvatar}>
+            <Text style={styles.commentAvatarText}>
+              {comment.user?.name?.charAt(0)?.toUpperCase() || 'U'}
+            </Text>
+          </View>
+          <View style={styles.commentMeta}>
+            <Text style={styles.commentUserName}>{comment.user?.name || 'Unknown User'}</Text>
+            <Text style={styles.commentDate}>{formatDate(comment.createdAt)}</Text>
+          </View>
+        </View>
+      </View>
+      <Text style={styles.commentText}>{comment.content}</Text>
+    </View>
+  );
+
+  const renderViewModal = () => (
+    <Modal 
+      visible={viewModalVisible} 
+      animationType="slide" 
+      presentationStyle="pageSheet"
+      onRequestClose={() => {
+        setViewModalVisible(false);
+        setViewingBulletin(null);
+      }}
+    >
+      <View style={styles.modalContainer}>
+        <View style={styles.modalHeader}>
+          <TouchableOpacity 
+            onPress={() => { 
+              setViewModalVisible(false);
+              setViewingBulletin(null);
+            }}
+            style={styles.closeButton}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="close" size={24} color="#374151" />
+          </TouchableOpacity>
+          <Text style={styles.modalTitle}>View Bulletin</Text>
+          <View style={styles.viewHeaderActions}>
+            <TouchableOpacity 
+              onPress={() => {
+                setViewModalVisible(false);
+                handleEditBulletin(viewingBulletin);
+              }}
+              style={styles.editActionButton}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="create-outline" size={20} color="#3B82F6" />
+            </TouchableOpacity>
+          </View>
+        </View>
+        
+        <ScrollView 
+          style={styles.modalContent}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.viewModalContentContainer}
+        >
+          {loadingBulletin ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#3B82F6" />
+              <Text style={styles.loadingText}>Loading bulletin details...</Text>
+            </View>
+          ) : viewingBulletin ? (
+            <>
+              {/* Bulletin Content */}
+              <View style={styles.viewBulletinCard}>
+                <View style={styles.viewBulletinHeader}>
+                  <Text style={styles.viewBulletinTitle}>{viewingBulletin.title}</Text>
+                  <View style={[styles.categoryBadge, { backgroundColor: getCategoryColor(viewingBulletin.category) }]}>
+                    <Text style={styles.categoryText}>{viewingBulletin.category}</Text>
+                  </View>
+                </View>
+                
+                <Text style={styles.viewBulletinMessage}>{viewingBulletin.message}</Text>
+                
+                {viewingBulletin.photos?.length > 0 && (
+                  <View style={styles.viewPhotosContainer}>
+                    <Text style={styles.viewSectionTitle}>Photos</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      <View style={styles.viewPhotosRow}>
+                        {viewingBulletin.photos.map((photo, index) => (
+                          <TouchableOpacity 
+                            key={index} 
+                            onPress={() => setPreviewImage(photo.url)} 
+                            activeOpacity={0.8}
+                          >
+                            <Image source={{ uri: photo.url }} style={styles.viewBulletinPhoto} />
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </ScrollView>
+                  </View>
+                )}
+                
+                <View style={styles.viewBulletinFooter}>
+                  <Text style={styles.viewCreatedBy}>Created by: {viewingBulletin.createdBy?.name || 'Unknown'}</Text>
+                  <Text style={styles.viewCreatedAt}>{formatDate(viewingBulletin.createdAt)}</Text>
+                </View>
+                
+                <View style={styles.viewStatsContainer}>
+                  <View style={styles.statItem}>
+                    <Ionicons name="thumbs-up-outline" size={18} color="#10B981" />
+                    <Text style={styles.viewStatText}>
+                      {viewingBulletin.reactions?.filter(r => r.type === 'upvote').length || 0} Upvotes
+                    </Text>
+                  </View>
+                  <View style={styles.statItem}>
+                    <Ionicons name="thumbs-down-outline" size={18} color="#EF4444" />
+                    <Text style={styles.viewStatText}>
+                      {viewingBulletin.reactions?.filter(r => r.type === 'downvote').length || 0} Downvotes
+                    </Text>
+                  </View>
+                  <View style={styles.statItem}>
+                    <Ionicons name="chatbubble-outline" size={18} color="#6B7280" />
+                    <Text style={styles.viewStatText}>
+                      {viewingBulletin.comments?.length || 0} Comments
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Comments Section */}
+              <View style={styles.commentsSection}>
+                <View style={styles.commentsSectionHeader}>
+                  <Text style={styles.commentsSectionTitle}>
+                    Comments ({viewingBulletin.comments?.length || 0})
+                  </Text>
+                  <Ionicons name="chatbubbles-outline" size={20} color="#6B7280" />
+                </View>
+                
+                {viewingBulletin.comments?.length > 0 ? (
+                  <View style={styles.commentsList}>
+                    {viewingBulletin.comments.map((comment, index) => renderComment(comment, index))}
+                  </View>
+                ) : (
+                  <View style={styles.noCommentsContainer}>
+                    <Ionicons name="chatbubble-outline" size={48} color="#D1D5DB" />
+                    <Text style={styles.noCommentsText}>No comments yet</Text>
+                    <Text style={styles.noCommentsSubtext}>Be the first to start a conversation</Text>
+                  </View>
+                )}
+              </View>
+            </>
+          ) : null}
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+
   const renderBulletinItem = (item) => {
     if (!item?._id) return null;
     return (
@@ -182,6 +356,9 @@ const AdminBulletinManagement = () => {
             </View>
           </View>
           <View style={styles.actionButtons}>
+            <TouchableOpacity style={styles.viewButton} onPress={() => handleViewBulletin(item)} activeOpacity={0.7}>
+              <Ionicons name="eye-outline" size={20} color="#10B981" />
+            </TouchableOpacity>
             <TouchableOpacity style={styles.editButton} onPress={() => handleEditBulletin(item)} activeOpacity={0.7}>
               <Ionicons name="create-outline" size={20} color="#3B82F6" />
             </TouchableOpacity>
@@ -428,6 +605,7 @@ const AdminBulletinManagement = () => {
       
       {renderFormModal(false)}
       {renderFormModal(true)}
+      {renderViewModal()}
       {renderImagePreview()}
     </View>
   );
@@ -516,6 +694,13 @@ const styles = StyleSheet.create({
   actionButtons: { 
     flexDirection: 'row', 
     gap: 6 
+  },
+  viewButton: { 
+    padding: 10,
+    backgroundColor: '#ECFDF5',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#A7F3D0'
   },
   editButton: { 
     padding: 10,
@@ -629,6 +814,17 @@ const styles = StyleSheet.create({
     fontWeight: '700', 
     color: '#1E293B' 
   },
+  viewHeaderActions: {
+    flexDirection: 'row',
+    gap: 8
+  },
+  editActionButton: {
+    padding: 6,
+    borderRadius: 10,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#DBEAFE'
+  },
   saveButtonContainer: {
     backgroundColor: '#3B82F6',
     paddingHorizontal: 12,
@@ -650,6 +846,10 @@ const styles = StyleSheet.create({
     flex: 1 
   },
   modalContentContainer: {
+    padding: 16,
+    paddingBottom: 32
+  },
+  viewModalContentContainer: {
     padding: 16,
     paddingBottom: 32
   },
@@ -777,6 +977,171 @@ const styles = StyleSheet.create({
   previewImage: { 
     width: width, 
     height: height * 0.8 
+  },
+  // View Modal Specific Styles
+  viewBulletinCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#F1F5F9'
+  },
+  viewBulletinHeader: {
+    marginBottom: 16
+  },
+  viewBulletinTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginBottom: 12,
+    lineHeight: 26
+  },
+  viewBulletinMessage: {
+    fontSize: 16,
+    color: '#475569',
+    lineHeight: 24,
+    marginBottom: 20
+  },
+  viewPhotosContainer: {
+    marginBottom: 20
+  },
+  viewSectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 12
+  },
+  viewPhotosRow: {
+    flexDirection: 'row',
+    gap: 12
+  },
+  viewBulletinPhoto: {
+    width: 100,
+    height: 100,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6'
+  },
+  viewBulletinFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    marginBottom: 16
+  },
+  viewCreatedBy: {
+    fontSize: 14,
+    color: '#64748B',
+    fontWeight: '600'
+  },
+  viewCreatedAt: {
+    fontSize: 12,
+    color: '#94A3B8'
+  },
+  viewStatsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0'
+  },
+  viewStatText: {
+    fontSize: 14,
+    color: '#64748B',
+    fontWeight: '600'
+  },
+  // Comments Section Styles
+  commentsSection: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#F1F5F9'
+  },
+  commentsSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0'
+  },
+  commentsSectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1E293B'
+  },
+  commentsList: {
+    gap: 16
+  },
+  commentItem: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0'
+  },
+  commentHeader: {
+    marginBottom: 8
+  },
+  commentUserInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12
+  },
+  commentAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#3B82F6',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  commentAvatarText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700'
+  },
+  commentMeta: {
+    flex: 1
+  },
+  commentUserName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151'
+  },
+  commentDate: {
+    fontSize: 12,
+    color: '#94A3B8',
+    marginTop: 2
+  },
+  commentText: {
+    fontSize: 14,
+    color: '#475569',
+    lineHeight: 20
+  },
+  noCommentsContainer: {
+    alignItems: 'center',
+    paddingVertical: 40
+  },
+  noCommentsText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#9CA3AF',
+    marginTop: 12
   },
 });
 

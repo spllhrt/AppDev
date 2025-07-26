@@ -294,17 +294,14 @@ const BulletinDetail = ({ route, navigation }) => {
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <View style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
+        <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
         <LinearGradient colors={['#0A0A0A', '#1A1A2E', '#16213E']} style={styles.gradient}>
           <SafeAreaView style={styles.safeArea}>
-            <View style={[styles.header, { paddingTop: insets.top }]}>
-              <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <View style={styles.header}>
+              <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} activeOpacity={0.8}>
                 <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
               </TouchableOpacity>
               <Text style={styles.headerTitle}>Bulletin Details</Text>
-              <TouchableOpacity style={styles.shareButton}>
-                <Ionicons name="share-outline" size={22} color="#FFFFFF" />
-              </TouchableOpacity>
             </View>
 
             <ScrollView 
@@ -332,7 +329,6 @@ const BulletinDetail = ({ route, navigation }) => {
                   <View style={styles.bulletinInfo}>
                     <Text style={styles.bulletinTitle}>{bulletin.title}</Text>
                     <View style={styles.bulletinMeta}>
-                      <Text style={styles.bulletinAuthor}>{bulletin.createdBy.name}</Text>
                       <Text style={styles.bulletinSeparator}>•</Text>
                       <Text style={styles.bulletinTime}>{formatTimeAgo(bulletin.createdAt)}</Text>
                       <Text style={styles.bulletinSeparator}>•</Text>
@@ -439,18 +435,42 @@ const BulletinDetail = ({ route, navigation }) => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0A0A0A' },
   gradient: { flex: 1 },
-  safeArea: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: 'rgba(0,0,0,0.8)',
+  safeArea: { flex: 1, paddingBottom: Platform.OS === 'ios' ? 34 : 20 },
+  header: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    paddingHorizontal: 20, 
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 20, 
+    paddingBottom: 20 
   },
-  backButton: { padding: 8 },
-  headerTitle: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
-  shareButton: { padding: 8 },
+  backButton: { 
+    width: 36, 
+    height: 36, 
+    borderRadius: 18, 
+    backgroundColor: 'rgba(255, 255, 255, 0.1)', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    borderColor: 'rgba(0,230,118,0.3)', 
+    borderWidth: 1 
+  },
+  headerTitle: { 
+    fontSize: 17, 
+    fontWeight: '700', 
+    color: '#FFFFFF', 
+    textAlign: 'center', 
+    flex: 1 
+  },
+  shareButton: { 
+    width: 36, 
+    height: 36, 
+    borderRadius: 18, 
+    backgroundColor: 'rgba(255, 255, 255, 0.1)', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    borderColor: 'rgba(0,230,118,0.3)', 
+    borderWidth: 1 
+  },
   scrollView: { flex: 1 },
   scrollViewContent: { flexGrow: 1 },
   bulletinContainer: {

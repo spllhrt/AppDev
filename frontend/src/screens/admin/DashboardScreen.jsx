@@ -291,34 +291,50 @@ const AdminDashboard = ({ navigation }) => {
           <Text style={styles.bulletinMessage}>{bulletin.message}</Text>
           
           {bulletin.photos && bulletin.photos.length > 0 && (
-            <View style={styles.bulletinImages}>
-              {bulletin.photos.slice(0, 4).map((photo, photoIndex) => {
-                if (photoIndex === 3 && bulletin.photos.length > 4) {
-                  return (
-                    <View key={photoIndex} style={styles.moreImagesContainer}>
+            <View style={styles.photoContainer}>
+              {bulletin.photos.length === 1 ? (
+                <Image source={{ uri: bulletin.photos[0].url }} style={styles.singlePhoto} />
+              ) : bulletin.photos.length === 2 ? (
+                <View style={styles.photoRow}>
+                  <Image source={{ uri: bulletin.photos[0].url }} style={styles.halfPhoto} />
+                  <Image source={{ uri: bulletin.photos[1].url }} style={styles.halfPhoto} />
+                </View>
+              ) : bulletin.photos.length === 3 ? (
+                <>
+                  <Image source={{ uri: bulletin.photos[0].url }} style={styles.mainPhoto} />
+                  <View style={styles.photoRow}>
+                    <Image source={{ uri: bulletin.photos[1].url }} style={styles.halfPhoto} />
+                    <Image source={{ uri: bulletin.photos[2].url }} style={styles.halfPhoto} />
+                  </View>
+                </>
+              ) : (
+                <>
+                  <View style={styles.photoRow}>
+                    <Image source={{ uri: bulletin.photos[0].url }} style={styles.halfPhoto} />
+                    <Image source={{ uri: bulletin.photos[1].url }} style={styles.halfPhoto} />
+                  </View>
+                  <View style={styles.photoRow}>
+                    <Image source={{ uri: bulletin.photos[2].url }} style={styles.halfPhoto} />
+                    <View style={styles.morePhotosContainer}>
                       <Image 
-                        source={{ uri: photo.url }} 
-                        style={[styles.bulletinImage, styles.blurredImage]} 
-                        blurRadius={3}
+                        source={{ uri: bulletin.photos[3].url }} 
+                        style={[styles.halfPhoto, bulletin.photos.length > 4 && styles.blurredPhoto]} 
+                        blurRadius={bulletin.photos.length > 4 ? 2 : 0} 
                       />
-                      <View style={styles.moreImagesOverlay}>
-                        <Text style={styles.moreImagesText}>+{bulletin.photos.length - 3}</Text>
-                      </View>
+                      {bulletin.photos.length > 4 && (
+                        <View style={styles.morePhotosOverlay}>
+                          <Text style={styles.morePhotosText}>+{bulletin.photos.length - 4}</Text>
+                        </View>
+                      )}
                     </View>
-                  );
-                }
-                return (
-                  <Image 
-                    key={photoIndex} 
-                    source={{ uri: photo.url }} 
-                    style={styles.bulletinImage} 
-                  />
-                );
-              })}
+                  </View>
+                </>
+              )}
             </View>
           )}
+          
           <View style={styles.bulletinFooter}>
-           <View style={styles.bulletinReactions}>
+            <View style={styles.bulletinReactions}>
               <View style={styles.reactionButton}>
                 <Ionicons name="thumbs-up-outline" size={16} color="#10B981" style={styles.reactionIcon} />
                 <Text style={styles.reactionText}>{bulletin.reactions?.filter(r => r.type === 'upvote').length || 0}</Text>
@@ -488,27 +504,141 @@ const styles = StyleSheet.create({
   bulletinCategory: { fontSize: 13, color: '#65676b', fontWeight: '400', marginBottom: 4 },
   bulletinTime: { fontSize: 12, color: '#65676b', fontWeight: '400' },
   bulletinMessage: { fontSize: 14, color: '#1c1e21', lineHeight: 20, marginBottom: 12 },
-  bulletinImages: { flexDirection: 'row', gap: 2, marginBottom: 12, flexWrap: 'wrap' },
-  bulletinImage: { width: (width + 15) / 3, height: 180, backgroundColor: '#f0f2f5', resizeMode: 'cover', borderRadius: 8 },
-  moreImagesContainer: { position: 'relative', width: (width + 15) / 3, height: 180, borderRadius: 8, overflow: 'hidden' },
-  blurredImage: { width: '100%', height: '100%' },
-  moreImagesOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center', borderRadius: 8 },
-  moreImagesText: { color: '#ffffff', fontSize: 18, fontWeight: '700', textAlign: 'center' },
-  bulletinFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTopWidth: 1, borderTopColor: '#e4e6ea' },
-  bulletinReactions: { flexDirection: 'row', gap: 20, alignItems: 'center' },
-  reactionText: { fontSize: 14, color: '#65676b', fontWeight: '400', flexDirection: 'row', alignItems: 'center' },
-  reactionButton: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4 },
-  reactionIcon: { marginRight: 4 },
-  aqiContainer: { gap: 16 },
-  aqiCard: { backgroundColor: '#ffffff', borderRadius: 20, padding: 20, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4 },
-  aqiCardTitle: { fontSize: 16, fontWeight: '700', color: '#1e293b', marginBottom: 16 },
-  aqiList: { gap: 8 },
-  aqiItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16, backgroundColor: '#f8fafc', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0' },
-  aqiCityInfo: { flex: 1 },
-  aqiCityName: { fontSize: 14, fontWeight: '600', color: '#1e293b', marginBottom: 4 },
-  aqiCityStatus: { fontSize: 11, fontWeight: '500', textTransform: 'uppercase' },
-  aqiValueSection: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  aqiValueContainer: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8,
+  
+  // Photo layout styles
+  photoContainer: { 
+    marginBottom: 12, 
+    borderRadius: 12, 
+    overflow: 'hidden' 
+  },
+  singlePhoto: { 
+    width: '100%', 
+    height: 320, 
+    resizeMode: 'cover' 
+  },
+  mainPhoto: { 
+    width: '100%', 
+    height: 280, 
+    resizeMode: 'cover', 
+    marginBottom: 4 
+  },
+  photoRow: { 
+    flexDirection: 'row', 
+    gap: 4 
+  },
+  halfPhoto: { 
+    flex: 1, 
+    height: 200, 
+    resizeMode: 'cover' 
+  },
+  morePhotosContainer: { 
+    flex: 1, 
+    position: 'relative' 
+  },
+  blurredPhoto: { 
+    position: 'relative' 
+  },
+  morePhotosOverlay: { 
+    position: 'absolute', 
+    top: 0, 
+    left: 0, 
+    right: 0, 
+    bottom: 0, 
+    backgroundColor: 'rgba(0,0,0,0.5)', 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  morePhotosText: { 
+    color: '#ffffff', 
+    fontSize: 22, 
+    fontWeight: '700' 
+  },
+  
+  bulletinFooter: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    paddingTop: 12, 
+    borderTopWidth: 1, 
+    borderTopColor: '#e4e6ea' 
+  },
+  bulletinReactions: { 
+    flexDirection: 'row', 
+    gap: 20, 
+    alignItems: 'center' 
+  },
+  reactionText: { 
+    fontSize: 14, 
+    color: '#65676b', 
+    fontWeight: '400', 
+    flexDirection: 'row', 
+    alignItems: 'center' 
+  },
+  reactionButton: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    paddingHorizontal: 8, 
+    paddingVertical: 4 
+  },
+  reactionIcon: { 
+    marginRight: 4 
+  },
+  aqiContainer: { 
+    gap: 16 
+  },
+  aqiCard: { 
+    backgroundColor: '#ffffff', 
+    borderRadius: 20, 
+    padding: 20, 
+    elevation: 3, 
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 2 }, 
+    shadowOpacity: 0.08, 
+    shadowRadius: 4 
+  },
+  aqiCardTitle: { 
+    fontSize: 16, 
+    fontWeight: '700', 
+    color: '#1e293b', 
+    marginBottom: 16 
+  },
+  aqiList: { 
+    gap: 8 
+  },
+  aqiItem: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    paddingVertical: 12, 
+    paddingHorizontal: 16, 
+    backgroundColor: '#f8fafc', 
+    borderRadius: 12, 
+    borderWidth: 1, 
+    borderColor: '#e2e8f0' 
+  },
+  aqiCityInfo: { 
+    flex: 1 
+  },
+  aqiCityName: { 
+    fontSize: 14, 
+    fontWeight: '600', 
+    color: '#1e293b', 
+    marginBottom: 4 
+  },
+  aqiCityStatus: { 
+    fontSize: 11, 
+    fontWeight: '500', 
+    textTransform: 'uppercase' 
+  },
+  aqiValueSection: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 8 
+  },
+  aqiValueContainer: { 
+    paddingHorizontal: 12, 
+    paddingVertical: 8, 
+    borderRadius: 8,
     minWidth: 50,
     alignItems: 'center',
   },

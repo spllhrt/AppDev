@@ -465,8 +465,8 @@ const styles = StyleSheet.create({
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 24, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 255, 255, 0.1)' },
   modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#FFFFFF' },
   closeButton: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255, 255, 255, 0.1)', justifyContent: 'center', alignItems: 'center' },
-  modalContent: { padding: 24 },
-  modalText: { fontSize: 14, color: 'rgba(255, 255, 255, 0.8)', lineHeight: 20 },
+  modalContent: { padding: 4 },
+  modalText: { fontSize: 14, color: 'rgba(255, 255, 255, 0.8)', lineHeight: 20 ,padding: 34 },
   modalHeading: { fontSize: 16, fontWeight: '600', color: '#00E676' },
   modalSubheading: { fontSize: 14, fontWeight: '600', color: '#FFFFFF' },
   // Alert Styles

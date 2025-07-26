@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, Platform, TouchableOpacity, Dimensions, StatusBar, RefreshControl, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, Platform, TouchableOpacity, Dimensions, StatusBar, RefreshControl, Alert, Modal } from 'react-native';
+import { ScrollView } from 'react-native-gesture-handler';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -28,153 +29,153 @@ const AqiScreen = ({ navigation, route }) => {
   const { cityName, lat, lon } = route?.params || {};
   const isParameterLocation = !!(cityName && lat && lon);
 
-  useEffect(() => { 
-    initializeAQI(); 
+  useEffect(() => {
+    initializeAQI();
   }, [useGPS, cityName, lat, lon]);
-const initializeAQI = async () => {
-  try {
-    setLoading(true);
-    let coords;
-    let locationName = '';
-    
+  const initializeAQI = async () => {
     try {
-      // Priority 1: Use parameter location if provided
-      if (isParameterLocation) {
-        coords = { latitude: lat, longitude: lon };
-        locationName = cityName;
-        const address = await reverseGeocode(lat, lon);
-        locationName = address?.city || address?.region || cityName;
-      } 
-      // Priority 2: Use GPS if enabled
-      else if (useGPS) {
-        coords = await getCurrentLocation();
-        const address = await reverseGeocode(coords.latitude, coords.longitude);
-        locationName = address?.city || address?.region || 'Current Location';
-      }
-      // Priority 3: Use user's city from profile
-      else if (user?.city) {
-        coords = await geocodeCity(user.city);
-        if (coords) {
-          const address = await reverseGeocode(coords.latitude, coords.longitude);
-          locationName = address?.city || address?.region || user.city;
+      setLoading(true);
+      let coords;
+      let locationName = '';
+
+      try {
+        // Priority 1: Use parameter location if provided
+        if (isParameterLocation) {
+          coords = { latitude: lat, longitude: lon };
+          locationName = cityName;
+          const address = await reverseGeocode(lat, lon);
+          locationName = address?.city || address?.region || cityName;
         }
+        // Priority 2: Use GPS if enabled
+        else if (useGPS) {
+          coords = await getCurrentLocation();
+          const address = await reverseGeocode(coords.latitude, coords.longitude);
+          locationName = address?.city || address?.region || 'Current Location';
+        }
+        // Priority 3: Use user's city from profile
+        else if (user?.city) {
+          coords = await geocodeCity(user.city);
+          if (coords) {
+            const address = await reverseGeocode(coords.latitude, coords.longitude);
+            locationName = address?.city || address?.region || user.city;
+          }
+        }
+        // Fallback: Use GPS as last resort
+        else {
+          coords = await getCurrentLocation();
+          const address = await reverseGeocode(coords.latitude, coords.longitude);
+          locationName = address?.city || address?.region || 'Current Location';
+        }
+      } catch (geocodeError) {
+        console.log('Geocoding error, using fallback Manila coordinates:', geocodeError);
+        coords = { latitude: 14.5995, longitude: 120.9842 };
+        locationName = 'Manila';
       }
-      // Fallback: Use GPS as last resort
-      else {
-        coords = await getCurrentLocation();
-        const address = await reverseGeocode(coords.latitude, coords.longitude);
-        locationName = address?.city || address?.region || 'Current Location';
+
+      if (coords) {
+        setLocation({ ...coords, name: locationName });
+        setDisplayLocationName(locationName);
+        await fetchAQIData(coords.latitude, coords.longitude);
       }
-    } catch (geocodeError) {
-      console.log('Geocoding error, using fallback Manila coordinates:', geocodeError);
-      coords = { latitude: 14.5995, longitude: 120.9842 };
-      locationName = 'Manila';
+    } catch (error) {
+      Alert.alert('AQI Error', 'Failed to load air quality data.', [
+        { text: 'Retry', onPress: initializeAQI },
+        { text: 'Cancel', style: 'cancel' }
+      ]);
+    } finally {
+      setLoading(false);
     }
-    
-    if (coords) {
-      setLocation({ ...coords, name: locationName });
-      setDisplayLocationName(locationName);
-      await fetchAQIData(coords.latitude, coords.longitude);
-    }
-  } catch (error) {
-    Alert.alert('AQI Error', 'Failed to load air quality data.', [
-      { text: 'Retry', onPress: initializeAQI }, 
-      { text: 'Cancel', style: 'cancel' }
-    ]);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const reverseGeocode = async (latitude, longitude) => {
-  try {
-    const response = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10`,
-      {
-        headers: {
-          'User-Agent': 'YourAppName/1.0 (your@email.com)' // Required by Nominatim usage policy
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10`,
+        {
+          headers: {
+            'User-Agent': 'YourAppName/1.0 (your@email.com)' // Required by Nominatim usage policy
+          }
         }
-      }
-    );
-    
-    // First check if response is HTML
-    const text = await response.text();
-    if (text.startsWith('<!DOCTYPE html>') || text.startsWith('<')) {
-      throw new Error('Received HTML response instead of JSON');
-    }
-    
-    const data = JSON.parse(text);
-    return {
-      city: data.address?.city || data.address?.town,
-      region: data.address?.state || data.address?.region,
-      country: data.address?.country
-    };
-  } catch (error) {
-    console.log('Reverse geocoding failed:', error);
-    return null;
-  }
-};
+      );
 
-const geocodeCity = async (city) => {
-  try {
-    // First try with Philippines-specific query
-    let response = await fetch(
-      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}, Philippines&format=json&limit=1`,
-      {
-        headers: {
-          'User-Agent': 'YourAppName/1.0 (your@email.com)' // Required by Nominatim usage policy
-        }
+      // First check if response is HTML
+      const text = await response.text();
+      if (text.startsWith('<!DOCTYPE html>') || text.startsWith('<')) {
+        throw new Error('Received HTML response instead of JSON');
       }
-    );
-    
-    // Check if response is HTML (indicating an error)
-    const text = await response.text();
-    if (text.startsWith('<!DOCTYPE html>') || text.startsWith('<')) {
-      throw new Error('Received HTML response instead of JSON');
-    }
-    
-    const data = JSON.parse(text);
-    
-    if (data.length > 0) {
+
+      const data = JSON.parse(text);
       return {
-        latitude: parseFloat(data[0].lat),
-        longitude: parseFloat(data[0].lon)
+        city: data.address?.city || data.address?.town,
+        region: data.address?.state || data.address?.region,
+        country: data.address?.country
       };
+    } catch (error) {
+      console.log('Reverse geocoding failed:', error);
+      return null;
     }
-    
-    // Fallback to our predefined city coordinates if Nominatim fails
-    const philippineCities = {
-      'manila': { lat: 14.5995, lon: 120.9842 },
-      'makati': { lat: 14.5547, lon: 121.0244 },
-      'quezon city': { lat: 14.6760, lon: 121.0437 },
-      'cebu': { lat: 10.3157, lon: 123.8854 },
-      'davao': { lat: 7.1907, lon: 125.4553 },
-      // Add more cities as needed
-    };
-    
-    const normalizedCity = city.toLowerCase().trim();
-    if (philippineCities[normalizedCity]) {
-      return philippineCities[normalizedCity];
+  };
+
+  const geocodeCity = async (city) => {
+    try {
+      // First try with Philippines-specific query
+      let response = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}, Philippines&format=json&limit=1`,
+        {
+          headers: {
+            'User-Agent': 'YourAppName/1.0 (your@email.com)' // Required by Nominatim usage policy
+          }
+        }
+      );
+
+      // Check if response is HTML (indicating an error)
+      const text = await response.text();
+      if (text.startsWith('<!DOCTYPE html>') || text.startsWith('<')) {
+        throw new Error('Received HTML response instead of JSON');
+      }
+
+      const data = JSON.parse(text);
+
+      if (data.length > 0) {
+        return {
+          latitude: parseFloat(data[0].lat),
+          longitude: parseFloat(data[0].lon)
+        };
+      }
+
+      // Fallback to our predefined city coordinates if Nominatim fails
+      const philippineCities = {
+        'manila': { lat: 14.5995, lon: 120.9842 },
+        'makati': { lat: 14.5547, lon: 121.0244 },
+        'quezon city': { lat: 14.6760, lon: 121.0437 },
+        'cebu': { lat: 10.3157, lon: 123.8854 },
+        'davao': { lat: 7.1907, lon: 125.4553 },
+        // Add more cities as needed
+      };
+
+      const normalizedCity = city.toLowerCase().trim();
+      if (philippineCities[normalizedCity]) {
+        return philippineCities[normalizedCity];
+      }
+
+      throw new Error('City not found');
+    } catch (error) {
+      console.log('Geocoding failed:', error);
+      throw error;
     }
-    
-    throw new Error('City not found');
-  } catch (error) {
-    console.log('Geocoding failed:', error);
-    throw error;
-  }
-};
+  };
 
   const getCurrentLocation = async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') throw new Error('Location permission denied');
-    const location = await Location.getCurrentPositionAsync({ 
-      accuracy: Location.Accuracy.Balanced, 
-      timeout: 15000, 
-      maximumAge: 300000 
+    const location = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+      timeout: 15000,
+      maximumAge: 300000
     });
-    return { 
-      latitude: location.coords.latitude, 
-      longitude: location.coords.longitude 
+    return {
+      latitude: location.coords.latitude,
+      longitude: location.coords.longitude
     };
   };
 
@@ -186,7 +187,7 @@ const geocodeCity = async (city) => {
       if (!response.ok) throw new Error(`AQI API error: ${response.status}`);
       const data = await response.json();
       if (!data.hourly?.pm2_5) throw new Error('Invalid AQI data');
-      
+
       const processedData = { ...data, daily: calculateDailyAQI(data.hourly) };
       setAqiData(processedData);
 
@@ -194,7 +195,7 @@ const geocodeCity = async (city) => {
       const currentPM25 = data.hourly.pm2_5[0] || 0;
       const currentNO2 = data.hourly.nitrogen_dioxide[0] || 0;
       const currentSO2 = data.hourly.sulphur_dioxide[0] || 0;
-      
+
       await classifySource(lat, lon, currentPM25, currentNO2, currentSO2);
     } catch (error) {
       console.error('Failed to fetch AQI data:', error);
@@ -207,7 +208,7 @@ const geocodeCity = async (city) => {
       console.log(`Classifying source for ${lat}, ${lon}`);
       const result = await classifyPollutionSource({
         lat,
-        lon, 
+        lon,
         pollutants: { pm2_5: pm25, no2, so2 }
       });
       setPollutionSource(result.source);
@@ -217,28 +218,28 @@ const geocodeCity = async (city) => {
     }
   };
 
-   const getLocationDisplayText = () => {
+  const getLocationDisplayText = () => {
     if (isParameterLocation) return displayLocationName || cityName;
     return displayLocationName || (useGPS ? 'Current Location' : user?.city || 'Unknown Location');
   };
-  
+
   const calculateDailyAQI = (hourly) => {
     const days = [];
     for (let i = 0; i < 5; i++) {
       const dayStart = i * 24;
       const dayEnd = Math.min(dayStart + 24, hourly.pm2_5.length);
       if (dayStart >= hourly.pm2_5.length) break;
-      
+
       const dayHours = hourly.pm2_5.slice(dayStart, dayEnd).filter(val => val !== null);
       if (dayHours.length === 0) continue;
-      
+
       const avgPM25 = dayHours.reduce((sum, val) => sum + val, 0) / dayHours.length;
       const calculatedAQI = pm25ToAQI(avgPM25);
-      days.push({ 
-        date: new Date(Date.now() + i * 24 * 60 * 60 * 1000).toISOString().split('T')[0], 
-        aqi: calculatedAQI, 
-        pm25: avgPM25, 
-        category: getAQICategory(calculatedAQI) 
+      days.push({
+        date: new Date(Date.now() + i * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        aqi: calculatedAQI,
+        pm25: avgPM25,
+        category: getAQICategory(calculatedAQI)
       });
     }
     return days;
@@ -254,7 +255,7 @@ const geocodeCity = async (city) => {
       { cLo: 150.5, cHi: 250.4, iLo: 201, iHi: 300 },
       { cLo: 250.5, cHi: 500.4, iLo: 301, iHi: 500 }
     ];
-    
+
     for (const bp of breakpoints) {
       if (pm25 >= bp.cLo && pm25 <= bp.cHi) {
         return Math.round(((bp.iHi - bp.iLo) / (bp.cHi - bp.cLo)) * (pm25 - bp.cLo) + bp.iLo);
@@ -273,20 +274,20 @@ const geocodeCity = async (city) => {
   };
 
   const getAQIDescription = (aqi) => {
-  if (aqi <= 50) return "Air quality is good. Ideal for outdoor activities.";
-  if (aqi <= 100) return "Air quality is acceptable. Sensitive individuals should consider limiting outdoor activities.";
-  if (aqi <= 150) return "Sensitive groups may experience health effects. Consider reducing outdoor activities.";
-  if (aqi <= 200) return "Everyone may experience health effects. Limit outdoor activities.";
-  if (aqi <= 300) return "Health alert: everyone may experience serious health effects. Avoid outdoor activities.";
-  return "Health emergency: everyone is at risk. Stay indoors.";
-};
+    if (aqi <= 50) return "Air quality is good. Ideal for outdoor activities.";
+    if (aqi <= 100) return "Air quality is acceptable. Sensitive individuals should consider limiting outdoor activities.";
+    if (aqi <= 150) return "Sensitive groups may experience health effects. Consider reducing outdoor activities.";
+    if (aqi <= 200) return "Everyone may experience health effects. Limit outdoor activities.";
+    if (aqi <= 300) return "Health alert: everyone may experience serious health effects. Avoid outdoor activities.";
+    return "Health emergency: everyone is at risk. Stay indoors.";
+  };
 
   const getMapHTML = (location, fullScreen = false) => {
     const lat = location?.latitude || 14.5995;
     const lon = location?.longitude || 120.9842;
     const interactive = fullScreen ? 'true' : 'false';
     const controls = fullScreen ? '' : 'zoomControl: false, attributionControl: false, touchZoom: false, doubleClickZoom: false, scrollWheelZoom: false, boxZoom: false, keyboard: false, dragging: false,';
-    
+
     return `<!DOCTYPE html>
 <html>
 <head>
@@ -412,102 +413,116 @@ const geocodeCity = async (city) => {
     </script>
 </body>
 </html>`;
-};
-const getCurrentPollutants = () => {
-  if (!aqiData?.hourly) return {};
-  
-  // Get current hour index (first available data point)
-  const currentIndex = 0;
-  
-  return {
-    pm25: aqiData.hourly.pm2_5?.[currentIndex] || 0,
-    pm10: aqiData.hourly.pm10?.[currentIndex] || 0,
-    co: aqiData.hourly.carbon_monoxide?.[currentIndex] || 0,
-    no2: aqiData.hourly.nitrogen_dioxide?.[currentIndex] || 0,
-    so2: aqiData.hourly.sulphur_dioxide?.[currentIndex] || 0,
-    ozone: aqiData.hourly.ozone?.[currentIndex] || 0,
   };
-};
-  const getHourlyData = (dayIndex) => {
-  if (!aqiData?.hourly) return [];
-  const startHour = dayIndex * 24;
-  const maxHours = Math.min(24, aqiData.hourly.pm2_5.length - startHour);
-  
-  return Array.from({ length: maxHours }, (_, i) => {
-    const hourIndex = startHour + i;
-    const pm25 = aqiData.hourly.pm2_5[hourIndex] || 0;
-    const hour = new Date(Date.now() + dayIndex * 24 * 60 * 60 * 1000 + i * 60 * 60 * 1000).getHours();
+  const getCurrentPollutants = () => {
+    if (!aqiData?.hourly) return {};
+
+    // Get current hour index (first available data point)
+    const currentIndex = 0;
+
     return {
-      hour: i,
-      actualHour: hour,
-      aqi: pm25ToAQI(pm25),
-      pm25,
-      pm10: aqiData.hourly.pm10[hourIndex] || 0,
-      co: aqiData.hourly.carbon_monoxide[hourIndex] || 0,
-      no2: aqiData.hourly.nitrogen_dioxide[hourIndex] || 0,
-      so2: aqiData.hourly.sulphur_dioxide[hourIndex] || 0,
-      ozone: aqiData.hourly.ozone[hourIndex] || 0
+      pm25: aqiData.hourly.pm2_5?.[currentIndex] || 0,
+      pm10: aqiData.hourly.pm10?.[currentIndex] || 0,
+      co: aqiData.hourly.carbon_monoxide?.[currentIndex] || 0,
+      no2: aqiData.hourly.nitrogen_dioxide?.[currentIndex] || 0,
+      so2: aqiData.hourly.sulphur_dioxide?.[currentIndex] || 0,
+      ozone: aqiData.hourly.ozone?.[currentIndex] || 0,
     };
-  });
-};
+  };
+  const getHourlyData = (dayIndex) => {
+    if (!aqiData?.hourly) return [];
+    const startHour = dayIndex * 24;
+    const maxHours = Math.min(24, aqiData.hourly.pm2_5.length - startHour);
+
+    return Array.from({ length: maxHours }, (_, i) => {
+      const hourIndex = startHour + i;
+      const pm25 = aqiData.hourly.pm2_5[hourIndex] || 0;
+      const hour = new Date(Date.now() + dayIndex * 24 * 60 * 60 * 1000 + i * 60 * 60 * 1000).getHours();
+      return {
+        hour: i,
+        actualHour: hour,
+        aqi: pm25ToAQI(pm25),
+        pm25,
+        pm10: aqiData.hourly.pm10[hourIndex] || 0,
+        co: aqiData.hourly.carbon_monoxide[hourIndex] || 0,
+        no2: aqiData.hourly.nitrogen_dioxide[hourIndex] || 0,
+        so2: aqiData.hourly.sulphur_dioxide[hourIndex] || 0,
+        ozone: aqiData.hourly.ozone[hourIndex] || 0
+      };
+    });
+  };
 
 
-const handleChartPress = (data) => {
-  if (data && data.index !== undefined) {
-    const hourlyData = getHourlyData(selectedDay);
-    const filteredData = hourlyData.filter((_, i) => i % 3 === 0);
-    const selectedData = filteredData[data.index];
-    if (selectedData) {
-      setSelectedHourData(selectedData);
-      setShowHourlyModal(true);
+  const handleChartPress = (data) => {
+    if (data && data.index !== undefined) {
+      const hourlyData = getHourlyData(selectedDay);
+      const selectedData = hourlyData[data.index];
+      if (selectedData) {
+        setSelectedHourData(selectedData);
+        setShowHourlyModal(true);
+      }
     }
-  }
-};
-
+  };
 
   const renderChart = () => {
-  const hourlyData = getHourlyData(selectedDay);
-  if (hourlyData.length === 0) return <Text style={styles.noDataText}>No data available</Text>;
-  
-  const filteredData = hourlyData.filter((_, i) => i % 3 === 0);
-  const labels = filteredData.map(d => `${d.hour}h`);
-  const chartConfigs = {
-    aqi: { data: filteredData.map(d => d.aqi), color: '#00E676' },
-    pm25: { data: filteredData.map(d => d.pm25), color: '#2196F3' },
-    pm10: { data: filteredData.map(d => d.pm10), color: '#FF9800' },
-    co: { data: filteredData.map(d => d.co), color: '#9C27B0' },
-    no2: { data: filteredData.map(d => d.no2), color: '#F44336' },
-    ozone: { data: filteredData.map(d => d.ozone), color: '#FFC107' }
+    const hourlyData = getHourlyData(selectedDay);
+    if (hourlyData.length === 0) return <Text style={styles.noDataText}>No data available</Text>;
+
+    const labels = hourlyData.map(d => `${d.hour}h`);
+    const chartConfigs = {
+      aqi: { data: hourlyData.map(d => d.aqi), color: '#00E676' },
+      pm25: { data: hourlyData.map(d => d.pm25), color: '#2196F3' },
+      pm10: { data: hourlyData.map(d => d.pm10), color: '#FF9800' },
+      co: { data: hourlyData.map(d => d.co), color: '#9C27B0' },
+      no2: { data: hourlyData.map(d => d.no2), color: '#F44336' },
+      ozone: { data: hourlyData.map(d => d.ozone), color: '#FFC107' }
+    };
+    const config = chartConfigs[activeChart];
+
+    if (!config.data.length || config.data.every(val => val === 0)) return <Text style={styles.noDataText}>No data available</Text>;
+
+    return (
+      <LineChart
+        data={{
+          labels,
+          datasets: [{
+            data: config.data,
+            color: () => config.color,
+            strokeWidth: 3
+          }]
+        }}
+        width={width * 2}  // Make chart twice as wide as screen for scrolling
+        height={250}
+        chartConfig={{
+          backgroundColor: 'transparent',
+          backgroundGradientFrom: 'rgba(0,0,0,0.1)',
+          backgroundGradientTo: 'rgba(0,0,0,0.1)',
+          decimalPlaces: 1,
+          color: () => config.color,
+          labelColor: () => 'rgba(255,255,255,0.9)',
+          style: { borderRadius: 16 },
+          propsForDots: {
+            r: '4',
+            strokeWidth: '2',
+            stroke: config.color,
+            fill: config.color
+          },
+          propsForLabels: {
+            fontSize: 10
+          }
+        }}
+        bezier
+        style={styles.chart}
+        withInnerLines={false}
+        withOuterLines={false}
+        withVerticalLines={false}
+        withHorizontalLines={true}
+        onDataPointClick={handleChartPress}
+        segments={6}
+        fromZero={false}
+      />
+    );
   };
-  const config = chartConfigs[activeChart];
-  
-  if (!config.data.length || config.data.every(val => val === 0)) return <Text style={styles.noDataText}>No data available</Text>;
-  
-  return (
-    <LineChart
-      data={{ labels, datasets: [{ data: config.data, color: () => config.color, strokeWidth: 3 }] }}
-      width={width - 60}
-      height={220}
-      chartConfig={{
-        backgroundColor: 'transparent',
-        backgroundGradientFrom: 'rgba(0,0,0,0.1)',
-        backgroundGradientTo: 'rgba(0,0,0,0.1)',
-        decimalPlaces: 1,
-        color: () => config.color,
-        labelColor: () => 'rgba(255,255,255,0.9)',
-        style: { borderRadius: 16 },
-        propsForDots: { r: '4', strokeWidth: '2', stroke: config.color, fill: config.color }
-      }}
-      bezier
-      style={styles.chart}
-      withInnerLines={false}
-      withOuterLines={false}
-      withVerticalLines={false}
-      withHorizontalLines={true}
-      onDataPointClick={handleChartPress}
-    />
-  );
-};
   const formatDate = (dateStr, index) => {
     if (index === 0) return 'Today';
     if (index === 1) return 'Tomorrow';
@@ -560,24 +575,24 @@ const handleChartPress = (data) => {
           {/* Header */}
           <View style={styles.stickyHeader}>
             <LinearGradient colors={['#0F0F23', '#1A1A2E']} style={styles.stickyHeaderGradient}>
-               <View style={styles.headerTop}>
-                  <View style={styles.headerContent}>
-                    <Text style={styles.headerTitle}>Air Quality</Text>
-                    <Text style={styles.headerSubtitle}>{getLocationDisplayText()}</Text>
-                  </View>
-                  {!isParameterLocation && (
-                    <TouchableOpacity style={styles.locationButton} onPress={() => setUseGPS(!useGPS)}>
-                      <Ionicons name={useGPS ? "location" : "location-outline"} size={24} color="#00E676" />
-                    </TouchableOpacity>
-                  )}
+              <View style={styles.headerTop}>
+                <View style={styles.headerContent}>
+                  <Text style={styles.headerTitle}>Air Quality</Text>
+                  <Text style={styles.headerSubtitle}>{getLocationDisplayText()}</Text>
                 </View>
+                {!isParameterLocation && (
+                  <TouchableOpacity style={styles.locationButton} onPress={() => setUseGPS(!useGPS)}>
+                    <Ionicons name={useGPS ? "location" : "location-outline"} size={24} color="#00E676" />
+                  </TouchableOpacity>
+                )}
+              </View>
             </LinearGradient>
           </View>
 
-          <ScrollView 
-            style={styles.scrollView} 
-            contentContainerStyle={styles.scrollContent} 
-            refreshControl={<RefreshControl refreshing={loading} onRefresh={initializeAQI} tintColor="#00E676" colors={['#00E676']} />} 
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
+            refreshControl={<RefreshControl refreshing={loading} onRefresh={initializeAQI} tintColor="#00E676" colors={['#00E676']} />}
             showsVerticalScrollIndicator={false}
           >
             {/* Main AQI Card */}
@@ -585,7 +600,7 @@ const handleChartPress = (data) => {
               <View style={styles.aqiSection}>
                 <Text style={styles.aqiValue}>{currentAQI?.aqi || 0}</Text>
                 <Text style={[styles.aqiCategory, { color: category.color }]}>{category.text}</Text>
-                  {pollutionSource && (
+                {pollutionSource && (
                   <View style={styles.sourceCard}>
                     <Ionicons name="analytics-outline" size={24} color="#00E676" />
                     <View style={styles.sourceInfo}>
@@ -641,9 +656,9 @@ const handleChartPress = (data) => {
                   const dayCategory = getAQICategory(day.aqi);
                   const isSelected = selectedDay === index;
                   return (
-                    <TouchableOpacity 
-                      key={index} 
-                      style={[styles.forecastCard, isSelected && styles.forecastCardSelected, { borderColor: dayCategory.color }]} 
+                    <TouchableOpacity
+                      key={index}
+                      style={[styles.forecastCard, isSelected && styles.forecastCardSelected, { borderColor: dayCategory.color }]}
                       onPress={() => setSelectedDay(index)}
                     >
                       <Text style={styles.forecastDay}>{formatDate(day.date, index)}</Text>
@@ -658,11 +673,16 @@ const handleChartPress = (data) => {
             {/* Hourly Chart */}
             <View style={styles.chartSection}>
               <Text style={styles.sectionTitle}>Hourly Data - {formatDate(aqiData.daily[selectedDay]?.date, selectedDay)}</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chartTabs}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.chartTabs}
+                contentContainerStyle={{ paddingRight: 20 }}
+              >
                 {['aqi', 'pm25', 'pm10', 'co', 'no2', 'ozone'].map((type) => (
-                  <TouchableOpacity 
-                    key={type} 
-                    style={[styles.chartTab, activeChart === type && styles.chartTabActive]} 
+                  <TouchableOpacity
+                    key={type}
+                    style={[styles.chartTab, activeChart === type && styles.chartTabActive]}
                     onPress={() => setActiveChart(type)}
                   >
                     <Text style={[styles.chartTabText, activeChart === type && styles.chartTabTextActive]}>
@@ -671,9 +691,16 @@ const handleChartPress = (data) => {
                   </TouchableOpacity>
                 ))}
               </ScrollView>
-              <View style={styles.chartContainer}>
-                {renderChart()}
-              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={true}
+                style={styles.chartScrollContainer}
+                contentContainerStyle={styles.chartContentContainer}
+              >
+                <View style={styles.chartContainer}>
+                  {renderChart()}
+                </View>
+              </ScrollView>
             </View>
 
             <View style={styles.bottomPadding} />
@@ -693,9 +720,9 @@ const handleChartPress = (data) => {
             </View>
           </Modal>
 
-          <Modal 
-            visible={showHourlyModal} 
-            animationType="slide" 
+          <Modal
+            visible={showHourlyModal}
+            animationType="slide"
             transparent={true}
             onRequestClose={() => setShowHourlyModal(false)}
           >
@@ -705,14 +732,14 @@ const handleChartPress = (data) => {
                   <Text style={styles.hourlyModalTitle}>
                     Hourly Details - {selectedHourData?.actualHour || 0}:00
                   </Text>
-                  <TouchableOpacity 
-                    style={styles.closeModalButton} 
+                  <TouchableOpacity
+                    style={styles.closeModalButton}
                     onPress={() => setShowHourlyModal(false)}
                   >
                     <Ionicons name="close" size={24} color="#fff" />
                   </TouchableOpacity>
                 </View>
-                
+
                 {selectedHourData && (
                   <View style={styles.hourlyModalContent}>
                     <View style={styles.hourlyAqiSection}>
@@ -721,7 +748,7 @@ const handleChartPress = (data) => {
                         {getAQICategory(selectedHourData.aqi).text}
                       </Text>
                     </View>
-                    
+
                     <View style={styles.hourlyPollutantsGrid}>
                       {[
                         { key: 'pm25', label: 'PM2.5', value: selectedHourData.pm25, unit: 'μg/m³', color: '#2196F3' },
@@ -756,13 +783,13 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   scrollView: { flex: 1 },
   scrollContent: { paddingHorizontal: 20, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 20) + 90 : 90 },
-  
+
   // Loading States
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { fontSize: 16, color: '#FFFFFF', marginTop: 20, fontWeight: '600' },
   retryButton: { backgroundColor: '#00E676', paddingHorizontal: 30, paddingVertical: 12, borderRadius: 25, marginTop: 30 },
   retryButtonText: { color: '#000', fontSize: 16, fontWeight: 'bold' },
-  
+
   // Header
   stickyHeader: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1000 },
   stickyHeaderGradient: { paddingBottom: 15, paddingHorizontal: 20, paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 20 },
@@ -771,33 +798,33 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 16, fontWeight: 'bold', color: '#FFFFFF' },
   headerSubtitle: { color: 'rgba(255,255,255,0.7)', fontSize: 10, marginTop: 4 },
   locationButton: { padding: 12, backgroundColor: 'rgba(0,230,118,0.1)', borderRadius: 12, borderWidth: 1, borderColor: 'rgba(0,230,118,0.3)' },
-  
+
   // Main AQI Card
   mainCard: { borderRadius: 20, marginBottom: 25, borderWidth: 2, backgroundColor: 'rgba(255,255,255,0.05)', overflow: 'hidden' },
   aqiSection: { padding: 30, alignItems: 'center' },
   aqiValue: { color: '#fff', fontSize: 64, fontWeight: 'bold', marginBottom: 8 },
-  sourceCard: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    backgroundColor: 'rgba(255,255,255,0.1)', 
-    borderRadius: 16, 
-    padding: 20, 
-    marginBottom: 20 
+  sourceCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20
   },
-  sourceInfo: { 
-    marginLeft: 12, 
-    flex: 1 
+  sourceInfo: {
+    marginLeft: 12,
+    flex: 1
   },
-  sourceLabel: { 
-    color: 'rgba(255,255,255,0.7)', 
-    fontSize: 14 
+  sourceLabel: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 14
   },
-  sourceValue: { 
-    color: '#00E676', 
-    fontSize: 18, 
-    fontWeight: 'bold' 
+  sourceValue: {
+    color: '#00E676',
+    fontSize: 18,
+    fontWeight: 'bold'
   },
-  
+
   // Pollutants Section
   pollutantsSection: { marginBottom: 25 },
   sectionTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold', marginBottom: 15 },
@@ -805,7 +832,7 @@ const styles = StyleSheet.create({
   pollutantCard: { width: '48%', backgroundColor: 'rgba(255,255,255,0.05)', padding: 15, borderRadius: 12, marginBottom: 12, borderLeftWidth: 4 },
   pollutantLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', marginBottom: 4 },
   pollutantValue: { fontSize: 16, fontWeight: 'bold' },
-  
+
   // Map Section
   mapSection: { marginBottom: 25 },
   mapHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
@@ -813,7 +840,7 @@ const styles = StyleSheet.create({
   fullMapButtonText: { color: '#00E676', fontSize: 14, fontWeight: '600', marginRight: 4 },
   mapContainer: { height: 200, borderRadius: 15, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.1)' },
   mapWebView: { flex: 1, backgroundColor: 'transparent' },
-  
+
   // Forecast Section
   forecastSection: { marginBottom: 25 },
   forecastCard: { backgroundColor: 'rgba(255,255,255,0.05)', padding: 15, borderRadius: 12, marginRight: 12, minWidth: 100, alignItems: 'center', borderWidth: 1 },
@@ -821,19 +848,35 @@ const styles = StyleSheet.create({
   forecastDay: { color: '#fff', fontSize: 12, fontWeight: '600', marginBottom: 8 },
   forecastAqi: { fontSize: 24, fontWeight: 'bold', marginBottom: 4 },
   forecastCategory: { color: 'rgba(255,255,255,0.7)', fontSize: 10, textAlign: 'center' },
-  
+
   // Chart Section
-  chartSection: { marginBottom: 20 },
+  chartSection: {
+    marginBottom: 20,
+    overflow: 'visible'
+  },
   chartTabs: { marginBottom: 15 },
   chartTab: { backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 10 },
   chartTabActive: { backgroundColor: '#00E676' },
   chartTabText: { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600' },
   chartTabTextActive: { color: '#000' },
-  chartContainer: { alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 16, padding: 15 },
-  chart: { borderRadius: 16 },
+  chartScrollContainer: {
+    maxHeight: 280,
+    marginHorizontal: -20,
+  },
+  chartContentContainer: {
+    paddingHorizontal: 20,
+  },
+  chartContainer: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 16,
+    padding: 15,
+  },
+  chart: {
+    borderRadius: 16,
+  },
   noDataText: { color: 'rgba(255,255,255,0.7)', fontSize: 16, textAlign: 'center', padding: 40 },
   bottomPadding: { height: 100 },
-  
+
   // Full Map Modal
   fullMapContainer: { flex: 1, backgroundColor: '#000' },
   fullMapHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'rgba(0,0,0,0.8)', paddingTop: Platform.OS === 'ios' ? 50 : 30, paddingBottom: 15, paddingHorizontal: 20 },

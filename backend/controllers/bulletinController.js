@@ -185,6 +185,7 @@ exports.getBulletinById = async (req, res) => {
 
 
 // Delete bulletin (admin only)
+// Delete bulletin (admin only)
 exports.deleteBulletin = async (req, res) => {
   try {
     console.log("Deleting bulletin:", req.params.id);
@@ -193,7 +194,10 @@ exports.deleteBulletin = async (req, res) => {
       console.warn("Bulletin not found for deletion:", req.params.id);
       return res.status(404).json({ message: 'Bulletin not found' });
     }
-    await bulletin.remove();
+    
+    await Bulletin.deleteOne({ _id: req.params.id });
+    
+    
     console.log("Bulletin deleted:", req.params.id);
     res.json({ message: 'Bulletin deleted' });
   } catch (err) {
@@ -201,7 +205,6 @@ exports.deleteBulletin = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
-
 exports.updateBulletin = async (req, res) => {
   const id = req.params.id;
 

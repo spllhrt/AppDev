@@ -144,7 +144,6 @@ const BulletinFeed = ({ navigation }) => {
         <View style={styles.bulletinInfo}>
           <Text style={styles.bulletinTitle}>{item.title}</Text>
           <View style={styles.bulletinMeta}>
-            <Text style={styles.bulletinAuthor}>{item.createdBy.name}</Text>
             <Text style={styles.bulletinSeparator}>•</Text>
             <Text style={styles.bulletinTime}>{formatTimeAgo(item.createdAt)}</Text>
             <Text style={styles.bulletinSeparator}>•</Text>

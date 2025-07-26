@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator, SafeAreaView, StatusBar, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator, SafeAreaView, StatusBar, Platform, RefreshControl } from 'react-native';
 import { useSelector } from 'react-redux';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -8,17 +8,23 @@ import * as Print from 'expo-print';
 import * as FileSystem from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
 import { createHealthRiskAssessment, getLatestAssessment } from '../../api/health';
+import { getUserProfile } from '../../api/auth';
+import { getHealthProfile } from '../../api/health';
 
 const HealthRiskAssessmentScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [assessment, setAssessment] = useState(null);
   const [currentAQI, setCurrentAQI] = useState(null);
   const [exportingPDF, setExportingPDF] = useState(false);
+  const [hasLoadedInitial, setHasLoadedInitial] = useState(false);
+  const [userProfile, setUserProfile] = useState(null);
+  const [healthProfile, setHealthProfile] = useState(null);
   const user = useSelector(state => state.auth.user);
 
   const getCityCoordinates = async (cityName) => {
     try {
-      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cityName.trim())}&limit=1`, 
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cityName.trim())}&limit=1`,
         { headers: { 'User-Agent': 'HealthRiskApp/1.0' } });
       const data = await response.json();
       if (data.length > 0) return { latitude: parseFloat(data[0].lat), longitude: parseFloat(data[0].lon) };
@@ -30,7 +36,7 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
 
   const getCityFromCoordinates = async (latitude, longitude) => {
     try {
-      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10`, 
+      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10`,
         { headers: { 'User-Agent': 'HealthRiskApp/1.0' } });
       const data = await response.json();
       return data?.address?.city || data?.address?.town || data?.display_name?.split(',')[0] || 'Unknown Location';
@@ -57,7 +63,7 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
     try {
       setLoading(true);
       let coordinates, locationName;
-      
+
       if (useGPS) {
         coordinates = await getGPSLocation();
         locationName = await getCityFromCoordinates(coordinates.latitude, coordinates.longitude);
@@ -69,14 +75,14 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
 
       const aqiData = await fetchAQIData(coordinates);
       setCurrentAQI(aqiData);
-      
-      const result = await createHealthRiskAssessment({ 
-        aqi: aqiData.aqi, 
-        pm25: aqiData.pm25, 
-        pm10: aqiData.pm10, 
-        location: locationName 
+
+      const result = await createHealthRiskAssessment({
+        aqi: aqiData.aqi,
+        pm25: aqiData.pm25,
+        pm10: aqiData.pm10,
+        location: locationName
       });
-      
+
       if (result && result.assessment) {
         setAssessment(result.assessment);
         Alert.alert(
@@ -94,11 +100,11 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
       } else {
         throw new Error('Invalid response from assessment API');
       }
-      
+
     } catch (error) {
       console.error('Assessment error:', error);
       let errorMessage = 'Unable to complete assessment';
-      
+
       if (error.message) {
         errorMessage = error.message;
       } else if (error.status === 401) {
@@ -110,40 +116,136 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
       } else if (!navigator.onLine) {
         errorMessage = 'No internet connection. Please check your network.';
       }
-      
+
       Alert.alert('Assessment Failed', errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  const loadLatestAssessment = async () => {
+  const loadLatestAssessment = async (showErrorAlert = false) => {
     try {
       const result = await getLatestAssessment();
-      
+
       if (result && result.success && result.assessment) {
         setAssessment(result.assessment);
+        return true;
       } else if (result && result.assessment) {
         setAssessment(result.assessment);
+        return true;
       }
+
+      // If we reach here, there's no assessment but no error either
+      setAssessment(null);
+      return false;
+
     } catch (error) {
-      if (error.status !== 404) {
-        console.warn('Failed to load latest assessment:', error.message);
-        if (error.status >= 500) {
+      console.warn('Failed to load latest assessment:', error);
+
+      // Handle different error scenarios
+      if (error.status === 404) {
+        // No assessments found - this is normal for new users
+        setAssessment(null);
+        return false;
+      } else if (error.status === 401) {
+        // Authentication error
+        if (showErrorAlert) {
+          Alert.alert(
+            'Authentication Error',
+            'Please log in again to access your assessments.',
+            [{ text: 'OK', style: 'default' }]
+          );
+        }
+        return false;
+      } else if (error.status >= 500) {
+        // Server error
+        if (showErrorAlert) {
           Alert.alert(
             'Connection Issue',
+            'Unable to load previous assessments due to server issues. You can still create a new assessment.',
+            [{ text: 'OK', style: 'default' }]
+          );
+        }
+        return false;
+      } else if (!navigator.onLine) {
+        // Network error
+        if (showErrorAlert) {
+          Alert.alert(
+            'No Internet',
+            'Unable to load previous assessments. Please check your connection.',
+            [{ text: 'OK', style: 'default' }]
+          );
+        }
+        return false;
+      } else {
+        // Unknown error
+        if (showErrorAlert) {
+          Alert.alert(
+            'Error',
             'Unable to load previous assessments. You can still create a new assessment.',
             [{ text: 'OK', style: 'default' }]
           );
         }
+        return false;
       }
+    }
+  };
+
+  // Improved refresh function
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      console.log('[HealthRiskAssessment] Refreshing data...');
+
+      console.log('[HealthRiskAssessment] Fetching updated profiles...');
+      const [profileData, healthData] = await Promise.all([
+        getUserProfile().then(data => {
+          console.log('[HealthRiskAssessment] User profile refreshed');
+          return data;
+        }),
+        getHealthProfile().then(data => {
+          console.log('[HealthRiskAssessment] Health profile refreshed');
+          return data;
+        })
+      ]);
+
+      setUserProfile(profileData);
+      setHealthProfile(healthData);
+
+      console.log('[HealthRiskAssessment] Loading latest assessment...');
+      const hasAssessment = await loadLatestAssessment(true);
+
+      if (hasAssessment && user?.city) {
+        try {
+          console.log('[HealthRiskAssessment] Refreshing AQI data for city:', user.city);
+          const coordinates = await getCityCoordinates(user.city);
+          const aqiData = await fetchAQIData(coordinates);
+          setCurrentAQI(aqiData);
+          console.log('[HealthRiskAssessment] AQI data refreshed:', {
+            aqi: aqiData.aqi,
+            pm25: aqiData.pm25
+          });
+        } catch (error) {
+          console.warn('[HealthRiskAssessment] Failed to refresh AQI data:', error.message);
+        }
+      }
+
+      console.log('[HealthRiskAssessment] Refresh completed', {
+        hasAssessment: !!assessment,
+        profilesUpdated: !!profileData && !!healthData
+      });
+
+    } catch (error) {
+      console.error('[HealthRiskAssessment] Refresh error:', error.message);
+    } finally {
+      setRefreshing(false);
     }
   };
 
   const generatePDFHTML = () => {
     const riskColor = getRiskColor(assessment.riskLevel);
-    const assessmentDate = new Date(assessment.assessedAt).toLocaleDateString('en-US', { 
-      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
+    const assessmentDate = new Date(assessment.assessedAt).toLocaleDateString('en-US', {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
     });
 
     return `
@@ -195,7 +297,7 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
           </div>
           <div class="breakdown-item">
             <span class="breakdown-label">Age Factor</span>
-            <span class="breakdown-score">${assessment.breakdown.age || 0}/20</span>
+            <span class="breakdown-score">${assessment.breakdown.ageRiskScore || 0}/20</span>
           </div>
           <div class="breakdown-item">
             <span class="breakdown-label">Health Conditions</span>
@@ -251,7 +353,7 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
 
     try {
       setExportingPDF(true);
-      
+
       // Request media library permissions
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
@@ -266,22 +368,22 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
       // Create filename with timestamp
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
       const filename = `health_assessment_${timestamp}.pdf`;
-      
+
       // Copy to downloads directory
       const downloadDir = `${FileSystem.documentDirectory}Download/`;
-      
+
       // Ensure Download directory exists
       const dirInfo = await FileSystem.getInfoAsync(downloadDir);
       if (!dirInfo.exists) {
         await FileSystem.makeDirectoryAsync(downloadDir, { intermediates: true });
       }
-      
+
       const finalUri = `${downloadDir}${filename}`;
       await FileSystem.copyAsync({ from: uri, to: finalUri });
 
       // Save to media library (Downloads folder on Android, Photos on iOS)
       const asset = await MediaLibrary.createAssetAsync(finalUri);
-      
+
       // On Android, move to Downloads album
       if (Platform.OS === 'android') {
         const album = await MediaLibrary.getAlbumAsync('Download');
@@ -293,7 +395,7 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
       }
 
       Alert.alert(
-        'Export Successful', 
+        'Export Successful',
         `PDF report has been saved to your device's Downloads folder as "${filename}"`,
         [{ text: 'OK', style: 'default' }]
       );
@@ -306,18 +408,63 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
     }
   };
 
-  // Load latest assessment on component mount and when user changes
-  useEffect(() => { 
-    loadLatestAssessment(); 
-  }, [user?.id]);
+  useEffect(() => {
+    const initializeData = async () => {
+      if (user?.id && !hasLoadedInitial) {
+        try {
+          console.log('[HealthRiskAssessment] Initializing data...');
+
+          console.log('[HealthRiskAssessment] Fetching user profile...');
+          const profileData = await getUserProfile();
+          console.log('[HealthRiskAssessment] User profile fetched:', {
+            hasData: !!profileData,
+            age: profileData?.age,
+            city: profileData?.city
+          });
+          setUserProfile(profileData);
+
+          console.log('[HealthRiskAssessment] Fetching health profile...');
+          const healthData = await getHealthProfile();
+          console.log('[HealthRiskAssessment] Health profile fetched:', {
+            hasData: !!healthData,
+            isComplete: healthData?.isComplete,
+            missingFields: healthData?.missingFields?.join(', ') || 'none'
+          });
+          setHealthProfile(healthData);
+
+          console.log('[HealthRiskAssessment] Loading latest assessment...');
+          await loadLatestAssessment(false);
+          console.log('[HealthRiskAssessment] Initial data loaded successfully');
+        } catch (error) {
+          console.error('[HealthRiskAssessment] Initial data load error:', error.message);
+        } finally {
+          setHasLoadedInitial(true);
+        }
+      }
+    };
+
+    initializeData();
+  }, [user?.id, hasLoadedInitial]);
 
   const getRiskColor = (level) => ({ low: '#00E676', moderate: '#FF9800', high: '#E91E63', very_high: '#9C27B0' }[level] || '#757575');
-  
+
   const checkProfileCompleteness = () => {
-    const required = ['age', 'gender', 'outdoorExposure', 'isPregnant', 'isSmoker', 'hasAsthma', 'hasHeartDisease', 'hasRespiratoryIssues'];
-    const missing = required.filter(field => user?.[field] === undefined || user?.[field] === null);
-    return { complete: missing.length === 0, missing };
+    if (healthProfile?.isComplete) {
+      console.log('[Profile] API reports profile is complete');
+      return { complete: true, missing: [] };
+    }
+
+    console.log('[Profile] API reports profile is incomplete', {
+      missingFields: healthProfile?.requiredFields || [],
+      healthProfile: healthProfile
+    });
+
+    return {
+      complete: false,
+      missing: healthProfile?.requiredFields || []
+    };
   };
+
 
   const RiskFactorBar = ({ label, score, maxScore, color }) => (
     <View style={styles.riskFactorItem}>
@@ -326,7 +473,7 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
         <Text style={styles.riskFactorScore}>{score}/{maxScore}</Text>
       </View>
       <View style={styles.riskFactorBar}>
-        <View style={[styles.riskFactorFill, { width: `${(score/maxScore)*100}%`, backgroundColor: color }]} />
+        <View style={[styles.riskFactorFill, { width: `${(score / maxScore) * 100}%`, backgroundColor: color }]} />
       </View>
     </View>
   );
@@ -341,7 +488,7 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
         </View>
         <View style={styles.riskLabels}>
           {['Low', 'Moderate', 'High', 'Critical'].map((label, i) => (
-            <Text key={label} style={[styles.riskLabel, { color: progress >= (i+1)*25 ? color : '#666' }]}>{label}</Text>
+            <Text key={label} style={[styles.riskLabel, { color: progress >= (i + 1) * 25 ? color : '#666' }]}>{label}</Text>
           ))}
         </View>
       </View>
@@ -368,9 +515,10 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Current GPS', onPress: () => performAssessment(true) },
-        { text: user?.city ? `Saved City (${user.city})` : 'Saved City (Not Set)', 
-          onPress: () => performAssessment(false), 
-          style: user?.city ? 'default' : 'destructive' 
+        {
+          text: user?.city ? `Saved City (${user.city})` : 'Saved City (Not Set)',
+          onPress: () => performAssessment(false),
+          style: user?.city ? 'default' : 'destructive'
         }
       ]
     );
@@ -381,7 +529,7 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       <LinearGradient colors={['#0A0A0A', '#1A1A2E', '#16213E']} style={styles.gradient}>
         <SafeAreaView style={styles.safeArea}>
-          
+
           <View style={styles.header}>
             <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
               <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
@@ -391,6 +539,17 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
               <Text style={styles.headerSubtitle}>Environmental Health Analysis</Text>
             </View>
             <View style={styles.headerRightButtons}>
+              <TouchableOpacity
+                style={styles.refreshButton}
+                onPress={onRefresh}
+                disabled={refreshing}
+              >
+                {refreshing ? (
+                  <ActivityIndicator size="small" color="#00E676" />
+                ) : (
+                  <Ionicons name="refresh-outline" size={20} color="#00E676" />
+                )}
+              </TouchableOpacity>
               <TouchableOpacity style={styles.historyButton} onPress={() => navigation.navigate('History')}>
                 <Ionicons name="time-outline" size={20} color="#00E676" />
               </TouchableOpacity>
@@ -406,8 +565,22 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
             </View>
           </View>
 
-          <ScrollView style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-            
+          <ScrollView
+            style={styles.content}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={['#00E676']}
+                tintColor="#00E676"
+                title="Refreshing..."
+                titleColor="rgba(255,255,255,0.7)"
+              />
+            }
+          >
+
             <View style={styles.statusBanner}>
               <View style={styles.statusIndicator}>
                 <Ionicons name="pulse" size={18} color="#00E676" />
@@ -428,7 +601,7 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
                       </View>
                     </View>
                   </View>
-                  
+
                   <View style={[styles.riskCard, { backgroundColor: getRiskColor(assessment.riskLevel) + '15', borderColor: getRiskColor(assessment.riskLevel) + '30' }]}>
                     <View style={styles.riskScoreContainer}>
                       <Text style={[styles.riskScore, { color: getRiskColor(assessment.riskLevel) }]}>{assessment.riskScore}</Text>
@@ -452,7 +625,7 @@ const HealthRiskAssessmentScreen = ({ navigation }) => {
                     </View>
                     <View style={styles.riskFactorsContainer}>
                       <RiskFactorBar label="Environmental" score={assessment.breakdown.environmental || 0} maxScore={40} color="#FF6B35" />
-                      <RiskFactorBar label="Age Factor" score={assessment.breakdown.age || 0} maxScore={20} color="#9C27B0" />
+                      <RiskFactorBar label="Age Factor" score={assessment.breakdown.ageRiskScore || 0} maxScore={20} color="#9C27B0" />
                       <RiskFactorBar label="Health Conditions" score={assessment.breakdown.healthConditions || 0} maxScore={25} color="#E91E63" />
                       <RiskFactorBar label="Lifestyle" score={assessment.breakdown.lifestyle || 0} maxScore={15} color="#FF9800" />
                     </View>
@@ -536,6 +709,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 20, paddingBottom: 20 },
   backButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255, 255, 255, 0.1)', justifyContent: 'center', alignItems: 'center', borderColor: 'rgba(0,230,118,0.3)', borderWidth: 1 },
   headerRightButtons: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  refreshButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,230,118,0.2)', justifyContent: 'center', alignItems: 'center', borderColor: 'rgba(0,230,118,0.3)', borderWidth: 1 },
   historyButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,230,118,0.2)', justifyContent: 'center', alignItems: 'center', borderColor: 'rgba(0,230,118,0.3)', borderWidth: 1 },
   pdfButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,230,118,0.2)', justifyContent: 'center', alignItems: 'center', borderColor: 'rgba(0,230,118,0.3)', borderWidth: 1 },
   headerCenter: { flex: 1, alignItems: 'center' },
@@ -583,7 +757,7 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 14, color: 'rgba(255,255,255,0.7)', textAlign: 'center', lineHeight: 20 },
   assessButton: { borderRadius: 12, marginBottom: 20, overflow: 'hidden' },
   assessButtonGradient: { padding: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' },
-  assessButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700', marginLeft: 8 },
+  assessButtonText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF', marginLeft: 8 },
 });
 
 export default HealthRiskAssessmentScreen;

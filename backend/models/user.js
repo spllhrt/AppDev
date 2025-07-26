@@ -99,7 +99,8 @@ const userSchema = new mongoose.Schema({
         // ADD THESE MISSING FIELDS:
         breakdown: {
             environmental: Number,
-            age: Number,
+            ageRiskScore: Number,
+            actualAge: Number,  // Add this if missing
             healthConditions: Number,
             lifestyle: Number
         },

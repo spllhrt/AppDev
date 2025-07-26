@@ -1099,7 +1099,7 @@ const handleSearchBlur = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0A0A0A' },
-  mapContainer: { flex: 1 },
+  mapContainer: { flex: 1, paddingBottom:60},
   webView: { flex: 1 },
   headerOverlay: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 },
   headerGradient: {

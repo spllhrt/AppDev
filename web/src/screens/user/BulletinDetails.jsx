@@ -344,7 +344,6 @@ const renderImageViewer = () => (
                     <View style={styles.bulletinInfo}>
                       <Text style={styles.bulletinTitle}>{bulletin.title}</Text>
                       <View style={styles.bulletinMeta}>
-                        <Text style={styles.bulletinAuthor}>{bulletin.createdBy.name}</Text>
                         <Text style={styles.bulletinTime}>{formatTimeAgo(bulletin.createdAt)}</Text>
                         <View style={styles.categoryBadge}>
                           <Text style={styles.categoryBadgeText}>{bulletin.category}</Text>

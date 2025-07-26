@@ -89,8 +89,8 @@ exports.createHealthRiskAssessment = async (req, res, next) => {
             recommendations: newAssessment.recommendations,
             breakdown: {
                 environmental: newAssessment.breakdown.environmental,
-                ageRiskScore: newAssessment.breakdown.ageRiskScore,
-                actualAge: newAssessment.breakdown.actualAge,
+                ageRiskScore: newAssessment.breakdown.ageRiskScore, // Now included
+                actualAge: user.age, // Direct from user object as fallback
                 healthConditions: newAssessment.breakdown.healthConditions,
                 lifestyle: newAssessment.breakdown.lifestyle
             },
@@ -146,21 +146,23 @@ exports.createHealthRiskAssessment = async (req, res, next) => {
             });
 
             user.lastAssessment = {
-                riskScore: fallback.totalScore,
-                riskLevel: fallback.riskLevel,
-                aqi,
-                pm25,
-                pm10,
-                recommendations: fallbackRecs,
+                _id: newAssessment._id,
+                riskScore: newAssessment.riskScore,
+                riskLevel: newAssessment.riskLevel,
+                aqi: newAssessment.aqi,
+                pm25: newAssessment.pm25,
+                pm10: newAssessment.pm10,
+                recommendations: newAssessment.recommendations,
                 breakdown: {
-                    environmental: fallback.breakdown.environmental,
-                    ageRiskScore: fallback.breakdown.age,
-                    actualAge: user.age,
-                    healthConditions: fallback.breakdown.healthConditions,
-                    lifestyle: fallback.breakdown.lifestyle
+                    environmental: newAssessment.breakdown.environmental,
+                    ageRiskScore: newAssessment.breakdown.ageRiskScore, // Now included
+                    actualAge: user.age, // Direct from user object as fallback
+                    healthConditions: newAssessment.breakdown.healthConditions,
+                    lifestyle: newAssessment.breakdown.lifestyle
                 },
-                location: fallbackAssessment.location,
-                assessedAt: fallbackAssessment.assessedAt
+                aiInsights: newAssessment.aiInsights,
+                location: newAssessment.location,
+                assessedAt: newAssessment.assessedAt
             };
 
             await user.save();
@@ -258,7 +260,7 @@ Respond ONLY with the JSON object, no additional text.
         }
 
         // Validate the AI response structure
-        if (!aiResponse.riskScore || !aiResponse.riskLevel || !aiResponse.breakdown || 
+        if (!aiResponse.riskScore || !aiResponse.riskLevel || !aiResponse.breakdown ||
             !aiResponse.recommendations || !aiResponse.insights) {
             throw new Error("Invalid AI response structure");
         }
@@ -272,13 +274,13 @@ Respond ONLY with the JSON object, no additional text.
             aiResponse.breakdown.ageRiskScore = Math.max(0, Math.min(20, parseInt(aiResponse.breakdown.ageRiskScore || 0)));
             aiResponse.breakdown.healthConditions = Math.max(0, Math.min(25, parseInt(aiResponse.breakdown.healthConditions || 0)));
             aiResponse.breakdown.lifestyle = Math.max(0, Math.min(15, parseInt(aiResponse.breakdown.lifestyle || 0)));
-            
+
             // Recalculate total risk score based on capped breakdown scores
-            const calculatedScore = aiResponse.breakdown.environmental + 
-                                  aiResponse.breakdown.ageRiskScore + 
-                                  aiResponse.breakdown.healthConditions + 
-                                  aiResponse.breakdown.lifestyle;
-            
+            const calculatedScore = aiResponse.breakdown.environmental +
+                aiResponse.breakdown.ageRiskScore +
+                aiResponse.breakdown.healthConditions +
+                aiResponse.breakdown.lifestyle;
+
             // Use the calculated score if it's significantly different from the AI's original score
             if (Math.abs(calculatedScore - aiResponse.riskScore) > 5) {
                 aiResponse.riskScore = Math.min(100, calculatedScore);
@@ -606,7 +608,7 @@ function calculateHealthRiskScore(user, environmentalData) {
 
 function calculateEnvironmentalScore(data) {
     let score = 0;
-    
+
     // AQI scoring (0-40 points)
     if (data.aqi >= 300) score += 40;
     else if (data.aqi >= 200) score += 35;
@@ -628,31 +630,31 @@ function calculateAgeScore(age) {
 
 function calculateHealthConditionsScore(user) {
     let score = 0;
-    
+
     if (user.hasAsthma) score += 8;
     if (user.hasHeartDisease) score += 10;
     if (user.hasRespiratoryIssues) score += 7;
     if (user.isPregnant) score += 8;
-    
+
     return score;
 }
 
 function calculateLifestyleScore(user) {
     let score = 0;
-    
+
     if (user.isSmoker) score += 8;
-    
+
     // Outdoor exposure
     if (user.outdoorExposure === 'high') score += 7;
     else if (user.outdoorExposure === 'moderate') score += 4;
     else score += 1;
-    
+
     return score;
 }
 
 function generateRecommendations(riskData, user) {
     const recommendations = [];
-    
+
     // Risk level based recommendations
     if (riskData.riskLevel === 'very_high') {
         recommendations.push("Avoid all outdoor activities. Stay indoors with air purifiers running.");
@@ -666,33 +668,33 @@ function generateRecommendations(riskData, user) {
     } else {
         recommendations.push("Normal outdoor activities are generally safe.");
     }
-    
+
     // Health condition specific recommendations
     if (user.hasAsthma) {
         recommendations.push("Keep your inhaler readily available and follow your asthma action plan.");
     }
-    
+
     if (user.hasHeartDisease) {
         recommendations.push("Monitor your symptoms closely and contact your doctor if you experience chest pain or unusual fatigue.");
     }
-    
+
     if (user.isPregnant) {
         recommendations.push("Consult with your healthcare provider about air quality precautions during pregnancy.");
     }
-    
+
     if (user.isSmoker) {
         recommendations.push("Consider quitting smoking to reduce additional respiratory risks.");
     }
-    
+
     // Age-specific recommendations
     if (user.age >= 65) {
         recommendations.push("Seniors should be extra cautious during poor air quality days.");
     }
-    
+
     if (user.age <= 12) {
         recommendations.push("Children should limit outdoor play during poor air quality periods.");
     }
-    
+
     return recommendations;
 }
 
@@ -1037,8 +1039,8 @@ exports.checkReassessmentNeeded = async (req, res, next) => {
 // Helper function to check if reassessment is needed
 function checkIfReassessmentNeeded(lastAssessment, currentEnvironmentalData) {
     if (!lastAssessment) {
-        return { 
-            shouldReassess: true, 
+        return {
+            shouldReassess: true,
             reason: 'No previous assessment found',
             urgency: 'normal'
         };
@@ -1048,8 +1050,8 @@ function checkIfReassessmentNeeded(lastAssessment, currentEnvironmentalData) {
 
     // Suggest reassessment if more than 12 hours old
     if (hoursSinceAssessment > 12) {
-        return { 
-            shouldReassess: true, 
+        return {
+            shouldReassess: true,
             reason: 'Assessment is over 12 hours old',
             urgency: 'normal'
         };
@@ -1059,8 +1061,8 @@ function checkIfReassessmentNeeded(lastAssessment, currentEnvironmentalData) {
     if (currentEnvironmentalData && currentEnvironmentalData.aqi) {
         const aqiDiff = Math.abs(currentEnvironmentalData.aqi - lastAssessment.aqi);
         if (aqiDiff > 50) {
-            return { 
-                shouldReassess: true, 
+            return {
+                shouldReassess: true,
                 reason: 'Air quality has changed significantly',
                 urgency: 'high',
                 aqiChange: aqiDiff
@@ -1068,8 +1070,8 @@ function checkIfReassessmentNeeded(lastAssessment, currentEnvironmentalData) {
         }
     }
 
-    return { 
-        shouldReassess: false, 
+    return {
+        shouldReassess: false,
         reason: 'Recent assessment is still valid',
         urgency: 'none',
         hoursSinceLastAssessment: Math.round(hoursSinceAssessment)
@@ -1084,6 +1086,6 @@ function getHealthConditionsSummary(user) {
     if (user.hasAsthma) conditions.push('Asthma');
     if (user.hasHeartDisease) conditions.push('Heart Disease');
     if (user.hasRespiratoryIssues) conditions.push('Respiratory Issues');
-    
+
     return conditions.length > 0 ? conditions.join(', ') : 'None reported';
 }

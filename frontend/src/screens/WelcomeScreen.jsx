@@ -137,41 +137,10 @@ const WelcomeScreen = ({ navigation }) => {
                 Real-time air quality predictions with personalized health insights powered by advanced AI
               </Text>
 
-              {/* Stats Cards */}
-              <View style={styles.statsContainer}>
-                <View style={styles.statCard}>
-                  <Text style={styles.statNumber}>98%</Text>
-                  <Text style={styles.statLabel}>Accuracy</Text>
-                </View>
-                <View style={styles.statCard}>
-                  <Text style={styles.statNumber}>24/7</Text>
-                  <Text style={styles.statLabel}>Monitoring</Text>
-                </View>
-                <View style={styles.statCard}>
-                  <Text style={styles.statNumber}>50+</Text>
-                  <Text style={styles.statLabel}>Cities</Text>
-                </View>
-              </View>
-
-              {/* Features */}
-              <View style={styles.featuresSection}>
-                <Text style={styles.featuresTitle}>Key Features</Text>
-                <View style={styles.featuresList}>
-                  <View style={styles.featureItem}>
-                    <Ionicons name="analytics-outline" size={24} color="#4CAF50" />
-                    <Text style={styles.featureText}>AI-powered predictions</Text>
-                  </View>
-                  <View style={styles.featureItem}>
-                    <Ionicons name="pulse-outline" size={24} color="#4CAF50" />
-                    <Text style={styles.featureText}>Real-time monitoring</Text>
-                  </View>
-                  <View style={styles.featureItem}>
-                    <Ionicons name="fitness-outline" size={24} color="#4CAF50" />
-                    <Text style={styles.featureText}>Health insights</Text>
-                  </View>
-                </View>
-              </View>
             </Animated.View>
+
+            {/* Spacer for visual separation */}
+            <View style={styles.spacer} />
 
             {/* Buttons Section */}
             <Animated.View 
@@ -231,80 +200,83 @@ const styles = StyleSheet.create({
   contentContainer: {
     flexGrow: 1,
     paddingHorizontal: 20,
-    paddingTop: StatusBar.currentHeight ? StatusBar.currentHeight + 20 : 40,
-    paddingBottom: 20,
+    paddingTop: StatusBar.currentHeight ? StatusBar.currentHeight + 30 : 50,
+    paddingBottom: 30,
+    justifyContent: 'center',
   },
   mainContent: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: height * 0.75,
+  },
+
+  // Spacer between content and buttons
+  spacer: {
+    height: 40,
   },
   
-  // Icon Styles
+  // Icon Styles (made more compact)
   iconContainer: {
     position: 'relative',
-    width: 160,
-    height: 120,
-    marginBottom: 32,
-    marginTop: 16,
+    width: 120,
+    height: 90,
+    marginBottom: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
   cloudBase: {
     position: 'relative',
-    width: 100,
-    height: 60,
+    width: 80,
+    height: 48,
     alignSelf: 'center',
   },
   cloudPart1: {
     position: 'absolute',
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: '#e8f4fd',
     left: 0,
     top: 0,
   },
   cloudPart2: {
     position: 'absolute',
-    width: 70,
-    height: 50,
-    borderRadius: 35,
+    width: 56,
+    height: 40,
+    borderRadius: 28,
     backgroundColor: '#f0f8ff',
     right: 0,
-    top: 5,
+    top: 4,
   },
   cloudPart3: {
     position: 'absolute',
-    width: 50,
-    height: 35,
-    borderRadius: 25,
+    width: 40,
+    height: 28,
+    borderRadius: 20,
     backgroundColor: '#f8fcff',
-    left: 25,
-    top: 25,
+    left: 20,
+    top: 20,
   },
   windLines: {
     position: 'absolute',
-    right: 10,
-    top: 20,
+    right: 8,
+    top: 16,
   },
   windLine: {
-    height: 3,
+    height: 2,
     backgroundColor: '#4CAF50',
-    borderRadius: 2,
+    borderRadius: 1,
     opacity: 0.8,
-    marginVertical: 4,
+    marginVertical: 3,
   },
   windLine1: {
-    width: 25,
+    width: 20,
   },
   windLine2: {
-    width: 20,
+    width: 16,
     opacity: 0.6,
   },
   windLine3: {
-    width: 15,
+    width: 12,
     opacity: 0.4,
   },
   particles: {
@@ -314,142 +286,69 @@ const styles = StyleSheet.create({
   },
   particle: {
     position: 'absolute',
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
     backgroundColor: '#81C784',
   },
   particle1: {
-    top: 15,
-    right: 15,
+    top: 12,
+    right: 12,
   },
   particle2: {
-    top: 40,
-    right: 5,
+    top: 32,
+    right: 4,
   },
   particle3: {
-    top: 65,
-    right: 10,
+    top: 52,
+    right: 8,
   },
   particle4: {
-    top: 25,
+    top: 20,
     right: 0,
   },
   particle5: {
-    top: 55,
-    right: -5,
+    top: 44,
+    right: -4,
   },
 
-  // Title Section
+  // Title Section (more compact)
   titleSection: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 26,
   },
   appName: {
-    fontSize: Math.min(width * 0.09, 36),
+    fontSize: Math.min(width * 0.08, 32),
     fontWeight: 'bold',
     color: '#ffffff',
     textAlign: 'center',
     letterSpacing: 1,
   },
   subtitle: {
-    fontSize: Math.min(width * 0.09, 36),
+    fontSize: Math.min(width * 0.08, 32),
     fontWeight: 'bold',
     color: '#4CAF50',
     textAlign: 'center',
-    marginTop: -6,
+    marginTop: -4,
     letterSpacing: 1,
   },
   description: {
-    fontSize: Math.min(width * 0.042, 16),
+    fontSize: Math.min(width * 0.04, 15),
     color: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 28,
+    lineHeight: 22,
     paddingHorizontal: 16,
     maxWidth: width * 0.85,
-  },
-
-  // Stats Section
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-    marginBottom: 28,
-    paddingHorizontal: 8,
-  },
-  statCard: {
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    flex: 1,
-    marginHorizontal: 4,
-    minHeight: 80,
-    justifyContent: 'center',
-  },
-  statNumber: {
-    fontSize: Math.min(width * 0.055, 20),
-    fontWeight: 'bold',
-    color: '#4CAF50',
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: Math.min(width * 0.032, 12),
-    color: 'rgba(255, 255, 255, 0.7)',
-    textAlign: 'center',
-    fontWeight: '500',
-  },
-
-  // Features Section
-  featuresSection: {
-    width: '100%',
-    marginBottom: 24,
-  },
-  featuresTitle: {
-    fontSize: Math.min(width * 0.052, 20),
-    fontWeight: 'bold',
-    color: '#ffffff',
-    textAlign: 'center',
-    marginBottom: 16,
-    letterSpacing: 0.5,
-  },
-  featuresList: {
-    alignItems: 'stretch',
-    width: '100%',
-  },
-  featureItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    width: '100%',
-    minHeight: 56,
-  },
-  featureText: {
-    fontSize: Math.min(width * 0.042, 16),
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginLeft: 16,
-    fontWeight: '500',
-    flex: 1,
+    marginBottom: 26,
   },
 
   // Buttons Section
   buttonsSection: {
     width: '100%',
     alignItems: 'center',
-    paddingTop: 16,
-    paddingBottom: 8,
   },
   primaryButton: {
-    width: '100%',
+    width: '85%',
     borderRadius: 28,
     overflow: 'hidden',
     marginBottom: 16,
@@ -460,31 +359,30 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
   },
   primaryButtonGradient: {
-    paddingVertical: 18,
+    paddingVertical: 16,
     paddingHorizontal: 32,
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'center',
-    minHeight: 56,
+    minHeight: 52,
   },
   primaryButtonText: {
     color: '#ffffff',
-    fontSize: Math.min(width * 0.047, 18),
+    fontSize: Math.min(width * 0.045, 17),
     fontWeight: '600',
     marginRight: 8,
   },
   signInContainer: {
     paddingVertical: 12,
     paddingHorizontal: 20,
-    minHeight: 44,
+    minHeight: 40,
     justifyContent: 'center',
   },
   signInText: {
     color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: Math.min(width * 0.042, 16),
+    fontSize: Math.min(width * 0.04, 15),
     textAlign: 'center',
     fontWeight: '500',
-    paddingBottom:100
   },
 });
 

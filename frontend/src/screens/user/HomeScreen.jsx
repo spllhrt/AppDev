@@ -661,7 +661,7 @@ Format your response as a JSON object with a single 'text' property containing t
 
             {/* Health Recommendation */}
             <View style={styles.healthSection}>
-              <TouchableOpacity style={styles.healthCard} onPress={() => navigation.navigate('Health')}>
+              <TouchableOpacity style={styles.healthCard} onPress={() => navigation.navigate('HealthAssessment')}>
                 <View style={styles.healthContent}>
                   <View style={styles.healthIcon}>
                     <Ionicons name="heart-outline" size={24} color="#00E676" />
