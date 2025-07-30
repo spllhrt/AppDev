@@ -400,8 +400,8 @@ const renderMap = (isFullscreen = false) => {
           <div class="weather-main">
             <div class="weather-icon">\${getWeatherIcon(weatherData.weatherCode)}</div>
             <div class="temp-info">
-              <div class="current-temp">\${weatherData.temp}°</div>
-              <div class="temp-range">H:\${weatherData.temp}° L:\${weatherData.tempMin}°</div>
+              <div class="current-temp">\${weatherData.temp}°C</div>
+              <div class="temp-range">H:\${weatherData.temp}°C L:\${weatherData.tempMin}°C</div>
             </div>
           </div>
           <div class="weather-details">

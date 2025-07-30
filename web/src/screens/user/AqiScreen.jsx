@@ -771,7 +771,7 @@ return (
                             onPress={() => setSelectedDay(index)}
                           >
                             <Text style={styles.webForecastDay}>{formatDate(day.date, index)}</Text>
-                            <Text style={[styles.webForecastAqi, { color: dayCategory.color }]}>{day.aqi}</Text>
+                            <Text style={[styles.webForecastAqi, { color: dayCategory.color }]}>{day.aqi} μg/m³</Text>
                             <Text style={styles.webForecastCategory}>{dayCategory.text}</Text>
                             <View style={[styles.webForecastIndicator, { backgroundColor: dayCategory.color }]} />
                           </TouchableOpacity>
