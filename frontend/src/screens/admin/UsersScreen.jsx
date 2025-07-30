@@ -26,6 +26,8 @@ const UsersScreen = () => {
   const [viewMode, setViewMode] = useState('clusters');
   const [exporting, setExporting] = useState(false);
   const [exportModalVisible, setExportModalVisible] = useState(false);
+  const [deactivationModalVisible, setDeactivationModalVisible] = useState(false);
+  const [deactivationReason, setDeactivationReason] = useState('');
 
   const roles = ['user', 'admin'];
   const statuses = ['active', 'deactivated'];
@@ -175,7 +177,6 @@ const UsersScreen = () => {
       setExportModalVisible(false);
       
       if (Platform.OS === 'web') {
-        // Web-specific PDF export
         const htmlContent = generatePDFHTML();
         const win = window.open('', '_blank');
         win.document.write(htmlContent);
@@ -187,7 +188,6 @@ const UsersScreen = () => {
         return;
       }
 
-      // Mobile export logic
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('Permission Denied', 'Permission to access media library is required to save the PDF.');
@@ -280,11 +280,27 @@ const UsersScreen = () => {
     if (!selectedUser) return;
     try {
       setUpdating(true);
-      const response = await updateUser(selectedUser._id, { role: newRole, status: newStatus });
+      const updateData = { role: newRole, status: newStatus };
+      
+      // Include deactivation reason if status is being set to deactivated
+      if (newStatus === 'deactivated' && deactivationReason.trim()) {
+        updateData.deactivationReason = deactivationReason.trim();
+      }
+      
+      const response = await updateUser(selectedUser._id, updateData);
       if (response.success) {
-        setUsers(prevUsers => prevUsers.map(user => user._id === selectedUser._id ? { ...user, role: newRole, status: newStatus } : user));
+        const updatedUser = { 
+          ...selectedUser, 
+          role: newRole, 
+          status: newStatus,
+          ...(newStatus === 'deactivated' && deactivationReason.trim() && { deactivationReason: deactivationReason.trim() })
+        };
+        
+        setUsers(prevUsers => prevUsers.map(user => user._id === selectedUser._id ? updatedUser : user));
         Alert.alert('Success', 'User updated successfully');
         setModalVisible(false);
+        setDeactivationModalVisible(false);
+        setDeactivationReason('');
       }
     } catch (error) {
       Alert.alert('Error', error.message || 'Failed to update user');
@@ -320,7 +336,6 @@ const UsersScreen = () => {
             <Text style={[styles.toggleText, viewMode === 'users' && styles.activeToggleText]}>Users</Text>
           </TouchableOpacity>
           
-          {/* Refresh Button */}
           <TouchableOpacity 
             style={[styles.refreshButton, refreshing && styles.disabledButton]} 
             onPress={onRefresh} 
@@ -364,7 +379,6 @@ const UsersScreen = () => {
               )}
             </View>
 
-            {/* Active filters indicator */}
             {hasActiveFilters && (
               <View style={styles.filtersContainer}>
                 <Text style={styles.filtersLabel}>Active filters:</Text>
@@ -489,7 +503,12 @@ const UsersScreen = () => {
                       <TouchableOpacity 
                         key={status} 
                         style={[styles.optionButton, newStatus === status && styles.selectedOption]} 
-                        onPress={() => setNewStatus(status)}
+                        onPress={() => {
+                          setNewStatus(status);
+                          if (status === 'deactivated') {
+                            setDeactivationModalVisible(true);
+                          }
+                        }}
                       >
                         <Text style={[styles.optionText, newStatus === status && styles.selectedOptionText]}>
                           {status.charAt(0).toUpperCase() + status.slice(1)}
@@ -517,6 +536,65 @@ const UsersScreen = () => {
                 </View>
               </>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Deactivation Reason Modal */}
+      <Modal visible={deactivationModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: '60%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Deactivation Reason</Text>
+              <TouchableOpacity onPress={() => {
+                setDeactivationModalVisible(false);
+                setNewStatus('active');
+              }}>
+                <Ionicons name="close" size={24} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.modalBody}>
+              <Text style={styles.modalText}>
+                Please provide a reason for deactivating this user account:
+              </Text>
+              <TextInput
+                style={styles.reasonInput}
+                placeholder="Enter reason..."
+                placeholderTextColor="#94A3B8"
+                multiline
+                numberOfLines={4}
+                value={deactivationReason}
+                onChangeText={setDeactivationReason}
+              />
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.cancelButton]} 
+                onPress={() => {
+                  setDeactivationModalVisible(false);
+                  setNewStatus('active');
+                  setDeactivationReason('');
+                }}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.confirmButton, (!deactivationReason.trim() || updating) && styles.disabledButton]} 
+                onPress={() => {
+                  setDeactivationModalVisible(false);
+                  handleUpdateUser();
+                }}
+                disabled={!deactivationReason.trim() || updating}
+              >
+                {updating ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.confirmButtonText}>Confirm Deactivation</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -627,6 +705,19 @@ const styles = StyleSheet.create({
   modalIcon: { marginBottom: 16 },
   modalText: { fontSize: 15, color: '#334155', textAlign: 'center', marginBottom: 8 },
   modalSubtext: { fontSize: 13, color: '#64748B', textAlign: 'center' },
+  reasonInput: {
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 8,
+    padding: 12,
+    minHeight: 100,
+    textAlignVertical: 'top',
+    backgroundColor: '#F8FAFC',
+    fontSize: 14,
+    color: '#1E293B',
+    width: '100%',
+    marginTop: 12,
+  },
   modalUserInfo: { padding: 20, backgroundColor: '#F8FAFC', margin: 20, borderRadius: 8 },
   modalUserName: { fontSize: 16, fontWeight: '600', color: '#1E293B' },
   modalUserEmail: { fontSize: 13, color: '#64748B' },
@@ -639,10 +730,10 @@ const styles = StyleSheet.create({
   selectedOptionText: { color: '#DC2626' },
   modalActions: { flexDirection: 'row', gap: 10, padding: 20 },
   modalButton: { flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
-  cancelButton: { backgroundColor: '#F1F5F9' },
-  cancelButtonText: { fontSize: 14, color: '#64748B', fontWeight: '600' },
-  confirmButton: { backgroundColor: '#3B82F6' },
-  confirmButtonText: { fontSize: 14, color: '#FFFFFF', fontWeight: '700' },
+  cancelButton: { flex: 1, paddingVertical: 12, borderRadius: 8, backgroundColor: '#64748B', alignItems: 'center'},
+  cancelButtonText: {fontSize: 14, color: '#FFFFFF', fontWeight: '700'  },
+  confirmButton: { flex: 1, paddingVertical: 12, borderRadius: 8, backgroundColor: '#3B82F6', alignItems: 'center' },
+  confirmButtonText: { fontSize: 14, color: '#FFFFFF', fontWeight: '700'  },
   saveButton: { flex: 1, paddingVertical: 12, borderRadius: 8, backgroundColor: '#DC2626', alignItems: 'center' },
   saveButtonText: { fontSize: 14, color: '#FFFFFF', fontWeight: '700' },
 });

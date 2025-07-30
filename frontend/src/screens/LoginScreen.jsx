@@ -13,7 +13,8 @@ import {
   ActivityIndicator,
   Dimensions,
   StatusBar,
-  Linking
+  Linking,
+  Modal
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -33,6 +34,7 @@ const LoginScreen = ({ navigation }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [showDeactivatedModal, setShowDeactivatedModal] = useState(false);
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({
@@ -65,6 +67,10 @@ const LoginScreen = ({ navigation }) => {
     return Object.keys(newErrors).length === 0;
   };
 
+  const handleDeactivatedAccount = () => {
+    setShowDeactivatedModal(true);
+  };
+
   const handleLogin = async () => {
     console.log('Login button pressed');
     
@@ -94,23 +100,7 @@ const LoginScreen = ({ navigation }) => {
 
       // Check if user is deactivated
       if (response.user?.status === 'deactivated' || response.data?.user?.status === 'deactivated') {
-        Alert.alert(
-          'Account Deactivated',
-          'Your account has been deactivated. Please contact our support team to reactivate your account.',
-          [
-            {
-              text: 'Contact Support',
-              onPress: () => {
-                Linking.openURL('mailto:support@yourapp.com?subject=Account Reactivation Request');
-              }
-            },
-            {
-              text: 'OK',
-              style: 'cancel'
-            }
-          ],
-          { cancelable: false }
-        );
+        handleDeactivatedAccount();
         return;
       }
 
@@ -127,23 +117,7 @@ const LoginScreen = ({ navigation }) => {
       // Check if the error is specifically about deactivated account
       if (error.response?.data?.message?.toLowerCase().includes('deactivated') || 
           error.message?.toLowerCase().includes('deactivated')) {
-        Alert.alert(
-          'Account Deactivated',
-          'Your account has been deactivated. Please contact our support team to reactivate your account.',
-          [
-            {
-              text: 'Contact Support',
-              onPress: () => {
-                Linking.openURL('mailto:support@yourapp.com?subject=Account Reactivation Request');
-              }
-            },
-            {
-              text: 'OK',
-              style: 'cancel'
-            }
-          ],
-          { cancelable: false }
-        );
+        handleDeactivatedAccount();
       } else {
         Alert.alert(
           'Login Failed',
@@ -155,6 +129,30 @@ const LoginScreen = ({ navigation }) => {
       setLoading(false);
     }
   };
+
+  const DeactivatedModal = () => (
+    <Modal visible={showDeactivatedModal} transparent animationType="fade">
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Ionicons name="alert-circle" size={24} color="#ef4444" />
+            <Text style={styles.modalTitle}>Account Deactivated</Text>
+          </View>
+          <Text style={styles.modalMessage}>
+            Your account has been deactivated. The reason/s and instructions for appeal has been sent to your Gmail.
+          </Text>
+          <View style={styles.modalButtonGroup}>
+            <TouchableOpacity
+              style={[styles.modalButton, styles.primaryButton]}
+              onPress={() => setShowDeactivatedModal(false)}
+            >
+              <Text style={styles.modalButtonText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
 
   const handleForgotPassword = () => {
     console.log('Forgot password pressed');
@@ -323,6 +321,7 @@ const LoginScreen = ({ navigation }) => {
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
+        <DeactivatedModal />
       </SafeAreaView>
     </LinearGradient>
   );
@@ -496,6 +495,60 @@ const styles = StyleSheet.create({
   },
   disabledText: {
     opacity: 0.5,
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#16213e',
+    borderRadius: 20,
+    padding: 30,
+    width: '90%',
+    maxWidth: 400,
+    alignItems: 'center',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginLeft: 10,
+  },
+  modalMessage: {
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.8)',
+    textAlign: 'center',
+    marginBottom: 25,
+    lineHeight: 22,
+  },
+  modalButtonGroup: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  modalButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 25,
+    alignItems: 'center',
+  },
+  primaryButton: {
+    backgroundColor: '#4CAF50',
+    flex: 1,
+    alignItems:'center'
+  },
+  modalButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
 

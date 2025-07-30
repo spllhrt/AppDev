@@ -368,7 +368,7 @@ const AqiScreen = ({ navigation, route }) => {
                         const marker = L.marker([lat, lng], {icon}).addTo(map);
                         if (${fullScreen}) {
                             const locationTitle = isCurrentLocation ? 'Your Current Location' : (cityName || 'Air Quality Data');
-                            const popupContent = \`<div class="popup-content"><div class="popup-title">\${locationTitle}</div><div class="aqi-badge" style="background-color:\${category.color};">AQI: \${aqi} (\${category.text})</div><div class="detail-item"><strong>Pollutant Concentrations:</strong><div class="pollutant"><span>PM2.5 (24h avg):</span><span>\${formatPollutantValue(current.pm2_5, 'μg/m³')}</span></div><div class="pollutant"><span>PM10:</span><span>\${formatPollutantValue(current.pm10, 'μg/m³')}</span></div><div class="pollutant"><span>NO₂:</span><span>\${formatPollutantValue(current.nitrogen_dioxide, 'μg/m³')}</span></div><div class="pollutant"><span>O₃:</span><span>\${formatPollutantValue(current.ozone, 'μg/m³')}</span></div><div class="pollutant"><span>SO₂:</span><span>\${formatPollutantValue(current.sulphur_dioxide, 'μg/m³')}</span></div><div class="pollutant"><span>CO:</span><span>\${formatPollutantValue(current.carbon_monoxide, 'μg/m³')}</span></div></div><div style="font-size:11px;color:rgba(255,255,255,0.7);margin-top:8px;">AQI calculated from 24-hour average PM2.5 using EPA standards</div></div>\`;
+                            const popupContent = \`<div class="popup-content"><div class="popup-title">\${locationTitle}</div><div class="aqi-badge" style="background-color:\${category.color};">AQI: \${aqi} μg/m³ (\${category.text})</div><div class="detail-item"><strong>Pollutant Concentrations:</strong><div class="pollutant"><span>PM2.5 (24h avg):</span><span>\${formatPollutantValue(current.pm2_5, 'μg/m³')}</span></div><div class="pollutant"><span>PM10:</span><span>\${formatPollutantValue(current.pm10, 'μg/m³')}</span></div><div class="pollutant"><span>NO₂:</span><span>\${formatPollutantValue(current.nitrogen_dioxide, 'μg/m³')}</span></div><div class="pollutant"><span>O₃:</span><span>\${formatPollutantValue(current.ozone, 'μg/m³')}</span></div><div class="pollutant"><span>SO₂:</span><span>\${formatPollutantValue(current.sulphur_dioxide, 'μg/m³')}</span></div><div class="pollutant"><span>CO:</span><span>\${formatPollutantValue(current.carbon_monoxide, 'μg/m³')}</span></div></div><div style="font-size:11px;color:rgba(255,255,255,0.7);margin-top:8px;">AQI calculated from 24-hour average PM2.5 using EPA standards</div></div>\`;
                             marker.bindPopup(popupContent); if (isCurrentLocation) marker.openPopup();
                         }
                         return {aqi, data: current};
@@ -598,7 +598,8 @@ const AqiScreen = ({ navigation, route }) => {
             {/* Main AQI Card */}
             <View style={[styles.mainCard, { borderColor: category.color }]}>
               <View style={styles.aqiSection}>
-                <Text style={styles.aqiValue}>{currentAQI?.aqi || 0}</Text>
+                <Text style={styles.aqiValue}>{currentAQI?.aqi || 0} </Text>
+                <Text style={[styles.aqiCategory, { color: category.color }]}>μg/m³</Text>
                 <Text style={[styles.aqiCategory, { color: category.color }]}>{category.text}</Text>
                 {pollutionSource && (
                   <View style={styles.sourceCard}>
@@ -663,6 +664,7 @@ const AqiScreen = ({ navigation, route }) => {
                     >
                       <Text style={styles.forecastDay}>{formatDate(day.date, index)}</Text>
                       <Text style={[styles.forecastAqi, { color: dayCategory.color }]}>{day.aqi}</Text>
+                      <Text style={styles.forecastCategory}>μg/m³</Text>
                       <Text style={styles.forecastCategory}>{dayCategory.text}</Text>
                     </TouchableOpacity>
                   );
@@ -743,7 +745,7 @@ const AqiScreen = ({ navigation, route }) => {
                 {selectedHourData && (
                   <View style={styles.hourlyModalContent}>
                     <View style={styles.hourlyAqiSection}>
-                      <Text style={styles.hourlyAqiValue}>{selectedHourData.aqi}</Text>
+                      <Text style={styles.hourlyAqiValue}>{selectedHourData.aqi} μg/m³</Text>
                       <Text style={[styles.hourlyAqiCategory, { color: getAQICategory(selectedHourData.aqi).color }]}>
                         {getAQICategory(selectedHourData.aqi).text}
                       </Text>

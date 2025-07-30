@@ -357,8 +357,8 @@ const WeatherScreen = ({ navigation, route }) => {
           <div class="weather-main">
             <div class="weather-icon">\${getWeatherIcon(weatherData.weatherCode)}</div>
             <div class="temp-info">
-              <div class="current-temp">\${weatherData.temp}°</div>
-              <div class="temp-range">H:\${weatherData.temp}° L:\${weatherData.tempMin}°</div>
+              <div class="current-temp">\${weatherData.temp}°C</div>
+              <div class="temp-range">H:\${weatherData.temp}°C L:\${weatherData.tempMin}°C</div>
             </div>
           </div>
           <div class="weather-details">
@@ -719,9 +719,9 @@ const WeatherScreen = ({ navigation, route }) => {
               <View style={styles.currentMain}>
                 <Ionicons name={getWeatherIcon(weatherData?.daily?.weathercode?.[0])} size={70} color="#00E676" />
                 <View style={styles.tempContainer}>
-                  <Text style={styles.currentTemp}>{Math.round(weatherData?.daily?.temperature_2m_max?.[0] || 0)}°</Text>
+                  <Text style={styles.currentTemp}>{Math.round(weatherData?.daily?.temperature_2m_max?.[0] || 0)}°C</Text>
                   <Text style={styles.tempRange}>
-                    H:{Math.round(weatherData?.daily?.temperature_2m_max?.[0] || 0)}° L:{Math.round(weatherData?.daily?.temperature_2m_min?.[0] || 0)}°
+                    H:{Math.round(weatherData?.daily?.temperature_2m_max?.[0] || 0)}° L:{Math.round(weatherData?.daily?.temperature_2m_min?.[0] || 0)}°C
                   </Text>
                 </View>
               </View>
@@ -808,10 +808,10 @@ const WeatherScreen = ({ navigation, route }) => {
                     <Text style={styles.dayText}>{formatDate(date, index)}</Text>
                     <Ionicons name={getWeatherIcon(weatherData.daily.weathercode[index])} size={32} color="#00E676" />
                     <Text style={styles.forecastTemp}>
-                      {Math.round(weatherData.daily.temperature_2m_max[index])}°
+                      {Math.round(weatherData.daily.temperature_2m_max[index])}°C
                     </Text>
                     <Text style={styles.forecastTempMin}>
-                      {Math.round(weatherData.daily.temperature_2m_min[index])}°
+                      {Math.round(weatherData.daily.temperature_2m_min[index])}°C
                     </Text>
                     <Text style={styles.precipText}>{weatherData.daily.precipitation_sum[index]}mm</Text>
                   </TouchableOpacity>

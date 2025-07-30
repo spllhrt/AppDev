@@ -13,6 +13,121 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+const BAD_WORDS = [
+  // Filipino bad words and variations
+  "Gago", "g4g0", "g@go", "G4go",
+  "Tanga", "t@ng@", "t4ng4", "tAng@",
+  "Bobo", "b0b0", "b0b0o", "b0bO",
+  "Putang Ina", "pUtan9 In@", "pUt4ng 1n@", "pUt@ng1n@",
+  "Punyeta", "pUnY3t@", "pUnY3t4",
+  "Bwisit", "bw!s1t", "bW!s!t", "bw!5!t",
+  "Landi", "L4nd1", "L@nd1", "L@nd!",
+  "Leche", "l3ch3", "l3ch@", "L3ch3",
+  "Salbahe", "S@lb@h3", "s@lB@h3", "s@lB4h3",
+  "Kupal", "kUp@l", "kUp4l", "kUp@1",
+  "Hudas", "hUd@s", "hUd4s", "h!d@S",
+  "Pangit", "p@ng!t", "p4ng!t", "p@nG!t",
+  "T*ngin", "t*ng!n", "t*ngin@", "tAng!n",
+  "Baho", "b4h0", "B@h0", "B4h0",
+  "Buwisit", "bUwi5it", "Buw!s1t", "bW1s1t",
+  "Paksyet", "p@ks13t", "P@k5y3t", "p4k5y3t",
+  "Tangina", "T4ng1n@", "tAng!n@", "t4ng!n@",
+  "Siraulo", "S1r@ul0", "S1r@U1o", "S1r@ul0",
+  "Abnoy", "@bn0y", "4bnoy", "Abn0y",
+  "Bastos", "b@st0s", "b4st0s", "B@st0$",
+  "Kalbo", "k4lb0", "K@lb0", "k@lB0",
+  "Chupa", "chUp4", "chUp@", "ChUp@!",
+  "Matigas ang ulo", "m@t1g@5", "m@t1g@5ngul0", "m@t!g@5angul0",
+  "Gaga", "G@g@", "G4g@",
+  "Mamatay ka", "m@m@t@yka", "M@m@t@yKA", "M@mt@yka",
+  "Bilog ang ulo", "b!l0g@ngul0", "b1l0g@ngul0",
+  "T*ngina mo", "t@ng!n@m0", "t*ng!n@m0", "t4ng!n@m0",
+  "Halimaw", "h4l1m@w", "h@l!m@w", "H4l1m@w",
+  "Pota", "p0t@", "P0t4",
+  "Utos ng utos", "ut0sngut0s", "Ut0sNgUt0s",
+  "Makatawid", "m@k@t4w!d", "m4k@t@w!d",
+  "Sungit", "SUnG1t", "sUng1t", "sUng!t",
+  "Gugol", "GUg0l", "gUg0l", "gUgOl",
+  "Ibo", "1b0", "!b0", "iB0",
+  "Bayot", "b@y0t", "b@yoT", "B@y0t",
+  "Walang hiya", "w@l4ng h!y@", "w4l@ng h!y@", "W4l@ng h1y@",
+  "Tirador", "t1r4d0r", "t!r4d0r", "t1r@d0r",
+  "Pucha", "puch@", "Puch@", "pUch@",
+  "Yawa", "y4w@", "Y@w4", "Y@w@",
+  "Panget", "p@ng3t", "p4ng3t", "P@ng3t",
+  "Tigas ng ulo", "t1g@sn9ul0", "t1g@sngul0", "T!g@5ngul0",
+  "Bangkang", "b4nk@ng", "b@nk@ng",
+  "Tits", "T!t$", "T1ts", "t!t$",
+  "Sablay", "S@bl@y", "S@bl4y", "s@bl@y",
+  "Yuck", "yUck", "yUk", "YUck",
+  "Masahe", "m@s@h3", "m@5@h3", "M@5@h3",
+  "Pagtawanan", "p@gT4w@n4n", "p@gT@w@N4n",
+
+  // International bad words
+  "ahole", "anus", "ash0le", "ash0les", "asholes", "ass", "Ass Monkey", "Assface", 
+  "assh0le", "assh0lez", "asshole", "assholes", "assholz", "asswipe", "azzhole", 
+  "bassterds", "bastard", "bastards", "bastardz", "basterds", "basterdz", "Biatch", 
+  "bitch", "bitches", "Blow Job", "boffing", "butthole", "buttwipe", "c0ck", "c0cks", 
+  "c0k", "Carpet Muncher", "cawk", "cawks", "Clit", "cnts", "cntz", "cock", "cockhead", 
+  "cock-head", "cocks", "CockSucker", "cock-sucker", "crap", "cum", "cunt", "cunts", 
+  "cuntz", "dick", "dild0", "dild0s", "dildo", "dildos", "dilld0", "dilld0s", 
+  "dominatricks", "dominatrics", "dominatrix", "dyke", "enema", "f u c k", "f u c k e r", 
+  "fag", "fag1t", "faget", "fagg1t", "faggit", "faggot", "fagit", "fags", "fagz", 
+  "faig", "faigs", "fart", "flipping the bird", "fuck", "fucker", "fuckin", "fucking", 
+  "fucks", "Fudge Packer", "fuk", "Fukah", "Fuken", "fuker", "Fukin", "Fukk", "Fukkah", 
+  "Fukken", "Fukker", "Fukkin", "g00k", "gay", "gayboy", "gaygirl", "gays", "gayz", 
+  "God-damned", "h00r", "h0ar", "h0re", "hells", "hoar", "hoor", "hoore", "jackoff", 
+  "jap", "japs", "jerk-off", "jisim", "jiss", "jizm", "jizz", "knob", "knobs", "knobz", 
+  "kunt", "kunts", "kuntz", "Lesbian", "Lezzian", "Lipshits", "Lipshitz", "masochist", 
+  "masokist", "massterbait", "masstrbait", "masstrbate", "masterbaiter", "masterbate", 
+  "masterbates", "Motha Fucker", "Motha Fuker", "Motha Fukkah", "Motha Fukker", 
+  "Mother Fucker", "Mother Fukah", "Mother Fuker", "Mother Fukkah", "Mother Fukker", 
+  "mother-fucker", "Mutha Fucker", "Mutha Fukah", "Mutha Fuker", "Mutha Fukkah", 
+  "Mutha Fukker", "n1gr", "nastt", "nigger", "nigur", "niiger", "niigr", "orafis", 
+  "orgasim", "orgasm", "orgasum", "oriface", "orifice", "orifiss", "packi", "packie", 
+  "packy", "paki", "pakie", "paky", "pecker", "peeenus", "peeenusss", "peenus", 
+  "peinus", "pen1s", "penas", "penis", "penis-breath", "penus", "penuus", "Phuc", 
+  "Phuck", "Phuk", "Phuker", "Phukker", "polac", "polack", "polak", "Poonani", 
+  "pr1c", "pr1ck", "pr1k", "pusse", "pussee", "pussy", "puuke", "puuker", "queer", 
+  "queers", "queerz", "qweers", "qweerz", "qweir", "recktum", "rectum", "retard", 
+  "sadist", "scank", "schlong", "screwing", "semen", "sex", "sexy", "Sh!t", "sh1t", 
+  "sh1ter", "sh1ts", "sh1tter", "sh1tz", "shit", "shits", "shitter", "Shitty", 
+  "Shity", "shitz", "Shyt", "Shyte", "Shytty", "Shyty", "skanck", "skank", "skankee", 
+  "skankey", "skanks", "Skanky", "slut", "sluts", "Slutty", "slutz", "son-of-a-bitch", 
+  "tit", "turd", "va1jina", "vag1na", "vagiina", "vagina", "vaj1na", "vajina", 
+  "vullva", "vulva", "w0p", "wh00r", "wh0re", "whore", "xrated", "xxx", "b!+ch", 
+  "blowjob", "clit", "arschloch", "b!tch", "b17ch", "b1tch", "bi+ch", "boiolas", 
+  "buceta", "chink", "cipa", "clits", "dirsa", "ejakulate", "fatass", "fcuk", 
+  "fux0r", "jism", "kawk", "l3itch", "l3i+ch", "masterbat*", "masterbat3", 
+  "s.o.b.", "mofo", "nigga", "nutsack", "phuck", "pimpis", "scrotum", "shemale", 
+  "shi+", "sh!+", "smut", "teets", "boobs", "b00bs", "teez", "testical", "testicle", 
+  "titt", "w00se", "wank", "whoar", "*dyke", "*fuck", "@$$", "amcik", "andskota", 
+  "arse*", "assrammer", "ayir", "bi7ch", "bitch*", "bollock*", "breasts", 
+  "butt-pirate", "cabron", "cazzo", "chraa", "chuj", "Cock*", "cunt*", "d4mn", 
+  "daygo", "dego", "dick*", "dike*", "dupa", "dziwka", "ejackulate", "Ekrem*", 
+  "Ekto", "enculer", "faen", "fag*", "fanculo", "fanny", "feces", "feg", "Felcher", 
+  "ficken", "fitt*", "Flikker", "foreskin", "Fotze", "Fu(", "futkretzn", "gook", 
+  "guiena", "h4x0r", "hell", "helvete", "hoer*", "honkey", "Huevon", "hui", "injun", 
+  "kanker*", "kike", "klootzak", "kraut", "knulle", "kuk", "kuksuger", "Kurac", 
+  "kurwa", "kusi*", "kyrpa*", "lesbo", "mamhoon", "masturbat*", "merd*", "mibun", 
+  "monkleigh", "mouliewop", "muie", "mulkku", "muschi", "nazis", "nepesaurio", 
+  "nigger*", "orospu", "paska*", "perse", "picka", "pierdol*", "pillu*", "pimmel", 
+  "piss*", "pizda", "poontsee", "poop", "porn", "p0rn", "pr0n", "preteen", "pula", 
+  "pule", "puta", "puto", "qahbeh", "queef*", "rautenberg", "schaffer", "scheiss*", 
+  "schlampe"
+];
+
+// Create a regex pattern that matches any of the bad words (case insensitive)
+const BAD_WORDS_REGEX = new RegExp(
+  BAD_WORDS.map(word => 
+    word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // Escape regex special characters
+  ).join('|'), 
+  'gi'
+);
+const filterBadWords = (text) => {
+  return text.replace(BAD_WORDS_REGEX, (match) => '*'.repeat(match.length));
+};
+
 const BulletinDetail = ({ route, navigation }) => {
   const { bulletin: initialBulletin } = route.params;
   const { user } = useSelector(state => state.auth);
@@ -78,12 +193,13 @@ const BulletinDetail = ({ route, navigation }) => {
     }
   };
 
-  const handleAddComment = async () => {
+const handleAddComment = async () => {
     if (!commentText.trim()) return;
     
     try {
       setIsSubmittingComment(true);
-      await addComment(bulletin._id, commentText.trim());
+      const filteredComment = filterBadWords(commentText.trim());
+      await addComment(bulletin._id, filteredComment);
       setCommentText('');
       setCommentModalVisible(false);
       await fetchBulletinDetails();
@@ -297,7 +413,7 @@ const renderImageViewer = () => (
       <View style={styles.commentContent}>
         <View style={styles.commentBubble}>
           <Text style={styles.commentAuthor}>{comment.user.name}</Text>
-          <Text style={styles.commentText}>{comment.text}</Text>
+          <Text style={styles.commentText}>{filterBadWords(comment.text)}</Text>
         </View>
         <Text style={styles.commentTime}>{formatTimeAgo(comment.createdAt)}</Text>
       </View>

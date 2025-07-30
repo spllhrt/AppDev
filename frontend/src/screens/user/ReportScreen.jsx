@@ -12,7 +12,7 @@ import { submitReport } from '../../api/report';
 
 const ReportScreen = ({ navigation }) => {
   const [formData, setFormData] = useState({
-    type: '', location: '', time: '', description: '', isAnonymous: false,
+    type: '', location: '', time: '', description: '',
   });
   const [photo, setPhoto] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -357,19 +357,6 @@ const ReportScreen = ({ navigation }) => {
                 )}
               </TouchableOpacity>
             </View>
-
-            <TouchableOpacity
-              style={styles.anonymousCard}
-              onPress={() => setFormData({...formData, isAnonymous: !formData.isAnonymous})}
-            >
-              <View style={styles.anonymousLeft}>
-                <Ionicons name="shield-outline" size={20} color="#00E676" />
-                <Text style={styles.anonymousText}>Submit Anonymously</Text>
-              </View>
-              <View style={[styles.checkbox, formData.isAnonymous && styles.checkboxSelected]}>
-                {formData.isAnonymous && <Ionicons name="checkmark" size={14} color="#0A0A0A" />}
-              </View>
-            </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}

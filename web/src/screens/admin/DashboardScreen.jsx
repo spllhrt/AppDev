@@ -403,7 +403,13 @@ const renderPhotoLayout = (photos) => {
 );
 
 
-  const renderAQICard = (title, cities, isBest = false) => (
+ const renderAQICard = (title, cities, isBest = false) => {
+  // For worst quality, check if any city has AQI >= 50
+  if (!isBest && cities.every(city => city.aqi < 50)) {
+    return null;
+  }
+
+  return (
     <View style={styles.card}>
       <Text style={styles.aqiCardTitle}>{title}</Text>
       <View style={styles.aqiList}>
@@ -430,6 +436,7 @@ const renderPhotoLayout = (photos) => {
       </View>
     </View>
   );
+};
 
   if (loading) {
     return (

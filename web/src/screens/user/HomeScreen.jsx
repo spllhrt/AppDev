@@ -525,10 +525,10 @@ Format your response as a JSON object with a single 'text' property containing t
             <View style={styles.photoRow}>
               <Image source={{ uri: photos[2].url }} style={styles.halfPhoto} />
               <View style={styles.morePhotosContainer}>
-                <Image 
-                  source={{ uri: photos[3].url }} 
-                  style={[styles.halfPhoto, photos.length > 4 && styles.blurredPhoto]} 
-                  blurRadius={photos.length > 4 ? 2 : 0} 
+                <Image
+                  source={{ uri: photos[3].url }}
+                  style={[styles.halfPhoto, photos.length > 4 && styles.blurredPhoto]}
+                  blurRadius={photos.length > 4 ? 2 : 0}
                 />
                 {photos.length > 4 && (
                   <View style={styles.morePhotosOverlay}>
@@ -689,6 +689,7 @@ Format your response as a JSON object with a single 'text' property containing t
                           </View>
                           <View style={styles.aqiData}>
                             <Text style={styles.aqiNumber}>{currentAQI.aqi}</Text>
+                            <Text style={[styles.aqiStatus, { color: aqiInfo.color }]}>μg/m³</Text>
                             <Text style={[styles.aqiStatus, { color: aqiInfo.color }]}>{aqiInfo.text}</Text>
                           </View>
                         </View>
@@ -723,10 +724,11 @@ Format your response as a JSON object with a single 'text' property containing t
                       </View>
                       <View style={styles.bulletinContent}>
                         <View style={styles.bulletinGrid}>
+                          {/* Best Cities - Always show */}
                           <View style={styles.bulletinSection}>
                             <View style={styles.bulletinSectionHeader}>
                               <View style={[styles.bulletinIndicator, { backgroundColor: '#00C853' }]} />
-                              <Text style={styles.bulletinSectionTitle}>Best Air Quality</Text>
+                              <Text style={styles.bulletinSectionTitle}>Cleanest Air</Text>
                             </View>
                             <View style={styles.cityList}>
                               {bestCities.map((city, idx) => (
@@ -741,24 +743,28 @@ Format your response as a JSON object with a single 'text' property containing t
                               ))}
                             </View>
                           </View>
-                          <View style={styles.bulletinSection}>
-                            <View style={styles.bulletinSectionHeader}>
-                              <View style={[styles.bulletinIndicator, { backgroundColor: '#FF5252' }]} />
-                              <Text style={styles.bulletinSectionTitle}>Worst Air Quality</Text>
-                            </View>
-                            <View style={styles.cityList}>
-                              {worstCities.map((city, idx) => (
-                                <View key={`worst-${idx}`} style={styles.cityItem}>
-                                  <Text style={styles.cityRank}>{idx + 1}</Text>
-                                  <Text style={styles.cityName}>{city.name}</Text>
-                                  <View style={styles.cityAqiContainer}>
-                                    <View style={[styles.cityAqiDot, { backgroundColor: city.category.color }]} />
-                                    <Text style={[styles.cityAqiValue, { color: city.category.color }]}>{city.aqi}</Text>
+
+                          {/* Worst Cities - Only show if any city has AQI >= 50 */}
+                          {worstCities.some(city => city.aqi >= 50) && (
+                            <View style={styles.bulletinSection}>
+                              <View style={styles.bulletinSectionHeader}>
+                                <View style={[styles.bulletinIndicator, { backgroundColor: '#FF5252' }]} />
+                                <Text style={styles.bulletinSectionTitle}>Worst Air Quality</Text>
+                              </View>
+                              <View style={styles.cityList}>
+                                {worstCities.map((city, idx) => (
+                                  <View key={`worst-${idx}`} style={styles.cityItem}>
+                                    <Text style={styles.cityRank}>{idx + 1}</Text>
+                                    <Text style={styles.cityName}>{city.name}</Text>
+                                    <View style={styles.cityAqiContainer}>
+                                      <View style={[styles.cityAqiDot, { backgroundColor: city.category.color }]} />
+                                      <Text style={[styles.cityAqiValue, { color: city.category.color }]}>{city.aqi}</Text>
+                                    </View>
                                   </View>
-                                </View>
-                              ))}
+                                ))}
+                              </View>
                             </View>
-                          </View>
+                          )}
                         </View>
                       </View>
                     </LinearGradient>
@@ -794,11 +800,11 @@ Format your response as a JSON object with a single 'text' property containing t
                                   <Text style={styles.bulletinTime}>{formatTimeAgo(bulletin.createdAt)}</Text>
                                 </View>
                               </View>
-                              
+
                               <Text style={styles.bulletinMessage}>{bulletin.message}</Text>
-                              
+
                               {renderPhotoLayout(bulletin.photos)}
-                              
+
                               <View style={styles.bulletinFooter}>
                                 <View style={styles.bulletinReactions}>
                                   <View style={styles.reactionButton}>
@@ -1099,15 +1105,15 @@ const styles = StyleSheet.create({
   cityAqiContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   cityAqiDot: { width: 8, height: 8, borderRadius: 4 },
   cityAqiValue: { fontSize: 14, fontWeight: '700', minWidth: 32, textAlign: 'center' },
-  
+
   // Updated bulletin post styles matching AdminDashboard
-  bulletinPost: { 
-    backgroundColor: 'rgba(255,255,255,0.04)', 
-    borderRadius: 16, 
-    padding: 20, 
-    marginBottom: 16, 
-    borderWidth: 1, 
-    borderColor: 'rgba(0,230,118,0.1)' 
+  bulletinPost: {
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(0,230,118,0.1)'
   },
   bulletinHeader: { flexDirection: 'row', marginBottom: 16, alignItems: 'flex-start' },
   bulletinIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#3b82f6', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
@@ -1117,7 +1123,7 @@ const styles = StyleSheet.create({
   bulletinCategory: { fontSize: 14, color: 'rgba(255,255,255,0.6)', fontWeight: '500', marginBottom: 4 },
   bulletinTime: { fontSize: 12, color: 'rgba(255,255,255,0.4)', fontWeight: '400' },
   bulletinMessage: { fontSize: 15, color: 'rgba(255,255,255,0.8)', lineHeight: 22, marginBottom: 16 },
-  
+
   // Photo layout styles matching AdminDashboard
   photoContainer: { marginBottom: 20, borderRadius: 16, overflow: 'hidden' },
   singlePhoto: { width: '100%', height: 200, resizeMode: 'cover' },
@@ -1128,14 +1134,14 @@ const styles = StyleSheet.create({
   blurredPhoto: { position: 'relative' },
   morePhotosOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
   morePhotosText: { color: '#ffffff', fontSize: 18, fontWeight: '700' },
-  
+
   bulletinFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 16, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)' },
   bulletinReactions: { flexDirection: 'row', gap: 20, alignItems: 'center' },
   reactionButton: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6 },
   reactionIcon: { marginRight: 4 },
   reactionText: { fontSize: 14, color: 'rgba(255,255,255,0.6)', fontWeight: '500' },
   commentCount: { fontSize: 14, color: 'rgba(255,255,255,0.6)', fontWeight: '500' },
-  
+
   reportsCard: { borderRadius: 24, overflow: 'hidden', marginBottom: -13 },
   reportsContent: { gap: 16 },
   reportItem: { backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,152,0,0.1)' },
@@ -1149,7 +1155,7 @@ const styles = StyleSheet.create({
   reportItemFooter: { flexDirection: 'row', justifyContent: 'flex-start' },
   reportStatusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1 },
   reportStatusText: { fontSize: 11, fontWeight: '600' },
-  
+
   '@media (max-width: 100%)': { mainGrid: { flexDirection: 'column' }, leftColumn: { flex: 1 }, rightColumn: { flex: 1 } },
 });
 

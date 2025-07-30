@@ -16,7 +16,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSelector } from 'react-redux';
 import { useNavigation } from '@react-navigation/native';
-import { getAllAssessments, deleteAssessment } from '../../api/historyApi';
+import { getAllAssessments} from '../../api/historyApi';
 import moment from 'moment';
 
 const HistoryScreen = () => {
@@ -137,75 +137,6 @@ const HistoryScreen = () => {
     fetchAssessments();
   };
 
-  const handleDelete = async (assessmentId) => {
-    Alert.alert(
-      'Confirm Delete',
-      'Are you sure you want to delete this assessment?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setAssessments(prev => 
-                prev.map(assessment => 
-                  assessment._id === assessmentId 
-                    ? { ...assessment, isDeleting: true } 
-                    : assessment
-                )
-              );
-              setFilteredAssessments(prev => 
-                prev.map(assessment => 
-                  assessment._id === assessmentId 
-                    ? { ...assessment, isDeleting: true } 
-                    : assessment
-                )
-              );
-              
-              const response = await deleteAssessment(assessmentId);
-              
-              if (response.success) {
-                setAssessments(prev => 
-                  prev.filter(assessment => assessment._id !== assessmentId)
-                );
-                setFilteredAssessments(prev => 
-                  prev.filter(assessment => assessment._id !== assessmentId)
-                );
-                Alert.alert('Success', 'Assessment deleted successfully');
-              } else {
-                throw new Error(response.message || 'Delete failed');
-              }
-            } catch (error) {
-              console.error('Delete failed:', error);
-              setAssessments(prev => 
-                prev.map(assessment => 
-                  assessment._id === assessmentId 
-                    ? { ...assessment, isDeleting: false } 
-                    : assessment
-                )
-              );
-              setFilteredAssessments(prev => 
-                prev.map(assessment => 
-                  assessment._id === assessmentId 
-                    ? { ...assessment, isDeleting: false } 
-                    : assessment
-                )
-              );
-              Alert.alert(
-                'Error', 
-                error.message || 'Failed to delete assessment. Please try again.'
-              );
-            }
-          },
-        },
-      ]
-    );
-  };
-
   const handleViewDetails = (assessment) => {
     setSelectedAssessment(assessment);
     setModalVisible(true);
@@ -218,19 +149,6 @@ const HistoryScreen = () => {
           <Text style={styles.userName}>{item.user?.name || 'Unknown User'}</Text>
           <Text style={styles.userEmail}>{item.user?.email || 'No email'}</Text>
         </View>
-        {user.role === 'admin' && (
-          <TouchableOpacity 
-            onPress={() => handleDelete(item._id)}
-            style={styles.deleteButton}
-            disabled={item.isDeleting}
-          >
-            {item.isDeleting ? (
-              <ActivityIndicator size="small" color="#ef4444" />
-            ) : (
-              <Ionicons name="trash-outline" size={20} color="#ef4444" />
-            )}
-          </TouchableOpacity>
-        )}
       </View>
       
       <View style={styles.detailsRow}>
@@ -725,10 +643,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6b7280',
     marginTop: 2,
-  },
-  deleteButton: {
-    padding: 5,
-    marginLeft: 10,
   },
   detailsRow: {
     flexDirection: 'row',

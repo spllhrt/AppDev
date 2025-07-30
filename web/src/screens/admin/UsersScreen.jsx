@@ -27,6 +27,8 @@ const UsersScreen = () => {
   const [exportingPDF, setExportingPDF] = useState(false);
   const [showPDFModal, setShowPDFModal] = useState(false);
   const [pdfMessage, setPdfMessage] = useState('');
+  const [deactivationModalVisible, setDeactivationModalVisible] = useState(false);
+  const [deactivationReason, setDeactivationReason] = useState('');
 
   const roles = ['user', 'admin'];
   const statuses = ['active', 'deactivated'];
@@ -78,7 +80,6 @@ const UsersScreen = () => {
     const startIndex = (currentPage - 1) * USERS_PER_PAGE;
     return { users: filtered.slice(startIndex, startIndex + USERS_PER_PAGE), total: filtered.length };
   };
-
 
   const generatePDFHTML = useCallback(() => {
     const currentDate = new Date().toLocaleDateString();
@@ -181,22 +182,16 @@ const UsersScreen = () => {
     try {
       setExportingPDF(true);
       
-      // Web-specific PDF generation
       if (Platform.OS === 'web') {
         const htmlContent = generatePDFHTML();
-        
-        // Create a blob from the HTML content
         const blob = new Blob([htmlContent], { type: 'text/html' });
         const url = URL.createObjectURL(blob);
-        
-        // Create a temporary iframe to load the HTML
         const iframe = document.createElement('iframe');
         iframe.style.display = 'none';
         iframe.src = url;
         document.body.appendChild(iframe);
         
         iframe.onload = () => {
-          // Use html2pdf library for better PDF generation
           const opt = {
             margin: 10,
             filename: `users_report_${new Date().toISOString().slice(0, 10)}.pdf`,
@@ -205,7 +200,6 @@ const UsersScreen = () => {
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
           };
           
-          // Use html2pdf.js if available, otherwise fallback to print
           if (window.html2pdf) {
             html2pdf().from(iframe.contentDocument.body).set(opt).save();
             setPdfMessage('PDF report is being generated and will download shortly.');
@@ -215,7 +209,6 @@ const UsersScreen = () => {
           }
           
           setShowPDFModal(true);
-          // Clean up
           setTimeout(() => {
             document.body.removeChild(iframe);
             URL.revokeObjectURL(url);
@@ -225,7 +218,6 @@ const UsersScreen = () => {
         return;
       }
 
-      // Mobile PDF generation
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
         setPdfMessage('Permission to access media library is required to save the PDF.');
@@ -323,11 +315,26 @@ const UsersScreen = () => {
     if (!selectedUser) return;
     try {
       setUpdating(true);
-      const response = await updateUser(selectedUser._id, { role: newRole, status: newStatus });
+      const updateData = { role: newRole, status: newStatus };
+      
+      if (newStatus === 'deactivated' && deactivationReason.trim()) {
+        updateData.deactivationReason = deactivationReason.trim();
+      }
+      
+      const response = await updateUser(selectedUser._id, updateData);
       if (response.success) {
-        setUsers(prevUsers => prevUsers.map(user => user._id === selectedUser._id ? { ...user, role: newRole, status: newStatus } : user));
+        const updatedUser = { 
+          ...selectedUser, 
+          role: newRole, 
+          status: newStatus,
+          ...(newStatus === 'deactivated' && deactivationReason.trim() && { deactivationReason: deactivationReason.trim() })
+        };
+        
+        setUsers(prevUsers => prevUsers.map(user => user._id === selectedUser._id ? updatedUser : user));
         Alert.alert('Success', 'User updated successfully');
         setModalVisible(false);
+        setDeactivationModalVisible(false);
+        setDeactivationReason('');
       }
     } catch (error) {
       Alert.alert('Error', error.message || 'Failed to update user');
@@ -363,7 +370,6 @@ const UsersScreen = () => {
             <Text style={[styles.toggleText, viewMode === 'users' && styles.activeToggleText]}>Users</Text>
           </TouchableOpacity>
           
-          {/* Refresh Button */}
           <TouchableOpacity 
             style={[styles.refreshButton, refreshing && styles.disabledButton]} 
             onPress={onRefresh} 
@@ -407,7 +413,6 @@ const UsersScreen = () => {
               )}
             </View>
 
-            {/* Active filters indicator */}
             {hasActiveFilters && (
               <View style={styles.filtersContainer}>
                 <Text style={styles.filtersLabel}>Active filters:</Text>
@@ -531,7 +536,12 @@ const UsersScreen = () => {
                       <TouchableOpacity 
                         key={status} 
                         style={[styles.optionButton, newStatus === status && styles.selectedOption]} 
-                        onPress={() => setNewStatus(status)}
+                        onPress={() => {
+                          setNewStatus(status);
+                          if (status === 'deactivated') {
+                            setDeactivationModalVisible(true);
+                          }
+                        }}
                       >
                         <Text style={[styles.optionText, newStatus === status && styles.selectedOptionText]}>
                           {status.charAt(0).toUpperCase() + status.slice(1)}
@@ -559,6 +569,65 @@ const UsersScreen = () => {
                 </View>
               </>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Deactivation Reason Modal */}
+      <Modal visible={deactivationModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Deactivation Reason</Text>
+              <TouchableOpacity onPress={() => {
+                setDeactivationModalVisible(false);
+                setNewStatus('active');
+              }}>
+                <Ionicons name="close" size={24} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.modalBody}>
+              <Text style={styles.modalText}>
+                Please provide a reason for deactivating this user account:
+              </Text>
+              <TextInput
+                style={styles.reasonInput}
+                placeholder="Enter reason..."
+                placeholderTextColor="#94A3B8"
+                multiline
+                numberOfLines={4}
+                value={deactivationReason}
+                onChangeText={setDeactivationReason}
+              />
+            </View>
+            
+            <View style={styles.modalActions}>
+              <TouchableOpacity 
+                style={styles.cancelButton} 
+                onPress={() => {
+                  setDeactivationModalVisible(false);
+                  setNewStatus('active');
+                  setDeactivationReason('');
+                }}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.saveButton, (!deactivationReason.trim() || updating) && styles.disabledButton]} 
+                onPress={() => {
+                  setDeactivationModalVisible(false);
+                  handleUpdateUser();
+                }} 
+                disabled={!deactivationReason.trim() || updating}
+              >
+                {updating ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.saveButtonText}>Confirm Deactivation</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -640,6 +709,19 @@ const styles = StyleSheet.create({
   modalContent: { backgroundColor: '#FFFFFF', borderRadius: 14, width: '90%', maxHeight: '75%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
   modalTitle: { fontSize: 18, fontWeight: '700', color: '#1E293B' },
+  modalBody: { paddingHorizontal: 20, paddingBottom: 20 },
+  modalText: { fontSize: 14, color: '#64748B', marginBottom: 12 },
+  reasonInput: { 
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 8,
+    padding: 12,
+    minHeight: 100,
+    textAlignVertical: 'top',
+    backgroundColor: '#F8FAFC',
+    fontSize: 14,
+    color: '#1E293B',
+  },
   modalUserInfo: { padding: 20, backgroundColor: '#F8FAFC', margin: 20, borderRadius: 8 },
   modalUserName: { fontSize: 16, fontWeight: '600', color: '#1E293B' },
   modalUserEmail: { fontSize: 13, color: '#64748B' },

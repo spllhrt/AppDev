@@ -17,7 +17,7 @@ const isLargeScreen = screenWidth > 768;
 
 const ReportScreen = ({ navigation }) => {
   const initialFormData = {
-    type: '', location: '', time: '', description: '', isAnonymous: false,
+    type: '', location: '', time: '', description: '', 
   };
 
   const [formData, setFormData] = useState(initialFormData);
@@ -371,20 +371,6 @@ const handleSubmit = async () => {
                       )}
                     </TouchableOpacity>
                   </View>
-
-                  {/* Anonymous Option */}
-                  <TouchableOpacity
-                    style={styles.anonymousCard}
-                    onPress={() => setFormData({ ...formData, isAnonymous: !formData.isAnonymous })}
-                  >
-                    <View style={styles.anonymousLeft}>
-                      <Ionicons name="shield-outline" size={20} color="#00E676" />
-                      <Text style={styles.anonymousText}>Submit Anonymously</Text>
-                    </View>
-                    <View style={[styles.checkbox, formData.isAnonymous && styles.checkboxSelected]}>
-                      {formData.isAnonymous && <Ionicons name="checkmark" size={14} color="#0A0A0A" />}
-                    </View>
-                  </TouchableOpacity>
 
                   {/* Submit Button */}
                   <TouchableOpacity

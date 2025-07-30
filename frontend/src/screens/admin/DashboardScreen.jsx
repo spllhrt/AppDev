@@ -54,7 +54,7 @@ const AdminDashboard = ({ navigation }) => {
       { cLo: 150.5, cHi: 250.4, iLo: 201, iHi: 300 },
       { cLo: 250.5, cHi: 500.4, iLo: 301, iHi: 500 }
     ];
-    
+
     for (const bp of breakpoints) {
       if (pm25 >= bp.cLo && pm25 <= bp.cHi) {
         return Math.round(((bp.iHi - bp.iLo) / (bp.cHi - bp.cLo)) * (pm25 - bp.cLo) + bp.iLo);
@@ -85,11 +85,11 @@ const AdminDashboard = ({ navigation }) => {
           if (!response.ok) return null;
           const data = await response.json();
           if (!data.hourly?.pm2_5) return null;
-          
+
           const pm25Values = data.hourly.pm2_5.filter(val => val !== null);
           const avgPM25 = pm25Values.reduce((sum, val) => sum + val, 0) / pm25Values.length;
           const aqi = pm25ToAQI(avgPM25);
-          
+
           return {
             ...city,
             aqi,
@@ -105,12 +105,12 @@ const AdminDashboard = ({ navigation }) => {
 
       const results = await Promise.all(aqiPromises);
       const validResults = results.filter(city => city !== null);
-      
+
       validResults.sort((a, b) => a.aqi - b.aqi);
-      
+
       const bestCities = validResults.slice(0, 5);
       const worstCities = [...validResults].reverse().slice(0, 5);
-      
+
       setCityAQI({ worst: worstCities, best: bestCities });
     } catch (error) {
       console.error('Error fetching AQI data:', error);
@@ -139,7 +139,7 @@ const AdminDashboard = ({ navigation }) => {
 
       setRecentReports(reports.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 3));
       setRecentBulletins(bulletins.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 3));
-      
+
       await fetchAQIData();
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -287,9 +287,9 @@ const AdminDashboard = ({ navigation }) => {
               <Text style={styles.bulletinTime}>{formatTimeAgo(bulletin.createdAt)}</Text>
             </View>
           </View>
-          
+
           <Text style={styles.bulletinMessage}>{bulletin.message}</Text>
-          
+
           {bulletin.photos && bulletin.photos.length > 0 && (
             <View style={styles.photoContainer}>
               {bulletin.photos.length === 1 ? (
@@ -316,10 +316,10 @@ const AdminDashboard = ({ navigation }) => {
                   <View style={styles.photoRow}>
                     <Image source={{ uri: bulletin.photos[2].url }} style={styles.halfPhoto} />
                     <View style={styles.morePhotosContainer}>
-                      <Image 
-                        source={{ uri: bulletin.photos[3].url }} 
-                        style={[styles.halfPhoto, bulletin.photos.length > 4 && styles.blurredPhoto]} 
-                        blurRadius={bulletin.photos.length > 4 ? 2 : 0} 
+                      <Image
+                        source={{ uri: bulletin.photos[3].url }}
+                        style={[styles.halfPhoto, bulletin.photos.length > 4 && styles.blurredPhoto]}
+                        blurRadius={bulletin.photos.length > 4 ? 2 : 0}
                       />
                       {bulletin.photos.length > 4 && (
                         <View style={styles.morePhotosOverlay}>
@@ -332,7 +332,7 @@ const AdminDashboard = ({ navigation }) => {
               )}
             </View>
           )}
-          
+
           <View style={styles.bulletinFooter}>
             <View style={styles.bulletinReactions}>
               <View style={styles.reactionButton}>
@@ -355,31 +355,38 @@ const AdminDashboard = ({ navigation }) => {
     </View>
   );
 
-  const renderAQICard = (title, cities) => (
-    <View style={styles.aqiCard}>
-      <Text style={styles.aqiCardTitle}>{title}</Text>
-      <View style={styles.aqiList}>
-        {cities.length > 0 ? cities.map((city, index) => (
-          <View key={index} style={styles.aqiItem}>
-            <View style={styles.aqiCityInfo}>
-              <Text style={styles.aqiCityName}>{city.name}</Text>
-              <Text style={[styles.aqiCityStatus, { color: city.category.color }]}>{city.category.text}</Text>
-            </View>
-            <View style={styles.aqiValueSection}>
-              <View style={[styles.aqiValueContainer, { backgroundColor: city.category.bgColor }]}>
-                <Text style={[styles.aqiValue, { color: city.category.color }]}>{city.aqi}</Text>
+  const renderAQICard = (title, cities, isBest = false) => {
+    // For worst quality, check if any city has AQI >= 50
+    if (!isBest && (cities.length === 0 || cities.every(city => city.aqi < 50))) {
+      return null;
+    }
+
+    return (
+      <View style={styles.aqiCard}>
+        <Text style={styles.aqiCardTitle}>{title}</Text>
+        <View style={styles.aqiList}>
+          {cities.length > 0 ? cities.map((city, index) => (
+            <View key={index} style={styles.aqiItem}>
+              <View style={styles.aqiCityInfo}>
+                <Text style={styles.aqiCityName}>{city.name}</Text>
+                <Text style={[styles.aqiCityStatus, { color: city.category.color }]}>{city.category.text}</Text>
               </View>
-              <View style={[styles.aqiIndicator, { backgroundColor: city.category.color }]} />
+              <View style={styles.aqiValueSection}>
+                <View style={[styles.aqiValueContainer, { backgroundColor: city.category.bgColor }]}>
+                  <Text style={[styles.aqiValue, { color: city.category.color }]}>{city.aqi}</Text>
+                </View>
+                <View style={[styles.aqiIndicator, { backgroundColor: city.category.color }]} />
+              </View>
             </View>
-          </View>
-        )) : (
-          <View style={styles.noDataContainer}>
-            <Text style={styles.noDataText}>No AQI data available</Text>
-          </View>
-        )}
+          )) : (
+            <View style={styles.noDataContainer}>
+              <Text style={styles.noDataText}>No AQI data available</Text>
+            </View>
+          )}
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   if (loading) {
     return (
@@ -393,7 +400,7 @@ const AdminDashboard = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#1e293b" />
-      
+
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -435,8 +442,8 @@ const AdminDashboard = ({ navigation }) => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>🌬️ Metro Manila Air Quality</Text>
           <View style={styles.aqiContainer}>
-            {renderAQICard('🟢 Best Air Quality', cityAQI.best || [])}
-            {renderAQICard('🔴 Worst Air Quality', cityAQI.worst || [])}
+            {renderAQICard('🟢 Best Air Quality', cityAQI.best || [], true)}
+            {renderAQICard('🔴 Worst Air Quality', cityAQI.worst || [], false)}
           </View>
         </View>
 
@@ -504,140 +511,140 @@ const styles = StyleSheet.create({
   bulletinCategory: { fontSize: 13, color: '#65676b', fontWeight: '400', marginBottom: 4 },
   bulletinTime: { fontSize: 12, color: '#65676b', fontWeight: '400' },
   bulletinMessage: { fontSize: 14, color: '#1c1e21', lineHeight: 20, marginBottom: 12 },
-  
+
   // Photo layout styles
-  photoContainer: { 
-    marginBottom: 12, 
-    borderRadius: 12, 
-    overflow: 'hidden' 
+  photoContainer: {
+    marginBottom: 12,
+    borderRadius: 12,
+    overflow: 'hidden'
   },
-  singlePhoto: { 
-    width: '100%', 
-    height: 320, 
-    resizeMode: 'cover' 
+  singlePhoto: {
+    width: '100%',
+    height: 320,
+    resizeMode: 'cover'
   },
-  mainPhoto: { 
-    width: '100%', 
-    height: 280, 
-    resizeMode: 'cover', 
-    marginBottom: 4 
+  mainPhoto: {
+    width: '100%',
+    height: 280,
+    resizeMode: 'cover',
+    marginBottom: 4
   },
-  photoRow: { 
-    flexDirection: 'row', 
-    gap: 4 
+  photoRow: {
+    flexDirection: 'row',
+    gap: 4
   },
-  halfPhoto: { 
-    flex: 1, 
-    height: 200, 
-    resizeMode: 'cover' 
+  halfPhoto: {
+    flex: 1,
+    height: 200,
+    resizeMode: 'cover'
   },
-  morePhotosContainer: { 
-    flex: 1, 
-    position: 'relative' 
+  morePhotosContainer: {
+    flex: 1,
+    position: 'relative'
   },
-  blurredPhoto: { 
-    position: 'relative' 
+  blurredPhoto: {
+    position: 'relative'
   },
-  morePhotosOverlay: { 
-    position: 'absolute', 
-    top: 0, 
-    left: 0, 
-    right: 0, 
-    bottom: 0, 
-    backgroundColor: 'rgba(0,0,0,0.5)', 
-    justifyContent: 'center', 
-    alignItems: 'center' 
+  morePhotosOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center'
   },
-  morePhotosText: { 
-    color: '#ffffff', 
-    fontSize: 22, 
-    fontWeight: '700' 
+  morePhotosText: {
+    color: '#ffffff',
+    fontSize: 22,
+    fontWeight: '700'
   },
-  
-  bulletinFooter: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    paddingTop: 12, 
-    borderTopWidth: 1, 
-    borderTopColor: '#e4e6ea' 
+
+  bulletinFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e4e6ea'
   },
-  bulletinReactions: { 
-    flexDirection: 'row', 
-    gap: 20, 
-    alignItems: 'center' 
+  bulletinReactions: {
+    flexDirection: 'row',
+    gap: 20,
+    alignItems: 'center'
   },
-  reactionText: { 
-    fontSize: 14, 
-    color: '#65676b', 
-    fontWeight: '400', 
-    flexDirection: 'row', 
-    alignItems: 'center' 
+  reactionText: {
+    fontSize: 14,
+    color: '#65676b',
+    fontWeight: '400',
+    flexDirection: 'row',
+    alignItems: 'center'
   },
-  reactionButton: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    paddingHorizontal: 8, 
-    paddingVertical: 4 
+  reactionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4
   },
-  reactionIcon: { 
-    marginRight: 4 
+  reactionIcon: {
+    marginRight: 4
   },
-  aqiContainer: { 
-    gap: 16 
+  aqiContainer: {
+    gap: 16
   },
-  aqiCard: { 
-    backgroundColor: '#ffffff', 
-    borderRadius: 20, 
-    padding: 20, 
-    elevation: 3, 
-    shadowColor: '#000', 
-    shadowOffset: { width: 0, height: 2 }, 
-    shadowOpacity: 0.08, 
-    shadowRadius: 4 
+  aqiCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 20,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4
   },
-  aqiCardTitle: { 
-    fontSize: 16, 
-    fontWeight: '700', 
-    color: '#1e293b', 
-    marginBottom: 16 
+  aqiCardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1e293b',
+    marginBottom: 16
   },
-  aqiList: { 
-    gap: 8 
+  aqiList: {
+    gap: 8
   },
-  aqiItem: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    paddingVertical: 12, 
-    paddingHorizontal: 16, 
-    backgroundColor: '#f8fafc', 
-    borderRadius: 12, 
-    borderWidth: 1, 
-    borderColor: '#e2e8f0' 
+  aqiItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0'
   },
-  aqiCityInfo: { 
-    flex: 1 
+  aqiCityInfo: {
+    flex: 1
   },
-  aqiCityName: { 
-    fontSize: 14, 
-    fontWeight: '600', 
-    color: '#1e293b', 
-    marginBottom: 4 
+  aqiCityName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1e293b',
+    marginBottom: 4
   },
-  aqiCityStatus: { 
-    fontSize: 11, 
-    fontWeight: '500', 
-    textTransform: 'uppercase' 
+  aqiCityStatus: {
+    fontSize: 11,
+    fontWeight: '500',
+    textTransform: 'uppercase'
   },
-  aqiValueSection: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 8 
+  aqiValueSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
   },
-  aqiValueContainer: { 
-    paddingHorizontal: 12, 
-    paddingVertical: 8, 
+  aqiValueContainer: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: 8,
     minWidth: 50,
     alignItems: 'center',

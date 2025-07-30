@@ -32,8 +32,8 @@ const AdminPollutionLogsScreen = () => {
   const initialLoadRef = useRef(true);
   const prevFiltersRef = useRef(state.filters);
 
-  const sourceTypes = ['Traffic', 'Industrial', 'Residential', 'Construction', 'Natural', 'Unknown'];
-  const colors = { Traffic: '#FF6B6B', Industrial: '#4ECDC4', Residential: '#45B7D1', Construction: '#96CEB4', Natural: '#FFEAA7', Unknown: '#DDA0DD' };
+  const sourceTypes = ['Traffic', 'Industrial', 'Residential', 'Construction'];
+  const colors = { Traffic: '#FF6B6B', Industrial: '#4ECDC4', Residential: '#45B7D1', Construction: '#96CEB4'};
   const thresholds = { pm2_5: { good: 12, moderate: 35, high: 55 }, no2: { good: 53, moderate: 100, high: 200 }, so2: { good: 35, moderate: 75, high: 185 } };
 
   const updateState = useCallback((updates) => setState(prev => ({ ...prev, ...updates })), []);
@@ -313,8 +313,6 @@ const AdminPollutionLogsScreen = () => {
           .source-industrial { background: #4ECDC4; }
           .source-residential { background: #45B7D1; }
           .source-construction { background: #96CEB4; }
-          .source-natural { background: #FFEAA7; color: #333; }
-          .source-unknown { background: #DDA0DD; }
           .footer {
             margin-top: 30px;
             text-align: center;
@@ -648,14 +646,6 @@ const AdminPollutionLogsScreen = () => {
           <div class="legend-item">
             <div class="legend-color" style="background-color: #96CEB4;"></div>
             <div class="legend-label">Construction</div>
-          </div>
-          <div class="legend-item">
-            <div class="legend-color" style="background-color: #FFEAA7;"></div>
-            <div class="legend-label">Natural</div>
-          </div>
-          <div class="legend-item">
-            <div class="legend-color" style="background-color: #DDA0DD;"></div>
-            <div class="legend-label">Unknown</div>
           </div>
         </div>
         <script>

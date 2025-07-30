@@ -83,7 +83,7 @@ export const toggleReaction = async (bulletinId, reactionType) => {
 export const addComment = async (bulletinId, commentText) => {
   try {
     const response = await apiClient.post(
-      `/bulletins/${bulletinId}/comments`,
+      `/${bulletinId}/comments`,
       { text: commentText },
       {
         headers: { "Content-Type": "application/json" },

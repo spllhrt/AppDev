@@ -77,12 +77,12 @@ const HomeScreen = () => {
           if (!response.ok) return null;
           const data = await response.json();
           if (!data.hourly?.pm2_5) return null;
-          
+
           // Calculate average PM2.5 for today
           const pm25Values = data.hourly.pm2_5.filter(val => val !== null);
           const avgPM25 = pm25Values.reduce((sum, val) => sum + val, 0) / pm25Values.length;
           const aqi = pm25ToAQI(avgPM25);
-          
+
           return {
             ...city,
             aqi,
@@ -97,7 +97,7 @@ const HomeScreen = () => {
       const results = await Promise.all(aqiPromises);
       const validResults = results.filter(city => city !== null);
       validResults.sort((a, b) => a.aqi - b.aqi); // Sort by AQI (best to worst)
-      
+
       setPhilippineCitiesAqi(validResults);
     } catch (error) {
       console.error('Failed to fetch cities AQI:', error);
@@ -110,7 +110,7 @@ const HomeScreen = () => {
       setLoading(true);
       let coords;
       let locationName = '';
-      
+
       try {
         // Priority 1: Use GPS if enabled
         if (useGPS) {
@@ -137,7 +137,7 @@ const HomeScreen = () => {
         coords = { latitude: 14.5995, longitude: 120.9842 };
         locationName = 'Manila';
       }
-      
+
       if (coords) {
         setLocation({ ...coords, name: locationName });
         setDisplayLocationName(locationName);
@@ -145,7 +145,7 @@ const HomeScreen = () => {
       }
     } catch (error) {
       Alert.alert('AQI Error', 'Failed to load air quality data.', [
-        { text: 'Retry', onPress: initializeAQI }, 
+        { text: 'Retry', onPress: initializeAQI },
         { text: 'Cancel', style: 'cancel' }
       ]);
     } finally {
@@ -163,12 +163,12 @@ const HomeScreen = () => {
           }
         }
       );
-      
+
       const text = await response.text();
       if (text.startsWith('<!DOCTYPE html>') || text.startsWith('<')) {
         throw new Error('Received HTML response instead of JSON');
       }
-      
+
       const data = JSON.parse(text);
       return {
         city: data.address?.city || data.address?.town,
@@ -191,21 +191,21 @@ const HomeScreen = () => {
           }
         }
       );
-      
+
       const text = await response.text();
       if (text.startsWith('<!DOCTYPE html>') || text.startsWith('<')) {
         throw new Error('Received HTML response instead of JSON');
       }
-      
+
       const data = JSON.parse(text);
-      
+
       if (data.length > 0) {
         return {
           latitude: parseFloat(data[0].lat),
           longitude: parseFloat(data[0].lon)
         };
       }
-      
+
       const philippineCities = {
         'manila': { lat: 14.5995, lon: 120.9842 },
         'makati': { lat: 14.5547, lon: 121.0244 },
@@ -213,12 +213,12 @@ const HomeScreen = () => {
         'cebu': { lat: 10.3157, lon: 123.8854 },
         'davao': { lat: 7.1907, lon: 125.4553 },
       };
-      
+
       const normalizedCity = city.toLowerCase().trim();
       if (philippineCities[normalizedCity]) {
         return philippineCities[normalizedCity];
       }
-      
+
       throw new Error('City not found');
     } catch (error) {
       console.log('Geocoding failed:', error);
@@ -229,14 +229,14 @@ const HomeScreen = () => {
   const getCurrentLocation = async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') throw new Error('Location permission denied');
-    const location = await Location.getCurrentPositionAsync({ 
-      accuracy: Location.Accuracy.Balanced, 
-      timeout: 15000, 
-      maximumAge: 300000 
+    const location = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+      timeout: 15000,
+      maximumAge: 300000
     });
-    return { 
-      latitude: location.coords.latitude, 
-      longitude: location.coords.longitude 
+    return {
+      latitude: location.coords.latitude,
+      longitude: location.coords.longitude
     };
   };
 
@@ -248,10 +248,10 @@ const HomeScreen = () => {
       if (!response.ok) throw new Error(`AQI API error: ${response.status}`);
       const data = await response.json();
       if (!data.hourly?.pm2_5) throw new Error('Invalid AQI data');
-      
+
       const processedData = { ...data, daily: calculateDailyAQI(data.hourly) };
       setAqiData(processedData);
-      
+
       // Also fetch weather data since we have coordinates
       await fetchWeatherData(lat, lon);
     } catch (error) {
@@ -266,17 +266,17 @@ const HomeScreen = () => {
       const dayStart = i * 24;
       const dayEnd = Math.min(dayStart + 24, hourly.pm2_5.length);
       if (dayStart >= hourly.pm2_5.length) break;
-      
+
       const dayHours = hourly.pm2_5.slice(dayStart, dayEnd).filter(val => val !== null);
       if (dayHours.length === 0) continue;
-      
+
       const avgPM25 = dayHours.reduce((sum, val) => sum + val, 0) / dayHours.length;
       const calculatedAQI = pm25ToAQI(avgPM25);
-      days.push({ 
-        date: new Date(Date.now() + i * 24 * 60 * 60 * 1000).toISOString().split('T')[0], 
-        aqi: calculatedAQI, 
-        pm25: avgPM25, 
-        category: getAQICategory(calculatedAQI) 
+      days.push({
+        date: new Date(Date.now() + i * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        aqi: calculatedAQI,
+        pm25: avgPM25,
+        category: getAQICategory(calculatedAQI)
       });
     }
     return days;
@@ -292,7 +292,7 @@ const HomeScreen = () => {
       { cLo: 150.5, cHi: 250.4, iLo: 201, iHi: 300 },
       { cLo: 250.5, cHi: 500.4, iLo: 301, iHi: 500 }
     ];
-    
+
     for (const bp of breakpoints) {
       if (pm25 >= bp.cLo && pm25 <= bp.cHi) {
         return Math.round(((bp.iHi - bp.iLo) / (bp.cHi - bp.cLo)) * (pm25 - bp.cLo) + bp.iLo);
@@ -312,9 +312,9 @@ const HomeScreen = () => {
 
   const getCurrentPollutants = () => {
     if (!aqiData?.hourly) return {};
-    
+
     const currentIndex = 0;
-    
+
     return {
       pm25: aqiData.hourly.pm2_5?.[currentIndex] || 0,
       pm10: aqiData.hourly.pm10?.[currentIndex] || 0,
@@ -330,10 +330,10 @@ const HomeScreen = () => {
       const response = await fetch(
         `https://api.open-meteo.com/v1/forecast?latitude=${lat || location?.latitude || 14.5995}&longitude=${lon || location?.longitude || 120.9842}&current=temperature_2m,relative_humidity_2m,precipitation_probability,weather_code,wind_speed_10m,uv_index&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max&timezone=auto`
       );
-      
+
       if (!response.ok) throw new Error(`Weather API error: ${response.status}`);
       const weather = await response.json();
-      
+
       const weatherDataObj = {
         location: displayLocationName,
         temperature: Math.round(weather.current.temperature_2m),
@@ -342,9 +342,9 @@ const HomeScreen = () => {
         weatherCode: weather.current.weather_code,
         weather: getWeatherDescription(weather.current.weather_code)
       };
-      
+
       setWeatherData(weatherDataObj);
-      
+
       // Generate advisories based on current AQI and weather
       if (aqiData?.daily?.[0]) {
         const advisoryData = await generateAdvisories({
@@ -400,7 +400,7 @@ Format your response as a JSON object with a single 'text' property containing t
     // Fallback advisory
     const aqiInfo = getAQICategory(data.aqi);
     let advisory = "";
-    
+
     if (aqiInfo.text === 'Good') {
       advisory += "Air quality is excellent today, making it perfect for outdoor activities and exercise. ";
     } else if (aqiInfo.text === 'Moderate') {
@@ -526,7 +526,7 @@ Format your response as a JSON object with a single 'text' property containing t
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       <LinearGradient colors={['#0A0A0A', '#1A1A2E', '#16213E']} style={styles.gradient}>
         <SafeAreaView style={styles.safeArea}>
-          <ScrollView 
+          <ScrollView
             showsVerticalScrollIndicator={false}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00E676" colors={['#00E676']} progressBackgroundColor="#1A1A2E" />}
             contentContainerStyle={styles.scrollContent}
@@ -560,7 +560,7 @@ Format your response as a JSON object with a single 'text' property containing t
                     </View>
                     <View style={styles.cardCenter}>
                       <Text style={styles.cardTitle}>Weather</Text>
-                      <Text style={styles.weatherTemp}>{weatherData.temperature}°</Text>
+                      <Text style={styles.weatherTemp}>{weatherData.temperature}°C</Text>
                       <Text style={styles.weatherDesc}>{weatherData.weather}</Text>
                     </View>
                     <View style={styles.cardRight}>
@@ -579,7 +579,7 @@ Format your response as a JSON object with a single 'text' property containing t
                 </LinearGradient>
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.aqiCard}
                 onPress={() => navigation.navigate('Aqi', {
                   cityName: displayLocationName,
@@ -597,6 +597,7 @@ Format your response as a JSON object with a single 'text' property containing t
                     <View style={styles.cardCenter}>
                       <Text style={styles.cardTitle}>Air Quality Index</Text>
                       <Text style={[styles.aqiValue, { color: aqiInfo.color }]}>{currentAQI.aqi}</Text>
+                      <Text style={[styles.aqiStatus, { color: aqiInfo.color }]}> μg/m³</Text>
                       <Text style={[styles.aqiStatus, { color: aqiInfo.color }]}>{aqiInfo.text}</Text>
                     </View>
                     <View style={styles.cardRight}>
@@ -626,9 +627,9 @@ Format your response as a JSON object with a single 'text' property containing t
             {philippineCitiesAqi.length > 0 && (
               <View style={styles.bulletinSection}>
                 <Text style={styles.sectionTitle}>Metro Manila Air Quality Bulletin</Text>
-                
+
                 <View style={styles.bulletinRow}>
-                  {/* Best Cities */}
+                  {/* Best Cities - Always show */}
                   <View style={styles.bulletinColumn}>
                     <Text style={styles.bulletinSubtitle}>Cleanest Air</Text>
                     {bestCities.map((city, index) => (
@@ -641,20 +642,22 @@ Format your response as a JSON object with a single 'text' property containing t
                       </View>
                     ))}
                   </View>
-                  
-                  {/* Worst Cities */}
-                  <View style={styles.bulletinColumn}>
-                    <Text style={styles.bulletinSubtitle}>Worst Air Quality</Text>
-                    {worstCities.map((city, index) => (
-                      <View key={`worst-${index}`} style={styles.cityItem}>
-                        <Text style={styles.cityName}>{city.name}</Text>
-                        <View style={styles.cityAqiContainer}>
-                          <Text style={[styles.cityAqi, { color: city.category.color }]}>{city.aqi}</Text>
-                          <View style={[styles.cityAqiDot, { backgroundColor: city.category.color }]} />
+
+                  {/* Worst Cities - Only show if any city has AQI >= 50 */}
+                  {worstCities.some(city => city.aqi >= 50) && (
+                    <View style={styles.bulletinColumn}>
+                      <Text style={styles.bulletinSubtitle}>Worst Air Quality</Text>
+                      {worstCities.map((city, index) => (
+                        <View key={`worst-${index}`} style={styles.cityItem}>
+                          <Text style={styles.cityName}>{city.name}</Text>
+                          <View style={styles.cityAqiContainer}>
+                            <Text style={[styles.cityAqi, { color: city.category.color }]}>{city.aqi}</Text>
+                            <View style={[styles.cityAqiDot, { backgroundColor: city.category.color }]} />
+                          </View>
                         </View>
-                      </View>
-                    ))}
-                  </View>
+                      ))}
+                    </View>
+                  )}
                 </View>
               </View>
             )}
@@ -684,9 +687,9 @@ Format your response as a JSON object with a single 'text' property containing t
                   { icon: 'megaphone-outline', title: 'Report', screen: 'Report' },
                   { icon: 'list-outline', title: 'My Reports', screen: 'MyReport' },
                 ].map((item, index) => (
-                  <TouchableOpacity 
-                    key={index} 
-                    style={styles.quickItem} 
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.quickItem}
                     onPress={() => handleQuickAccess(item.screen)}
                   >
                     <View style={styles.quickCard}>
@@ -703,7 +706,7 @@ Format your response as a JSON object with a single 'text' property containing t
         </SafeAreaView>
       </LinearGradient>
       <View style={styles.chatContainer}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.chatButton}
           onPress={handleChatPress}
           activeOpacity={0.8}
@@ -750,7 +753,7 @@ const styles = StyleSheet.create({
   cardLeft: { marginRight: 16 },
   cardCenter: { flex: 1 },
   cardRight: { alignItems: 'flex-end' },
-  
+
   weatherIconContainer: { width: 72, height: 72, borderRadius: 36, backgroundColor: 'rgba(0,230,118,0.15)', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'rgba(0,230,118,0.3)' },
   weatherTemp: { color: '#FFFFFF', fontSize: 36, fontWeight: '800', marginBottom: 4, textShadowColor: 'rgba(0,230,118,0.3)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4 },
   weatherDesc: { color: 'rgba(255,255,255,0.8)', fontSize: 14, fontWeight: '500' },
@@ -774,10 +777,10 @@ const styles = StyleSheet.create({
   bulletinSection: { paddingHorizontal: 20, marginBottom: 24 },
   bulletinRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 },
   bulletinColumn: { width: '48%' },
-  bulletinSubtitle: { 
-    color: '#FFFFFF', 
-    fontSize: 14, 
-    fontWeight: '600', 
+  bulletinSubtitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
     marginBottom: 12,
     paddingBottom: 6,
     borderBottomWidth: 1,

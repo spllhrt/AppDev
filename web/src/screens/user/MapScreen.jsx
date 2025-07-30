@@ -365,45 +365,6 @@ const MapScreen = ({ navigation }) => {
           setTimeout(sendMarker, 100); // Retry until iframe is ready
           return;
         }
-
-        // // Always remove previous marker
-        // iframeRef.current.contentWindow.postMessage({ action: 'removeMarker' }, '*');
-
-        // // Delay to ensure marker is removed first
-        // setTimeout(() => {
-        //   let markerColor = '#00E676';
-        //   let pulseColorRgba = 'rgba(0,230,118,0.4)';
-
-        //   if (state.dataLayer === 'weather' && weatherData) {
-        //     markerColor = getWeatherColor(weatherData.condition, weatherData.temp);
-        //   } else if (state.dataLayer === 'aqi' && aqiData) {
-        //     markerColor = getAQIColor(aqiData.aqi);
-        //   }
-
-        //   // Convert hex to rgba for pulse
-        //   if (markerColor !== '#00E676') {
-        //     const hex = markerColor.replace('#', '');
-        //     const r = parseInt(hex.substr(0, 2), 16);
-        //     const g = parseInt(hex.substr(2, 2), 16);
-        //     const b = parseInt(hex.substr(4, 2), 16);
-        //     pulseColorRgba = `rgba(${r}, ${g}, ${b}, 0.4)`;
-        //   }
-
-        //   // Build popup content dynamically based on current dataLayer
-        //   let popupContent = `<div class="popup-content"><div class="popup-title">${location.name.replace(/'/g, "\\'")}</div>`;
-
-        //   if (state.dataLayer === 'weather' && weatherData) {
-        //     popupContent += `<div class="popup-data"><strong style="color: #00E676;">Weather Conditions</strong><br/>🌡️ Temperature: <strong>${weatherData.temp}°C</strong><br/>💧 Humidity: <strong>${weatherData.humidity}%</strong><br/>☁️ Condition: <strong>${weatherData.condition}</strong></div>`;
-        //     popupContent += `<button class="nav-button" onclick="window.navigateToScreen('Weather', '${location.name.replace(/'/g, "\\'")}', ${location.lat}, ${location.lon})">📊 View Weather Details</button>`;
-        //   } else if (state.dataLayer === 'aqi' && aqiData) {
-        //     popupContent += `<div class="popup-data"><strong style="color: #00E676;">Air Quality Index</strong><br/>🌫️ PM2.5: <strong>${aqiData.pm25} μg/m³</strong><br/>🌪️ PM10: <strong>${aqiData.pm10} μg/m³</strong><br/>📊 AQI: <strong>${aqiData.aqi}</strong> (${aqiData.status})</div>`;
-        //     popupContent += `<button class="nav-button" onclick="window.navigateToScreen('Aqi', '${location.name.replace(/'/g, "\\'")}', ${location.lat}, ${location.lon})">🌿 View AQI Details</button>`;
-        //   } else {
-        //     popupContent += `<div class="popup-data">📍 <strong>Searched Location</strong><br/>Select a data layer to view more information</div>`;
-        //   }
-
-        //   popupContent += '</div>'; // Close popup-content
-
           // Send marker details to iframe
           const message = {
             action: 'addMarker',
@@ -622,19 +583,19 @@ const getHtmlContent = useCallback(() => `
             .leaflet-control-container .leaflet-bottom { bottom: 8px !important; }
             .leaflet-control-attribution { background: linear-gradient(135deg, rgba(0, 0, 0, 0.8) 0%, rgba(26, 26, 46, 0.8) 100%) !important; color: rgba(255, 255, 255, 0.8) !important; font-size: 10px !important; padding: 4px 8px !important; border-radius: 8px !important; border: 1px solid rgba(255, 255, 255, 0.1) !important; backdrop-filter: blur(8px) !important; }
             .leaflet-control-attribution a { color: #00E676 !important; text-decoration: none !important; }
-            .legend { position: absolute; bottom: 50px; right: 12px; background: linear-gradient(135deg, rgba(26, 26, 46, 0.97) 0%, rgba(16, 33, 62, 0.97) 100%); border-radius: 16px; border: 1px solid rgba(0, 230, 118, 0.4); color: white; font-size: 12px; z-index: 1000; max-width: 220px; backdrop-filter: blur(12px); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); overflow: hidden; }
-            .legend-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; cursor: pointer; background: rgba(0, 230, 118, 0.1); border-bottom: 1px solid rgba(0, 230, 118, 0.2); transition: background 0.2s ease; }
-            .legend-header:hover { background: rgba(0, 230, 118, 0.15); }
-            .legend-title { font-weight: 600; color: #00E676; font-size: 13px; margin: 0; }
-            .legend-toggle { color: #00E676; font-size: 16px; transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); user-select: none; }
+            .legend { position: absolute; bottom: 50px; left: 12px; background: linear-gradient(135deg, rgba(26, 26, 46, 0.97) 0%, rgba(16, 33, 62, 0.97) 100%); border-radius: 20px; border: 1.5px solid rgba(0, 230, 118, 0.4); color: white; font-size: 15px; z-index: 1000; max-width: 600px; backdrop-filter: blur(12px); box-shadow: 0 10px 36px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(255, 255, 255, 0.1); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); overflow: hidden; }
+            .legend-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 24px; cursor: pointer; background: rgba(0, 230, 118, 0.1); border-bottom: 1.5px solid rgba(0, 230, 118, 0.2); transition: background 0.2s ease; }
+            .legend-header:hover { background: rgba(0, 230, 118, 0.16); }
+            .legend-title { font-weight: 700; color: #00E676; font-size: 13px; margin: 0; }
+            .legend-toggle { color: #00E676; font-size: 22px; transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); user-select: none; }
             .legend-toggle.collapsed { transform: rotate(-90deg); }
-            .legend-content { padding: 12px 16px; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); max-height: 300px; overflow: hidden; }
-            .legend-content.collapsed { max-height: 0; padding: 0 16px; }
-            .legend-item { display: flex; align-items: center; margin-bottom: 8px; transition: transform 0.2s ease; }
-            .legend-item:hover { transform: translateX(2px); }
+            .legend-content { padding: 18px 24px; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); max-height: 460px; overflow: hidden; }
+            .legend-content.collapsed { max-height: 0; padding: 0 24px; }
+            .legend-item { display: flex; align-items: center; margin-bottom: 14px; transition: transform 0.2s ease; }
+            .legend-item:hover { transform: translateX(3px); }
             .legend-item:last-child { margin-bottom: 0; }
-            .legend-color { width: 14px; height: 14px; border-radius: 50%; margin-right: 10px; border: 2px solid rgba(255, 255, 255, 0.2); box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); }
-            .legend-text { font-weight: 500; color: rgba(255, 255, 255, 0.9); }
+            .legend-color { width: 20px; height: 20px; border-radius: 50%; margin-right: 14px; border: 2px solid rgba(255, 255, 255, 0.2); box-shadow: 0 3px 5px rgba(0, 0, 0, 0.25); }
+            .legend-text { font-weight: 600; color: rgba(255, 255, 255, 0.96); font-size: 13px; }
             @keyframes markerPulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.2); opacity: 0.7; } 100% { transform: scale(1); opacity: 1; } }
             .marker-pulse { animation: markerPulse 2s ease-in-out infinite; }
             .search-marker { z-index: 1000 !important; }
@@ -723,7 +684,7 @@ const getHtmlContent = useCallback(() => `
               } else if (dataLayer === 'aqi' && currentSearchAqiData) {
                 const a = currentSearchAqiData;
                 markerColor = getAQIColor(a.aqi);
-                popupContent += '<div class="popup-data"><strong style="color: #00E676;">Air Quality Index</strong><br/>🌫️ PM2.5: <strong>' + a.pm25 + ' μg/m³</strong><br/>🌪️ PM10: <strong>' + a.pm10 + ' μg/m³</strong><br/>📊 AQI: <strong>' + a.aqi + '</strong> (' + a.status + ')</div>';
+                popupContent += '<div class="popup-data"><strong style="color: #00E676;">Air Quality Index</strong><br/>🌫️ PM2.5: <strong>' + a.pm25 + ' μg/m³</strong><br/>🌪️ PM10: <strong>' + a.pm10 + ' μg/m³</strong><br/>📊 AQI: <strong>' + a.aqi  + ' μg/m³</strong> (' + a.status + ')</div>';
                 popupContent += '<button class="nav-button" onclick="window.navigateToScreen(\\'Aqi\\', \\''+currentSearchLocation.name+'\\', '+currentSearchLocation.lat+', '+currentSearchLocation.lon+')">🌿 View AQI Details</button>';
               } else {
                 popupContent += '<div class="popup-data">📍 <strong>Searched Location</strong><br/>Select a data layer to view more information</div>';
@@ -833,7 +794,7 @@ const getHtmlContent = useCallback(() => `
                     content += '<button class="nav-button" onclick="window.navigateToScreen(\\'Weather\\', \\''+city.name+'\\', '+city.lat+', '+city.lon+')">📊 View Weather Details</button>';
                 } else if (dataLayer === 'aqi' && aqiData[city.name]) {
                     const a = aqiData[city.name];
-                    content += '<div class="popup-data"><strong style="color: #00E676;">Air Quality Index</strong><br/>🌫️ PM2.5: <strong>' + a.pm25 + ' μg/m³</strong><br/>🌪️ PM10: <strong>' + a.pm10 + ' μg/m³</strong><br/>📊 AQI: <strong>' + a.aqi + '</strong> (' + a.status + ')</div>';
+                    content += '<div class="popup-data"><strong style="color: #00E676;">Air Quality Index</strong><br/>🌫️ PM2.5: <strong>' + a.pm25 + ' μg/m³</strong><br/>🌪️ PM10: <strong>' + a.pm10 + ' μg/m³</strong><br/>📊 AQI: <strong>' + a.aqi  + ' μg/m³</strong> (' + a.status + ')</div>';
                     content += '<button class="nav-button" onclick="window.navigateToScreen(\\'Aqi\\', \\''+city.name+'\\', '+city.lat+', '+city.lon+')">🌿 View AQI Details</button>';
                 } else {
                     content += '<div class="popup-data">🏙️ <strong>Metro Manila LGU</strong><br/>Click the menu to view weather or air quality data</div>';

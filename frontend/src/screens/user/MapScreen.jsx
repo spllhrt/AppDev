@@ -427,7 +427,7 @@ const handleSearchBlur = () => {
         popupContent += `<div class="popup-data"><strong style="color: #00E676;">Weather Conditions</strong><br/>🌡️ Temperature: <strong>${weatherData.temp}°C</strong><br/>💧 Humidity: <strong>${weatherData.humidity}%</strong><br/>☁️ Condition: <strong>${weatherData.condition}</strong></div>`;
         popupContent += `<button class="nav-button" onclick="navigateToScreen('Weather', '${location.name.replace(/'/g, "\\'")}', ${location.lat}, ${location.lon})">📊 View Weather Details</button>`;
       } else if (state.dataLayer === 'aqi' && aqiData) {
-        popupContent += `<div class="popup-data"><strong style="color: #00E676;">Air Quality Index</strong><br/>🌫️ PM2.5: <strong>${aqiData.pm25} μg/m³</strong><br/>🌪️ PM10: <strong>${aqiData.pm10} μg/m³</strong><br/>📊 AQI: <strong>${aqiData.aqi}</strong> (${aqiData.status})</div>`;
+        popupContent += `<div class="popup-data"><strong style="color: #00E676;">Air Quality Index</strong><br/>🌫️ PM2.5: <strong>${aqiData.pm25} μg/m³</strong><br/>🌪️ PM10: <strong>${aqiData.pm10} μg/m³</strong><br/>📊 AQI: <strong>${aqiData.aqi} μg/m³</strong> (${aqiData.status})</div>`;
         popupContent += `<button class="nav-button" onclick="navigateToScreen('Aqi', '${location.name.replace(/'/g, "\\'")}', ${location.lat}, ${location.lon})">🌿 View AQI Details</button>`;
       } else {
         popupContent += '<div class="popup-data">📍 <strong>Searched Location</strong><br/>Select a data layer to view more information</div>';
@@ -686,7 +686,7 @@ const handleSearchBlur = () => {
             .leaflet-control-container .leaflet-bottom { bottom: 8px !important; }
             .leaflet-control-attribution { background: linear-gradient(135deg, rgba(0, 0, 0, 0.8) 0%, rgba(26, 26, 46, 0.8) 100%) !important; color: rgba(255, 255, 255, 0.8) !important; font-size: 10px !important; padding: 4px 8px !important; border-radius: 8px !important; border: 1px solid rgba(255, 255, 255, 0.1) !important; backdrop-filter: blur(8px) !important; }
             .leaflet-control-attribution a { color: #00E676 !important; text-decoration: none !important; }
-            .legend { position: absolute; bottom: 50px; right: 12px; background: linear-gradient(135deg, rgba(26, 26, 46, 0.97) 0%, rgba(16, 33, 62, 0.97) 100%); border-radius: 16px; border: 1px solid rgba(0, 230, 118, 0.4); color: white; font-size: 12px; z-index: 1000; max-width: 220px; backdrop-filter: blur(12px); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); overflow: hidden; }
+            .legend { position: absolute; bottom: 50px; left: 12px; background: linear-gradient(135deg, rgba(26, 26, 46, 0.97) 0%, rgba(16, 33, 62, 0.97) 100%); border-radius: 16px; border: 1px solid rgba(0, 230, 118, 0.4); color: white; font-size: 12px; z-index: 1000; max-width: 220px; backdrop-filter: blur(12px); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); overflow: hidden; }
             .legend-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; cursor: pointer; background: rgba(0, 230, 118, 0.1); border-bottom: 1px solid rgba(0, 230, 118, 0.2); transition: background 0.2s ease; }
             .legend-header:hover { background: rgba(0, 230, 118, 0.15); }
             .legend-title { font-weight: 600; color: #00E676; font-size: 13px; margin: 0; }
@@ -789,7 +789,7 @@ const handleSearchBlur = () => {
                     content += '<button class="nav-button" onclick="navigateToScreen(\\'Weather\\', \\''+city.name+'\\', '+city.lat+', '+city.lon+')">📊 View Weather Details</button>';
                 } else if (dataLayer === 'aqi' && aqiData[city.name]) {
                     const a = aqiData[city.name];
-                    content += '<div class="popup-data"><strong style="color: #00E676;">Air Quality Index</strong><br/>🌫️ PM2.5: <strong>' + a.pm25 + ' μg/m³</strong><br/>🌪️ PM10: <strong>' + a.pm10 + ' μg/m³</strong><br/>📊 AQI: <strong>' + a.aqi + '</strong> (' + a.status + ')</div>';
+                    content += '<div class="popup-data"><strong style="color: #00E676;">Air Quality Index</strong><br/>🌫️ PM2.5: <strong>' + a.pm25 + ' μg/m³</strong><br/>🌪️ PM10: <strong>' + a.pm10 + ' μg/m³</strong><br/>📊 AQI: <strong>' + a.aqi + ' μg/m³</strong> (' + a.status + ')</div>';
                     content += '<button class="nav-button" onclick="navigateToScreen(\\'Aqi\\', \\''+city.name+'\\', '+city.lat+', '+city.lon+')">🌿 View AQI Details</button>';
                 } else {
                     content += '<div class="popup-data">🏙️ <strong>Metro Manila LGU</strong><br/>Click the menu to view weather or air quality data</div>';

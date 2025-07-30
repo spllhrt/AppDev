@@ -58,14 +58,13 @@ const RegisterScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [showCityDropdown, setShowCityDropdown] = useState(false);
+  const [showActivationModal, setShowActivationModal] = useState(false);
 
-  // Memoized function to prevent re-renders
   const handleInputChange = useCallback((field, value) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
     }));
-    // Clear error when user starts typing
     if (errors[field]) {
       setErrors(prev => ({
         ...prev,
@@ -158,7 +157,7 @@ const RegisterScreen = ({ navigation }) => {
   }, [formData]);
 
   const handleRegister = useCallback(async () => {
-    if (loading) return; // Prevent double submission
+    if (loading) return;
     
     if (!validateForm()) return;
 
@@ -172,7 +171,6 @@ const RegisterScreen = ({ navigation }) => {
       formDataToSend.append('password', formData.password);
       formDataToSend.append('city', formData.city.trim());
 
-      // Avatar is required based on the backend controller
       if (formData.profileImage) {
         formDataToSend.append('avatar', {
           uri: formData.profileImage.uri,
@@ -185,13 +183,7 @@ const RegisterScreen = ({ navigation }) => {
       const response = await registerUser(formDataToSend);
       console.log('Registration response received:', response);
 
-      Alert.alert(
-        'Registration Successful!',
-        'Your account has been created successfully.',
-        [
-          { text: 'OK', onPress: () => navigation.navigate('Login') }
-        ]
-      );
+      setShowActivationModal(true);
     } catch (error) {
       console.error('Registration error:', error);
       Alert.alert(
@@ -202,9 +194,13 @@ const RegisterScreen = ({ navigation }) => {
       console.log('Registration process completed, setting loading to false');
       setLoading(false);
     }
-  }, [formData, loading, validateForm, navigation]);
+  }, [formData, loading, validateForm]);
 
-  // Memoized toggle functions
+  const handleActivationModalClose = useCallback(() => {
+    setShowActivationModal(false);
+    navigation.navigate('Login');
+  }, [navigation]);
+
   const toggleShowPassword = useCallback(() => {
     setShowPassword(prev => !prev);
   }, []);
@@ -241,7 +237,6 @@ const RegisterScreen = ({ navigation }) => {
       colors={['#1a1a2e', '#16213e', '#0f3460']}
       style={styles.container}
     >
-      {/* Set StatusBar style */}
       <StatusBar 
         barStyle="light-content" 
         backgroundColor="transparent" 
@@ -501,6 +496,27 @@ const RegisterScreen = ({ navigation }) => {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
+
+      {/* Activation Link Sent Modal */}
+      <Modal visible={showActivationModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.activationModalContent}>
+            <View style={styles.activationIconContainer}>
+              <Ionicons name="mail-outline" size={60} color="#4CAF50" />
+            </View>
+            <Text style={styles.activationModalTitle}>Activation Link Sent!</Text>
+            <Text style={styles.activationModalText}>
+              An activation link has been sent to {formData.email}. Please check your email and click the link to activate your account.
+            </Text>
+            <TouchableOpacity 
+              style={styles.activationModalButton} 
+              onPress={handleActivationModalClose}
+            >
+              <Text style={styles.activationModalButtonText}>Continue to Login</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </LinearGradient>
   );
 };
@@ -750,30 +766,47 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
   },
+  // Activation Modal Styles
+  activationModalContent: {
+    backgroundColor: '#1a1a2e',
+    borderRadius: 16,
+    padding: 30,
+    width: '90%',
+    maxWidth: 400,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  activationIconContainer: {
+    marginBottom: 20,
+  },
+  activationModalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  activationModalText: {
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.7)',
+    textAlign: 'center',
+    marginBottom: 25,
+    lineHeight: 24,
+  },
+  activationModalButton: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 25,
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    width: '100%',
+  },
+  activationModalButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
 });
 
 export default RegisterScreen;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

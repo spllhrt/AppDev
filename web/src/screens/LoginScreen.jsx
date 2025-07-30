@@ -20,6 +20,7 @@ const LoginScreen = ({ navigation }) => {
   const [errors, setErrors] = useState({});
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [showDeactivatedModal, setShowDeactivatedModal] = useState(false);
 
   const handleInputChange = useCallback((field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -48,23 +49,7 @@ const LoginScreen = ({ navigation }) => {
   };
 
   const handleDeactivatedAccount = () => {
-    Alert.alert(
-      'Account Deactivated',
-      'Your account has been deactivated. Please contact support for assistance.',
-      [
-        {
-          text: 'Contact Support',
-          onPress: () => {
-            Linking.openURL('mailto:support@airnetai.com?subject=Account Reactivation Request');
-          }
-        },
-        {
-          text: 'OK',
-          style: 'cancel'
-        }
-      ],
-      { cancelable: false }
-    );
+    setShowDeactivatedModal(true);
   };
 
   const handleLogin = useCallback(async () => {
@@ -114,6 +99,30 @@ const LoginScreen = ({ navigation }) => {
           >
             <Text style={styles.modalButtonText}>Try Again</Text>
           </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
+  const DeactivatedModal = () => (
+    <Modal visible={showDeactivatedModal} transparent animationType="fade">
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Ionicons name="alert-circle" size={24} color="#ef4444" />
+            <Text style={styles.modalTitle}>Account Deactivated</Text>
+          </View>
+          <Text style={styles.modalMessage}>
+            Your account has been deactivated. The reason/s and instructions for appeal has been sent to your Gmail.
+          </Text>
+          <View style={styles.modalButtonGroup}>
+            <TouchableOpacity
+              style={[styles.modalButton, styles.primaryButton]}
+              onPress={() => setShowDeactivatedModal(false)}
+            >
+              <Text style={styles.modalButtonText}>OK</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </Modal>
@@ -245,6 +254,7 @@ const LoginScreen = ({ navigation }) => {
           )}
         </View>
         <ErrorModal />
+        <DeactivatedModal />
       </SafeAreaView>
     </LinearGradient>
   );
@@ -316,7 +326,18 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff', marginLeft: 10 },
   modalMessage: { fontSize: 16, color: 'rgba(255, 255, 255, 0.8)', textAlign: 'center', marginBottom: 25, lineHeight: 22 },
   modalButton: { backgroundColor: '#10b981', paddingHorizontal: 30, paddingVertical: 12, borderRadius: 25 },
-  modalButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  modalButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold',
+    justifyContent: 'center', },
+  modalButtonGroup: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  primaryButton: {
+    backgroundColor: '#10b981',
+    alignItems: 'center',
+    flex: 1,
+  },
 });
 
 export default LoginScreen;

@@ -15,6 +15,7 @@ import {
   Modal,
   FlatList,
 } from 'react-native';
+
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
@@ -30,7 +31,7 @@ const metroManilaCities = [
 
 const RegisterScreen = ({ navigation }) => {
   const isLargeScreen = width > 768;
-
+  const [showActivationModal, setShowActivationModal] = useState(false);
   const [formData, setFormData] = useState({
     name: '', email: '', password: '', confirmPassword: '', city: '', profileImage: null,
   });
@@ -79,16 +80,16 @@ const RegisterScreen = ({ navigation }) => {
     const newErrors = {};
     if (!formData.name.trim()) newErrors.name = 'Name is required';
     else if (formData.name.trim().length < 2) newErrors.name = 'Name must be at least 2 characters';
-    
+
     if (!formData.email.trim()) newErrors.email = 'Email is required';
     else if (!/\S+@\S+\.\S+/.test(formData.email)) newErrors.email = 'Please enter a valid email';
-    
+
     if (!formData.password) newErrors.password = 'Password is required';
     else if (formData.password.length < 6) newErrors.password = 'Password must be at least 6 characters';
-    
+
     if (!formData.confirmPassword) newErrors.confirmPassword = 'Please confirm your password';
     else if (formData.password !== formData.confirmPassword) newErrors.confirmPassword = 'Passwords do not match';
-    
+
     if (!formData.city.trim()) newErrors.city = 'City is required';
     if (!formData.profileImage) newErrors.profileImage = 'Profile image is required';
 
@@ -122,13 +123,18 @@ const RegisterScreen = ({ navigation }) => {
       }
 
       await registerUser(formDataToSend);
-      setShowSuccessModal(true);
+      setShowActivationModal(true); // Show activation modal instead of success modal
     } catch (error) {
       Alert.alert('Registration Failed', error.message || 'An error occurred during registration');
     } finally {
       setLoading(false);
     }
   }, [formData, loading, validateForm]);
+
+  const handleActivationModalClose = useCallback(() => {
+    setShowActivationModal(false);
+    navigation.navigate('Login');
+  }, [navigation]);
 
   const handleSuccessModalClose = useCallback(() => {
     setShowSuccessModal(false);
@@ -150,11 +156,11 @@ const RegisterScreen = ({ navigation }) => {
       >
         <Ionicons name="arrow-back" size={24} color="#fff" />
       </TouchableOpacity>
-      
+
       <View style={styles.brandSection}>
         <Text style={styles.brandName}>AirNet AI</Text>
         <Text style={styles.brandTagline}>Smart Air Quality Monitoring</Text>
-        
+
         <View style={styles.iconContainer}>
           <View style={styles.cloudBase}>
             <View style={styles.cloudPart1} />
@@ -181,8 +187,8 @@ const RegisterScreen = ({ navigation }) => {
 
         {/* Profile Image */}
         <View style={styles.imageSection}>
-          <TouchableOpacity 
-            style={[styles.imagePicker, errors.profileImage && styles.imagePickerError]} 
+          <TouchableOpacity
+            style={[styles.imagePicker, errors.profileImage && styles.imagePickerError]}
             onPress={pickImage}
             disabled={loading}
           >
@@ -374,9 +380,30 @@ const RegisterScreen = ({ navigation }) => {
               </View>
               <Text style={styles.successModalTitle}>Registration Successful!</Text>
               <Text style={styles.successModalText}>Your account has been created successfully.</Text>
-              <TouchableOpacity 
-                style={styles.successModalButton} 
+              <TouchableOpacity
+                style={styles.successModalButton}
                 onPress={handleSuccessModalClose}
+              >
+                <Text style={styles.successModalButtonText}>Continue to Login</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Activation Link Sent Modal */}
+        <Modal visible={showActivationModal} transparent animationType="fade">
+          <View style={styles.modalOverlay}>
+            <View style={styles.successModalContent}>
+              <View style={styles.successIconContainer}>
+                <Ionicons name="mail-outline" size={60} color="#10b981" />
+              </View>
+              <Text style={styles.successModalTitle}>Activation Link Sent!</Text>
+              <Text style={styles.successModalText}>
+                An activation link has been sent to {formData.email}. Please check your email and click the link to activate your account.
+              </Text>
+              <TouchableOpacity
+                style={styles.successModalButton}
+                onPress={handleActivationModalClose}
               >
                 <Text style={styles.successModalButtonText}>Continue to Login</Text>
               </TouchableOpacity>
@@ -495,8 +522,8 @@ const styles = StyleSheet.create({
     borderLeftWidth: width > 768 ? 1 : 0,
     borderTopWidth: width > 768 ? 0 : 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
-    paddingHorizontal:50,
-    paddingTop:20
+    paddingHorizontal: 50,
+    paddingTop: 20
   },
   formScroll: {
     padding: width > 768 ? 30 : 25, // Reduced padding for more compact layout

@@ -738,9 +738,9 @@ return (
                 <View style={styles.currentMain}>
                   <Ionicons name={getWeatherIcon(weatherData?.daily?.weathercode?.[0])} size={100} color="#00E676" />
                   <View style={styles.tempContainer}>
-                    <Text style={styles.currentTemp}>{Math.round(weatherData?.daily?.temperature_2m_max?.[0] || 0)}°</Text>
+                    <Text style={styles.currentTemp}>{Math.round(weatherData?.daily?.temperature_2m_max?.[0] || 0)}°C</Text>
                     <Text style={styles.tempRange}>
-                      H:{Math.round(weatherData?.daily?.temperature_2m_max?.[0] || 0)}° L:{Math.round(weatherData?.daily?.temperature_2m_min?.[0] || 0)}°
+                      H:{Math.round(weatherData?.daily?.temperature_2m_max?.[0] || 0)}° L:{Math.round(weatherData?.daily?.temperature_2m_min?.[0] || 0)}°C
                     </Text>
                   </View>
                 </View>
@@ -808,8 +808,8 @@ return (
                 >
                   <Text style={styles.dayText}>{formatDate(date, index)}</Text>
                   <Ionicons name={getWeatherIcon(weatherData.daily.weathercode[index])} size={36} color="#00E676" />
-                  <Text style={styles.forecastTemp}>{Math.round(weatherData.daily.temperature_2m_max[index])}°</Text>
-                  <Text style={styles.forecastTempMin}>{Math.round(weatherData.daily.temperature_2m_min[index])}°</Text>
+                  <Text style={styles.forecastTemp}>{Math.round(weatherData.daily.temperature_2m_max[index])}°C</Text>
+                  <Text style={styles.forecastTempMin}>{Math.round(weatherData.daily.temperature_2m_min[index])}°C</Text>
                   <Text style={styles.precipText}>{weatherData.daily.precipitation_sum[index]}mm</Text>
                 </TouchableOpacity>
               ))}
